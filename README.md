@@ -1,0 +1,59 @@
+# NPLL - Nintendo PowerPC Linux Loader
+
+TODO
+
+
+## Boot Process
+1. `_start` in src/entry.S, then that entire thing executes from top to bottom (set up virtual memory, stack, SDA/SDA2, clear BSS)
+2. `init` in src/init.c, does hardware detection then hands off below
+  a. `initGamecube` in src/gamecube/init.c
+    1. Go to top-level step 3
+  b. `initWii` in src/wii/init.c
+    1. Check AHBPROT
+    2. Set up GPIOs
+    3. Map MEM2
+    4. Set HID4[SBE]
+    5. Clear upper BATs
+    6. Go to top-level step 3
+  c. `initWiiU` in src/wiiu/init.c
+    1. Check AHBPROT
+    2. Set up GPIOs
+    3. Set HID4[SBE], needed to map all of MEM2
+    4. Map MEM2
+    5. Go to top-level step 3
+3. Common initialization (memory allocation, etc)
+4. Driver initialization - in-order:
+  a. bootlog (e.g. EXI, USB Gecko)
+  b. block (e.g. SDGecko, Hollywood/Latte Front SD, USB Mass Storage)
+  c. partitions (MBR, GPT, APM, etc)
+  d. filesystem (e.g. FAT, ext[2/3/4], btrfs, xfs, ios9660)
+  e. graphics (VI, DRC, GX, GPU7)
+  f. input (SI, GPIO, PI, DRC, USB HID, Bluetooth)
+5. Enter main loop - in order, try to:
+  a. Check for and handle any pending I/O operations
+  b. Check for and handle any inputs
+  c. Update the screen if necessary
+
+## Subsystem IDs
+This codebase uses subsystem IDs for global variables and functions - similar in style to DOOM.
+- `I`  - Initialization
+- `D`  - Drivers
+- `H`  - Current Hardware
+- `B`  - Block devices
+- `M`  - Menu
+- `FS` - Filesystem
+- `IN` - Input
+- `O`  - Output
+- `V`  - Video
+- `E`  - PowerPC Exception handling
+
+## Copyright / Legal / Disclaimers
+"Nintendo®" is a registered trademark of Nintendo of America Inc.  
+"GameCube®" is a registered trademark of Nintendo of America Inc.  
+"Wii®" is a registered trademark of Nintendo of America Inc.  
+"Wii U®" is a registered trademark of Nintendo of America Inc.  
+"Linux®" is the registered trademark of Linus Torvalds in the U.S. and other countries.  
+
+All code unless otherwise stated is Copyright (C) 2025 Techflash and NPLL contributors.  See the relevant file for additional copyright information.
+
+
