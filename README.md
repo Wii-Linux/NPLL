@@ -22,17 +22,18 @@ It provides an interface to load Linux on these platforms, all in one universal 
   c. `initWiiU` in src/wiiu/init.c
     1. Check AHBPROT
     2. Set up GPIOs
-    3. Set HID4[SBE], needed to map all of MEM2
-    4. Map MEM2
+    3. Set HID4[SBE], needed to map the majority of MEM2
+    4. Map (most of) MEM2
     5. Go to top-level step 3
-3. Common initialization (memory allocation, etc)
+3. Common initialization, like exception handling
 4. Driver initialization - in-order:
-  a. bootlog (e.g. EXI, USB Gecko)
+  a. critical (mainly for logging, e.g. EXI, USB Gecko)
   b. block (e.g. SDGecko, Hollywood/Latte Front SD, USB Mass Storage)
   c. partitions (MBR, GPT, APM, etc)
   d. filesystem (e.g. FAT, ext[2/3/4], btrfs, xfs, ios9660)
   e. graphics (VI, DRC, GX, GPU7)
   f. input (SI, GPIO, PI, DRC, USB HID, Bluetooth)
+  g. other (e.g. GPIO)
 5. Enter main loop - in order, try to:
   a. Check for and handle any pending I/O operations
   b. Check for and handle any inputs
