@@ -5,10 +5,13 @@
  */
 
 #include <string.h>
+#include <npll/cache.h>
 #include <npll/video.h>
 #include <npll/drivers.h>
 
 static REGISTER_DRIVER(fbDrv);
+
+static void fbFlush(void);
 
 static struct videoInfo fbVidInfo = {
 	.fb = (u32 *)0x97500000, /* TV */
@@ -19,9 +22,14 @@ static struct videoInfo fbVidInfo = {
 	.width = 896, /* weird width/height, comes from linux-loader, check this? */
 	.height = 504,
 #endif
-	.flush = NULL, /* goes straight to the real fb, no further action necessary */
+	.flush = fbFlush,
 	.driver = &fbDrv
 };
+
+
+static void fbFlush(void) {
+	dcache_flush(fbVidInfo.fb, fbVidInfo.width * fbVidInfo.height * sizeof(u32));
+}
 
 static void fbInit(void) {
 	/* clear to black */

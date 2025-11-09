@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/timer.h>
@@ -463,19 +464,6 @@ void VISetupEncoder(void)
 	//oldTvStatus = tv;
 }
 
-void sync_after_write(const void *p, u32 len)
-{
-	u32 a, b;
-
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
-
-	for ( ; a < b; a += 32)
-		asm("dcbst 0,%0" : : "b"(a));
-
-	asm("sync ; isync");
-}
-
 typedef union {
 		struct __attribute__((__packed__)) {
 			u8 x, r, g, b;
@@ -509,7 +497,7 @@ static void clear_fb(rgb fill_rgb) {
 	fb  = xfb;
 	for (i = 0; i < XFB_HEIGHT * 2 * (XFB_WIDTH >> 1); i++) {
 		*fb = fill_yuv;
-		sync_after_write(fb, 4);
+		dcache_flush(fb, 4);
 		fb++;
 	}
 }
@@ -521,7 +509,7 @@ static void clear_fb_rgb(rgb fill_rgb) {
 	fb  = rgbFb;
 	for (i = 0; i < XFB_HEIGHT * 2 * (XFB_WIDTH >> 1); i++) {
 		*fb = fill_rgb.as_u32;
-		sync_after_write(fb, 4);
+		dcache_flush(fb, 4);
 		fb++;
 	}
 }
@@ -542,7 +530,7 @@ static void viFlush(void) {
 		src++;
 
 		*dest = make_yuv(rgb1, rgb2);
-		sync_after_write(dest, 4);
+		dcache_flush(dest, 4);
 		dest++;
 	}
 }
