@@ -171,7 +171,6 @@ void V_Register(struct videoInfo *info) {
 	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
 	videoOutDev.columns = info->width / FONT_WIDTH;
 	videoOutDev.rows = info->height / FONT_HEIGHT;
-	O_AddDevice(&videoOutDev);
 
 	V_FbPtr = info->fb;
 	V_FbWidth = info->width;
@@ -181,5 +180,7 @@ void V_Register(struct videoInfo *info) {
 
 	color[0] = colors[C_LGRAY];
 	color[1] = colors[C_BLACK];
+
+	O_AddDevice(&videoOutDev);
 }
 
