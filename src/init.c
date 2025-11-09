@@ -11,6 +11,7 @@
 #include <npll/drivers.h>
 #include <npll/output.h>
 #include <npll/exceptions.h>
+#include <npll/menu.h>
 #include <stdio.h>
 
 enum consoleType H_ConsoleType;
@@ -82,6 +83,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	O_DebugInit();
 	E_Init();
 	D_Init();
+	M_Init();
 	puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();
