@@ -66,6 +66,7 @@ static void drcWriteStr(const char *str) {
 static const struct outputDevice outDev = {
 	.writeChar = drcWriteChar,
 	.writeStr = drcWriteStr,
+	.name = "Wii U GamePad Text Console",
 	.driver = &drcDrv,
 	.isGraphical = true,
 	.rows = 896 / 8, /* screen width / linux-loader font width */
@@ -75,13 +76,6 @@ static const struct outputDevice outDev = {
 static void drcInit(void) {
 	/* we're all good */
 	drcDrv.state = DRIVER_STATE_READY;
-
-	drcWriteChar('T');
-	drcWriteChar('e');
-	drcWriteChar('s');
-	drcWriteChar('t');
-	drcWriteChar('?');
-	drcWriteChar('\n');
 
 	drcWriteStr("Wii U GamePad Text Console driver is now enabled\n");
 	O_AddDevice(&outDev);
