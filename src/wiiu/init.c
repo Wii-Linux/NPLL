@@ -26,12 +26,9 @@ static void wiiuDebugStr(const char *str) {
 		HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
 
 		/* spin until Starbuck processes our message */
-		while (HW_IPC_PPCCTRL & HW_IPC_PPCCTRL_Y1);
+		while (HW_IPC_PPCCTRL & HW_IPC_PPCCTRL_X1);
 
 		str++;
-
-		/* XXX: give it 1ms, Starbuck seems to hang if we hammer it too hard */
-		udelay(1000 * 1);
 	}
 }
 
