@@ -7,12 +7,14 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <npll/console.h>
+#include <npll/video.h>
 
-extern bool __putcharNoGraphics;
+/*extern bool __putcharNoGraphics;*/
 
 void __attribute__((noreturn)) panic(const char *str) {
-	__putcharNoGraphics = true;
+	/*__putcharNoGraphics = true;*/
 	printf("FATAL: PANIC: %s\r\n", str);
+	V_Flush();
 
 	H_PlatOps->panic(str);
 }
