@@ -40,6 +40,7 @@ static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 	int i;
 	(void)str;
 
+	wiiuDebugStr("PANIC: ");
 	wiiuDebugStr(str);
 
 #if 0
