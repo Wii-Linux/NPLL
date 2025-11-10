@@ -36,6 +36,9 @@ void __attribute__((noreturn)) H_InitGameCube(void) {
 	/* we want to load GameCube drivers */
 	D_DriverMask = DRIVER_ALLOW_GAMECUBE;
 
+	/* set plat ops */
+	H_PlatOps = &gamecubePlatOps;
+
 	/* kick off the real init */
 	I_InitCommon();
 
