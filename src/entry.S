@@ -3,10 +3,9 @@
 # Copyright (C) 2025 Techflash
 #
 
-.section .text
+.section .init
 .global _start
 .extern init
-.extern panic
 
 #define __ASSEMBLY__
 #include <npll/cpu.h>
@@ -27,7 +26,9 @@
 #
 # 5. Set up a stack
 #
-# 6. Zero out the (non-SP/R) registers
+# 6. Relocate the rest of the code into high MEM1 (we start in low MEM1)
+#
+# 6. Zero out the (non-SP) registers
 #
 # 7. Call into the C init function, where we can do things like hardware detection
 _start:
@@ -35,7 +36,7 @@ _start:
 	lis r0, setupBATs@h
 	ori r0, r0, setupBATs@l
 
-	# Clear bit 0, since we want the physical address.  This binary is linked assuming virtual addresses in .text, so r0 = 0x8000xxxx right now, which is no good.  Clear bit 0 to get a real MEM1-physical address.
+	# Clear bit 0, since we want the physical address.  This binary is linked assuming virtual addresses in .text, so r0 = 0x8xxxxxxx right now, which is no good.  Clear bit 0 to get a real MEM1-physical address.
 	lis r3, 0x7fff
 	ori r3, r3, 0xffff
 	and r0, r0, r3
@@ -177,18 +178,86 @@ setupStack:
 	lis r1, __stack_top@h
 	ori r1, r1, __stack_top@l
 
-setupSDA:
-	# set r2 (Small Data Area 2 pointer) to the start of SDA2
-	lis r2, __sda2_start@h
-	ori r2, r2, __sda2_start@l
+relocate:
+	# Here goes nothing.  About to relocate
+	# from __reloc_source_start until __reloc_source_end,
+	# to __reloc_dest_start until __reloc_dest_end.
+	#
+	# Assumptions:
+	# - (source_start - source_end) == (dest_start - dest_end)
+	# - both starts and ends are 32-byte aligned
+	# - we've enabled the caches (as performed above)
+	#
+	# Registers:
+	# - r0 = scratch
+	# - r3 = cur source
+	# - r4 = source end
+	# - r5 = cur dest
+	# - r6 = dest end
+	# - r7 = mask to convert phys->virt
 
-	# set r13 (Small Data Area pointer) to the start of SDA
-	lis r13, __sda_start@h
-	ori r13, r13, __sda_start@l
+	# mask to convert phys -> virt addr
+	lis r7, 0x8000
+
+	# load and convert addresses
+	lis r3, __reloc_source_start@h
+	ori r3, r3, __reloc_source_start@l
+	or  r3, r3, r7 # convert to virt
+
+	lis r4, __reloc_source_end@h
+	ori r4, r4, __reloc_source_end@l
+	or  r4, r4, r7 # convert to virt
+
+	lis r5, __reloc_dest_start@h
+	ori r5, r5, __reloc_dest_start@l
+
+	lis r6, __reloc_dest_end@h
+	ori r6, r6, __reloc_dest_end@l
+
+_copyLoop:
+	# start copying data
+	cmpw r3, r4
+	bge _copyDone  # are we done?
+	lwz r0, 0(r3)  # load a word
+	stw r0, 0(r5)  # store it in the dest
+	addi r3, r3, 4 # keep moving
+	addi r5, r5, 4
+	b _copyLoop
+
+_copyDone:
+	# flush D$ for dest
+	lis r5, __reloc_dest_start@h     # reload start of dest
+	ori r5, r5, __reloc_dest_start@l
+
+_flushDcacheLoop:
+	cmpw r5, r6
+	bge _flushDcacheDone # are we done?
+	dcbf 0, r5           # flush D$ for this region
+	addi r5, r5, 32      # advance by one D$ block
+	b _flushDcacheLoop   # keep going
+
+_flushDcacheDone:
+	sync
+
+	# start I$ invalidate
+	lis r5, __reloc_dest_start@h     # reload start of dest
+	ori r5, r5, __reloc_dest_start@l
+
+_invalidateIcacheLoop:
+	cmpw r5, r6
+	bge _invalidateIcacheDone # are we done?
+	icbi 0, r5                # invalidate I$ for this region
+	addi r5, r5, 32           # advance by one I$ block
+	b _invalidateIcacheLoop   # keep going
+
+_invalidateIcacheDone:
+	sync
+	isync
 
 clearRegs:
 	li r0, 0
-	# don't clear r1 nor r2, we just set them above
+	# don't clear r1, we just set it above
+	li r2, 0
 	li r3, 0 # args for init would go heere if it took any, but it doesn't.
 	li r4, 0
 	li r5, 0
@@ -199,7 +268,7 @@ clearRegs:
 	li r10, 0
 	li r11, 0
 	li r12, 0
-	# don't clear r13, we just set it above
+	li r13, 0
 	li r14, 0
 	li r15, 0
 	li r16, 0
@@ -222,19 +291,9 @@ clearRegs:
 jumpToInit:
 	# YOLO, jump into the C code
 	bl init
-	# It should have never returned.  Something has gone wrong - panic.
-
-	lis r3, panicStr@h
-	ori r3, r3, panicStr@l
-	bl panic
-
 _hang:
 	b _hang
 
-
-.section .rodata
-panicStr:
-	.asciz "init() returned - this should not be possible"
 
 .section .note.GNU-stack
 _note:
