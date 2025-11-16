@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <npll/menu.h>
 #include <npll/timer.h>
+#include <npll/video.h>
 
 #define MAX_ENTRIES 24
 static bool hasChanged = false;
@@ -27,13 +28,19 @@ void M_Init(void) {
 }
 
 static u64 lastTb = 0;
+static u32 flushes = 0;
 void M_Redraw(void) {
 	int i;
 	u64 tb = mftb();
-	if (T_HasElapsed(lastTb, 1000 * 500)) {
+	if (T_HasElapsed(lastTb, 1000 * 1000)) {
 		lastTb = tb;
-		puts("a");
+		printf("V_Flush's in last second: %u\r\n", flushes);
+		V_Flush();
+		flushes = 0;
+		return;
 	}
+	V_Flush();
+	flushes++;
 	if (!hasChanged)
 		return;
 

@@ -71,6 +71,22 @@ SECTIONS
 	} > HIVIRT :data
 	_lma = _lma + SIZEOF(.data);
 
+	.sdata : AT(_lma) {
+		PROVIDE(__sda_start = .);
+		*(.sdata)
+		*(.sdata.*)
+		*(.gnu.linkonce.s.*)
+	} > HIVIRT :data
+	_lma = _lma + SIZEOF(.sdata);
+
+	.sdata2 : AT(_lma) {
+		PROVIDE(__sda2_start = .);
+		*(.sdata2)
+		*(.sdata2.*)
+		*(.gnu.linkonce.s2.*)
+	} > HIVIRT :data
+	_lma = _lma + SIZEOF(.sdata2);
+
 	/* we don't actually care, we set up our own, but GCC really wants to */
 	.eh_frame_hdr : AT(_lma) {
 		KEEP (*(.eh_frame_hdr))

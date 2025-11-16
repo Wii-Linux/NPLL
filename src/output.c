@@ -26,7 +26,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 	if (dev->driver && dev->driver->name)
 		driver = (char *)dev->driver->name;
 
-	printf("OUT: Adding new device: %s [driver: %s]\r\n", name, driver);
+	printf("OUT: Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
 	O_Devices[O_NumDevices] = dev;
 	O_NumDevices++;
 
@@ -36,9 +36,11 @@ void O_AddDevice(const struct outputDevice *dev) {
 		deviceNum++;
 	else if (deviceNum == 2) { /* added real device */
 		deviceNum++;
+		puts("OUT: Cleaning out debug devices");
 		O_DebugCleanup();
 		O_MemlogCleanup();
 	}
+	puts("OUT: Success");
 }
 
 void O_RemoveDevice(const struct outputDevice *dev) {

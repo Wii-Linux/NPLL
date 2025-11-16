@@ -14,8 +14,8 @@
 #include <npll/menu.h>
 #include <stdio.h>
 
-enum consoleType H_ConsoleType;
-struct platOps *H_PlatOps;
+enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
+struct platOps *H_PlatOps = NULL;
 
 extern void mainLoop(void);
 

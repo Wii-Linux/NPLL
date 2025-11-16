@@ -14,6 +14,5 @@ void __attribute__((noreturn)) mainLoop(void) {
 		D_RunCallbacks();
 		IN_HandleInputs();
 		M_Redraw();
-		V_Flush();
 	}
 }

@@ -455,13 +455,10 @@ static int make_yuv(rgb c1, rgb c2) {
 }
 
 static void clear_fb(rgb fill_rgb) {
-	int i;
-	u32 *fb;
-
+	u32 *fb = (u32 *)xfb;
 	u32 fill_yuv = make_yuv(fill_rgb, fill_rgb);
 
-	fb  = (u32 *)xfb;
-	for (i = 0; i < XFB_HEIGHT * 2 * (XFB_WIDTH >> 1); i++) {
+	while ((void *)fb < ((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) {
 		*fb = fill_yuv;
 		dcache_flush(fb, 4);
 		fb++;
@@ -469,11 +466,8 @@ static void clear_fb(rgb fill_rgb) {
 }
 
 static void clear_fb_rgb(rgb fill_rgb) {
-	int i;
-	u32 *fb;
-
-	fb  = rgbFb;
-	for (i = 0; i < XFB_HEIGHT * 2 * (XFB_WIDTH >> 1); i++) {
+	u32 *fb = rgbFb;
+	while ((void *)fb < ((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) {
 		*fb = fill_rgb.as_u32;
 		dcache_flush(fb, 4);
 		fb++;
@@ -483,13 +477,13 @@ static void clear_fb_rgb(rgb fill_rgb) {
 static struct videoInfo viVidInfo;
 
 static void viFlush(void) {
-	int i;
 	u32 *dest, *src;
 	rgb rgb1, rgb2;
 
 	src  = rgbFb;
 	dest = (u32 *)xfb;
-	for (i = 0; i < XFB_HEIGHT * 2 * (XFB_WIDTH >> 1); i++) {
+	while ((void *)src < ((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32)) &&
+	       (void *)dest < ((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) {
 		rgb1 = (rgb)*src;
 		src++;
 		rgb2 = (rgb)*src;

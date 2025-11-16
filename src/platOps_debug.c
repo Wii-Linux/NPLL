@@ -11,13 +11,16 @@
 #include <npll/output.h>
 
 static void debugConWriteChar(const char c) {
-	if (!H_PlatOps->debugWriteChar)
+	if (!H_PlatOps || !H_PlatOps->debugWriteChar)
 		return;
 
 	H_PlatOps->debugWriteChar(c);
 }
 
 static void debugConWriteStr(const char *str) {
+	if (!H_PlatOps)
+		return;
+
 	if (H_PlatOps->debugWriteStr) {
 		H_PlatOps->debugWriteStr(str);
 		return;

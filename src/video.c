@@ -150,8 +150,10 @@ static struct outputDevice videoOutDev = {
 };
 
 void V_Flush(void) {
+#if 0
 	if (!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000))
 		return;
+#endif
 
 	if (!activeDriver)
 		panic("Tried to V_Flush with no driver");

@@ -18,7 +18,7 @@
 
 extern char exception_2200_start, exception_2200_end;
 
-void sync_before_exec(const void *p, u32 len) {
+static void sync_before_exec(const void *p, u32 len) {
 	u32 a, b;
 
 	a = (u32)p & ~0x1f;
@@ -30,14 +30,34 @@ void sync_before_exec(const void *p, u32 len) {
 	asm("sync ; isync");
 }
 
-void E_Handler(int exception)
-{
-	u32 *x;
-	u32 i;
+static void dump_stack_trace(u32 *sp) {
+	u32 prev_sp, lr;
+	int depth;
+	printf("Stack trace:\n");
+
+	for (depth = 0; sp && depth < 32; depth++) {
+		prev_sp = sp[0];
+		lr = sp[1];
+
+		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (u32)sp, lr);
+
+		// sanity checks
+		if (prev_sp <= (u32)sp || prev_sp == 0 || prev_sp == 0xffffffff)
+			break;
+
+		sp = (u32 *)prev_sp;
+	}
+}
+
+
+void E_Handler(int exception) {
+	u32 *x, sp;
+	int i;
 
 	printf("\r\nException %04x occurred!\r\n", exception);
 
 	x = (u32 *)0x80002000;
+	sp = x[1];
 
 	printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
 	for (i = 0; i < 8; i++) {
@@ -51,6 +71,8 @@ void E_Handler(int exception)
 		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[2], x[4], x[6]);
 		x++;
 	}
+
+	dump_stack_trace((u32 *)sp);
 
 	panic("Got fatal exception");
 }

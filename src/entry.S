@@ -254,10 +254,19 @@ _invalidateIcacheDone:
 	sync
 	isync
 
+
+setupSDA:
+	# set r2 (Small Data Area 2 pointer) to the start of SDA2
+	lis r2, __sda2_start@h
+	ori r2, r2, __sda2_start@l
+
+	# set r13 (Small Data Area pointer) to the start of SDA
+	lis r13, __sda_start@h
+	ori r13, r13, __sda_start@l
+
 clearRegs:
 	li r0, 0
-	# don't clear r1, we just set it above
-	li r2, 0
+	# don't clear r1, or r2, we just set them above
 	li r3, 0 # args for init would go heere if it took any, but it doesn't.
 	li r4, 0
 	li r5, 0
@@ -268,7 +277,7 @@ clearRegs:
 	li r10, 0
 	li r11, 0
 	li r12, 0
-	li r13, 0
+	# don't clear r13, we just set it above
 	li r14, 0
 	li r15, 0
 	li r16, 0
