@@ -16,7 +16,6 @@ static void exiCallback(void) {
 }
 
 static void exiInit(void) {
-	u32 val;
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
 		regs = (vu32 *)0xcc006800;
