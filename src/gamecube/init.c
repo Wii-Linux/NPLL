@@ -10,6 +10,7 @@
 #include <npll/init.h>
 #include <npll/panic.h>
 #include <npll/timer.h>
+#include <npll/tiny_usbgecko.h>
 #include <npll/drivers.h>
 
 static __attribute__((noreturn)) void gamecubePanic(const char *str) {
@@ -38,6 +39,9 @@ void __attribute__((noreturn)) H_InitGameCube(void) {
 
 	/* set plat ops */
 	H_PlatOps = &gamecubePlatOps;
+
+	/* debug console */
+	H_TinyUGInit();
 
 	/* kick off the real init */
 	I_InitCommon();

@@ -11,6 +11,7 @@
 #include <npll/timer.h>
 #include <npll/drivers.h>
 #include <npll/cpu.h>
+#include <npll/tiny_usbgecko.h>
 #include <npll/hollywood/gpio.h>
 
 enum wiiRev H_WiiRev;
@@ -92,6 +93,9 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
+
+	/* debug console */
+	H_TinyUGInit();
 
 	/* set up basic GPIOs for panic indicator */
 	HW_GPIO_OWNER |= GPIO_SLOT_LED;
