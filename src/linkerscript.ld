@@ -76,6 +76,7 @@ SECTIONS
 		*(.sdata)
 		*(.sdata.*)
 		*(.gnu.linkonce.s.*)
+		. = ALIGN(32);
 	} > HIVIRT :data
 	_lma = _lma + SIZEOF(.sdata);
 
@@ -84,19 +85,9 @@ SECTIONS
 		*(.sdata2)
 		*(.sdata2.*)
 		*(.gnu.linkonce.s2.*)
+		. = ALIGN(32);
 	} > HIVIRT :data
 	_lma = _lma + SIZEOF(.sdata2);
-
-	/* we don't actually care, we set up our own, but GCC really wants to */
-	.eh_frame_hdr : AT(_lma) {
-		KEEP (*(.eh_frame_hdr))
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.eh_frame_hdr);
-
-	.eh_frame : AT(_lma) {
-		KEEP (*(.eh_frame))
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.eh_frame);
 
 	.drivers : AT(_lma) {
 		PROVIDE(__drivers_start = .);
@@ -105,6 +96,13 @@ SECTIONS
 		. = ALIGN(32);
 	} > HIVIRT :data
 	_lma = _lma + SIZEOF(.drivers);
+
+	/* GNU ld complains if we discard it sadly */
+	.note.gnu.build-id : AT(_lma) {
+		*(.note.gnu.build-id);
+		. = ALIGN(32);
+	} > HIVIRT :data
+	_lma = _lma + SIZEOF(.note.gnu.build-id);
 
 	PROVIDE(__reloc_source_end = _lma);
 	PROVIDE(__reloc_dest_end = .);
@@ -119,6 +117,11 @@ SECTIONS
 		PROVIDE (__bss_end = .);
 		__bss_end = .;
 	} > HIVIRT :bss
+
+	/DISCARD/ : {
+		*(.eh_frame)
+		*(.eh_frame_hdr)
+	}
 }
 
 __stack_top = (__bss_start + SIZEOF(.bss) + 0x20000 + 7) & (-8);
