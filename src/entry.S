@@ -168,10 +168,34 @@ _bssLoop:
 	cmplw r3, r4
 
 	# yes!
-	bge setupStack
+	bge clearSBSS
 
 	# nope
 	b _bssLoop
+
+clearSBSS:
+	# Same thing as above but for SBSS
+	lis r3, __sbss_start@h
+	ori r3, r3, __sbss_start@l
+	lis r4, __sbss_end@h
+	ori r4, r4, __sbss_end@l
+
+_sbssLoop:
+	# store 0 at r3
+	stw r0, 0(r3)
+
+	# move forward 4 bytes
+	addi r3, r3, 4
+
+	# are we done?
+	cmplw r3, r4
+
+	# yes!
+	bge setupStack
+
+	# nope
+	b _sbssLoop
+
 
 setupStack:
 	# set r1 (sp) to the top of the stack

@@ -117,6 +117,18 @@ SECTIONS
 		PROVIDE (__bss_end = .);
 		__bss_end = .;
 	} > HIVIRT :bss
+	_lma = _lma + SIZEOF(.bss);
+
+	.sbss (NOLOAD) : AT(_lma) {
+		PROVIDE(__sbss_start = .);
+		*(.dynsbss)
+		*(.sbss)
+		*(.sbss.*)
+		*(.gnu.linkonce.sb.*)
+		*(.scommon)
+		. = ALIGN(32);
+		PROVIDE(__sbss_end = .);
+	} > HIVIRT :bss
 
 	/DISCARD/ : {
 		*(.eh_frame)
