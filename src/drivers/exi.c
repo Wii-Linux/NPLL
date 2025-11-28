@@ -9,7 +9,7 @@
 #include <npll/drivers.h>
 #include <npll/drivers/exi.h>
 
-vu32 *regs;
+static vu32 *regs;
 
 static void exiCallback(void) {
 	
