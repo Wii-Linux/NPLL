@@ -51,7 +51,7 @@ void D_Init(void) {
 			}
 
 			/* make sure it's the right time to try / try again to load it */
-			if (curDriver->type <= curType) {
+			if (curDriver->type <= (u32)curType) {
 				puts(" initializing...");
 				curDriver->init();
 				puts("DRV: Done");
