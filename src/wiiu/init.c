@@ -37,7 +37,6 @@ static void wiiuDebugStr(const char *str) {
 }
 
 static __attribute__((noreturn)) void wiiuPanic(const char *str) {
-	int i;
 	(void)str;
 
 	wiiuDebugStr("PANIC: ");
