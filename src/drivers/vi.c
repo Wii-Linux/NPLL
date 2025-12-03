@@ -509,7 +509,6 @@ static struct videoInfo viVidInfo = {
 };
 
 static void viDrvInit(void) {
-	int x, y, off;
 	rgb black = {.as_u32 = 0xff000000};
 	//rgb gray = {.as_u32 = 0xffaaaaaa};
 	//rgb yellow = {.as_u32 = 0xffffff00};
