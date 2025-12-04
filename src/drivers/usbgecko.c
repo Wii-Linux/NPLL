@@ -8,6 +8,7 @@
  * Copyright (C) 2008,2009 Albert Herranz
  */
 
+#include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/output.h>
 #include <npll/drivers/exi.h>
@@ -19,24 +20,21 @@ static REGISTER_DRIVER(usbgeckoDrv);
 
 static int slot = -1;
 
-static u32 usbgeckoTransaction(u32 tx, int port) {
-	*EXI_CSR(port) = EXI_CSR_CLK_32MHZ | EXI_CSR_CS_0;
-	*EXI_DATA(port) = tx;
-	*EXI_CR(port) = EXI_CR_TLEN(2) | EXI_CR_RW | EXI_CR_TSTART;
+static u16 usbgeckoTransaction(u16 tx, int port) {
+	u16 rx;
 
-	while (*EXI_CR(port) & EXI_CR_TSTART) {
-		/* spin */
-	}
+	H_EXISelect(port, 0, 32);
+	H_EXIRdWrImm(port, 2, &tx, &rx);
+	H_EXIDeselect(port);
 
-	*EXI_CSR(port) = 0;
-	return *EXI_DATA(port);
+	return rx;
 }
 
 static int usbgeckoIsAdapterPresent(int port) {
-	return usbgeckoTransaction(0x90000000, port) == 0x04700000;
+	return usbgeckoTransaction(0x9000, port) == 0x0470;
 }
 static int usbgeckoTXReady(int port) {
-	return usbgeckoTransaction(0xc0000000, port) & 0x04000000;
+	return usbgeckoTransaction(0xc000, port) & 0x0400;
 }
 
 static void usbgeckoWriteChar(const char c) {
@@ -44,7 +42,7 @@ static void usbgeckoWriteChar(const char c) {
 		/* spin */
 	}
 
-	usbgeckoTransaction(0xb0000000 | (c << 20), slot);
+	usbgeckoTransaction(0xb000 | (c << 4), slot);
 }
 
 static void usbgeckoWriteStr(const char *str) {
@@ -69,10 +67,21 @@ static const struct outputDevice outDev = {
 };
 
 static void usbgeckoInit(void) {
+	void *str = NULL, *chr = NULL;
+
 	if (exiDrv.state != DRIVER_STATE_READY) {
 		usbgeckoDrv.state = DRIVER_STATE_NEED_DEP;
 		return;
 	}
+
+	/* it conflicts with our probing */
+	if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
+		str = H_PlatOps->debugWriteStr;
+		H_PlatOps->debugWriteStr = NULL;
+		chr = H_PlatOps->debugWriteChar;
+		H_PlatOps->debugWriteChar = NULL;
+	}
+
 
 	if (usbgeckoIsAdapterPresent(UG_SLOTB))
 		slot = UG_SLOTB;
@@ -81,6 +90,12 @@ static void usbgeckoInit(void) {
 	else {
 		slot = -1;
 		usbgeckoDrv.state = DRIVER_STATE_NO_HARDWARE;
+
+		/* restore */
+		if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
+			H_PlatOps->debugWriteStr = str;
+			H_PlatOps->debugWriteChar = chr;
+		}
 		return;
 	}
 
@@ -90,7 +105,10 @@ static void usbgeckoInit(void) {
 	/* we're all good */
 	usbgeckoDrv.state = DRIVER_STATE_READY;
 
-	usbgeckoWriteStr("USB Gecko driver is now enabled\r\n");
+	usbgeckoWriteStr("USB Gecko driver is now enabled in Slot-");
+	usbgeckoWriteChar('A' + slot);
+	usbgeckoWriteChar('\r');
+	usbgeckoWriteChar('\n');
 	O_AddDevice(&outDev);
 }
 
