@@ -87,13 +87,14 @@ static u32 binSz = 0;
 static enum {
 	STATE_IDLE = 0,
 	STATE_GET_SIZE,
-	STATE_GET_DATA,
-	STATE_LAUNCH
+	STATE_GET_DATA
 } usbgeckoState = STATE_IDLE;
 static const char bufMagic[7] = "NPLLBIN";
 static void usbgeckoCallback(void) {
 	int ret;
 	u8 data;
+
+again:
 
 #if 0
 	/* are we still in timeout? */
@@ -168,6 +169,8 @@ static void usbgeckoCallback(void) {
 		break;
 	}
 	case STATE_GET_DATA: {
+		int ret;
+
 		buf[bufIdx] = data;
 		bufIdx++;
 
@@ -177,11 +180,7 @@ static void usbgeckoCallback(void) {
 
 		/* yes, let's do this thing */
 		puts("GECKO: Preparing to launch...");
-		usbgeckoState = STATE_LAUNCH;
-		break;
-	}
-	case STATE_LAUNCH: {
-		int ret;
+
 		ret = ELF_CheckValid(buf);
 		if (ret) {
 			printf("GECKO: Invalid ELF: %d\r\n", ret);
@@ -193,12 +192,15 @@ static void usbgeckoCallback(void) {
 		/* valid ELF, let's load it... */
 		printf("GECKO: Launching ELF, goodbye!\r\n", ret);
 		ret = ELF_LoadMem(buf);
-		printf("GECKO: ELF launch failed: %d\r\n");
+		printf("GECKO: ELF launch failed: %d\r\n", ret);
 		usbgeckoState = STATE_IDLE;
 		bufIdx = 0;
 		break;
 	}
 	}
+
+	/* try to ingest as many bytes as we have */
+	goto again;
 }
 
 static const struct outputDevice outDev = {
