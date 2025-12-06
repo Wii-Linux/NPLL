@@ -48,16 +48,17 @@ A. `initGamecube` in src/gamecube/init.c
 
 ## Subsystem IDs
 This codebase uses subsystem IDs for global variables and functions - similar in style to DOOM.
-- `I`  - Initialization
-- `D`  - Drivers
-- `H`  - Current Hardware
-- `B`  - Block devices
-- `M`  - Menu
-- `FS` - Filesystem
-- `IN` - Input
-- `O`  - Output
-- `V`  - Video
-- `E`  - PowerPC Exception handling
+- `I`   - Initialization
+- `D`   - Drivers
+- `H`   - Current Hardware
+- `B`   - Block devices
+- `M`   - Menu
+- `FS`  - Filesystem
+- `IN`  - Input
+- `O`   - Output
+- `V`   - Video
+- `E`   - PowerPC Exception handling
+- `ELF` - ELF binary handling
 
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
