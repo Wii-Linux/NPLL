@@ -85,7 +85,6 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 	printf ("sending file size (%u bytes)\n", len);
 	((u32 *)b)[0] = htonl(len);
 	gecko_flush();
-	usleep(500 * 1000);
 
 	if (gecko_write (b, 4)) {
 		gecko_close ();
@@ -95,14 +94,13 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 
 	printf ("sending data");
 	fflush (stdout);
-	usleep(500 * 1000);
 
 	left = len;
 	p = buf;
 	while (left) {
 		block = left;
-		if (block > 4)
-			block = 4;
+		if (block > 32768)
+			block = 32768;
 		left -= block;
 
 		if (gecko_write (p, block)) {
@@ -110,7 +108,6 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 			break;
 		}
 		p += block;
-		usleep(25 * 1000);
 
 		printf (".");
 		fflush (stdout);
