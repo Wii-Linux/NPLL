@@ -6,8 +6,11 @@
 
 #include <npll/elf_abi.h>
 #include <npll/elf.h>
+#include <npll/cache.h>
 #include <stdio.h>
 #include <string.h>
+
+extern void __attribute__((noreturn)) ELF_DoEntry(const void *entry);
 
 int ELF_CheckValid(const void *data) {
 	const Elf32_Ehdr *ehdr = (const Elf32_Ehdr *)data;
@@ -38,22 +41,22 @@ int ELF_LoadMem(const void *data) {
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		/* sanity check */
 		if (phdr->p_type != PT_LOAD) {
-			printf("Skipping segment: type %d != %d (PT_LOAD)\r\n", phdr->p_type, PT_LOAD);
+			printf("ELF: Skipping segment: type %d != %d (PT_LOAD)\r\n", phdr->p_type, PT_LOAD);
 			continue;
 		}
 
 		/* get the address */
-		addr = phdr->p_vaddr;
+		addr = phdr->p_paddr;
 		if (!addr)
-			addr = phdr->p_paddr;
+			addr = phdr->p_vaddr;
 		if (!addr) {
-			puts("Skipping segment: no address");
+			puts("ELF: Skipping segment: no address");
 			continue;
 		}
 
 		/* verify there's anything to copy */
 		if (!phdr->p_filesz || !phdr->p_memsz) {
-			puts("Skipping segment: no data to copy");
+			puts("ELF: Skipping segment: no data to copy");
 			continue;
 		}
 
@@ -70,7 +73,18 @@ int ELF_LoadMem(const void *data) {
 
 		/* copy it into memory */
 		memcpy((void *)addr, (void *)((u32)data + phdr->p_offset), size);
+		printf("ELF: Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, addr, size);
+
+		/* and flush the cache - ELF_DoEntry will turn caches off */
+		dcache_flush((void *)addr, size);
+
+		phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
 	}
 
-	return 0;
+	/* lets do this thing */
+	ELF_DoEntry((void *)(ehdr->e_entry & (~0x80000000)));
+
+	/* ELF_DoEntry does not return */
+	__builtin_unreachable();
+	return -1;
 }
