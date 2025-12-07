@@ -36,4 +36,7 @@ static inline void dcache_flush(const void *p, u32 len) {
 	asm("sync ; isync");
 }
 
+#define sync() asm volatile("sync" ::: "memory")
+#define barrier() asm volatile ("" ::: "memory")
+
 #endif /* _CACHE_H */
