@@ -29,6 +29,7 @@
 #include <npll/video.h>
 #include <npll/flipper/vi.h>
 #include <npll/hollywood/gpio.h>
+#include <npll/allocator.h>
 
 static REGISTER_DRIVER(viDrv);
 
@@ -36,8 +37,8 @@ static REGISTER_DRIVER(viDrv);
 #define XFB_HEIGHT 480
 /* most TVs crop off the top and bottom-most ~16px - try to account for that here */
 #define XFB_OS_COMP_PIX 16
-static u32 __attribute__((aligned(32))) rgbFb[XFB_WIDTH * XFB_HEIGHT] = { 0 };
-static u16 __attribute__((aligned(32))) xfb[XFB_WIDTH * XFB_HEIGHT] = { 0 };
+static u32 *rgbFb;
+static u16 *xfb;
 
 #ifdef VI_DEBUG
 #define  VI_debug(f, arg...) printf("VI: " f, ##arg);
@@ -501,7 +502,7 @@ static struct videoInfo viVidInfo = {
 	.width = XFB_WIDTH,
 	.height = XFB_HEIGHT - (XFB_OS_COMP_PIX * 2),
 #endif
-	.fb = rgbFb,
+	.fb = NULL,
 	.width = XFB_WIDTH,
 	.height = XFB_HEIGHT,
 	.flush = viFlush,
@@ -513,13 +514,20 @@ static void viDrvInit(void) {
 	//rgb gray = {.as_u32 = 0xffaaaaaa};
 	//rgb yellow = {.as_u32 = 0xffffff00};
 
+	/* XFB must be in MEM1 */
+	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * XFB_WIDTH * XFB_HEIGHT);
+
+	/* rgbFB can go wherever */
+	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
+	viVidInfo.fb = rgbFb;
+
 	VIDEO_Init(0);
 	VIDEO_SetFrameBuffer(xfb);
 	if (H_ConsoleType == CONSOLE_TYPE_WII)
 		VISetupEncoder();
 
 	clear_fb(black);
-	//clear_fb_rgb(yellow);
+	clear_fb_rgb(black);
 	V_Register(&viVidInfo);
 
 	viDrv.state = DRIVER_STATE_READY;
