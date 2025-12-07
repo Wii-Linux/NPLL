@@ -10,6 +10,7 @@
 #ifndef _STDINT_H
 #define _STDINT_H
 
+#include <stddef.h>
 #include <npll/types.h>
 
 typedef i8 int8_t;
