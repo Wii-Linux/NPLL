@@ -38,8 +38,8 @@ int init(void) {
 	hw_version = HW_VERSION;
 	switch (hw_version) {
 	/* see console.h for reason behind not more types */
-	case HW_VERSION_PROD_11:
-	case HW_VERSION_PROD_21: {
+	case HW_VERSION_PROD_HOLLYWOOD:
+	case HW_VERSION_PROD_BOLLYWOOD: {
 		H_WiiRev = hw_version;
 		H_WiiURev = 0;
 		H_ConsoleType = CONSOLE_TYPE_WII;
