@@ -12,6 +12,7 @@
 #include <npll/output.h>
 #include <npll/exceptions.h>
 #include <npll/menu.h>
+#include <npll/allocator.h>
 #include <stdio.h>
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
@@ -82,6 +83,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	puts("I_InitCommon entered");
 	O_DebugInit();
 	E_Init();
+	M_Init();
 	D_Init();
 	UI_Init();
 	puts("Driver initialization done, entering mainLoop");
