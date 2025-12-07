@@ -226,6 +226,7 @@ void M_Init(void) {
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";
 		memcpy(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
+		break;
 	}
 	case CONSOLE_TYPE_WII_U: {
 		/* MEM1 below our binary */
@@ -241,6 +242,7 @@ void M_Init(void) {
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";
 		memcpy(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
+		break;
 	}
 	}
 	printf("Memory pool 0: \"%s\", 0x%08x down to 0x%08x\r\n", pools[0].name, pools[0].top, pools[0].bottom);
