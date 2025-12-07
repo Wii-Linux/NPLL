@@ -10,6 +10,7 @@
 #include <npll/menu.h>
 #include <npll/timer.h>
 #include <npll/video.h>
+#include <npll/utils.h>
 
 #define MAX_ENTRIES 24
 static bool hasChanged = false;
@@ -31,12 +32,12 @@ static u64 lastTb = 0;
 void M_Redraw(void) {
 	int i;
 	u64 tb = mftb();
-	if (T_HasElapsed(lastTb, 1000 * 1000)) {
+	if (__unlikely(T_HasElapsed(lastTb, 1000 * 1000))) {
 		puts("a");
 		lastTb = tb;
 		return;
 	}
-	if (!hasChanged)
+	if (__likely(!hasChanged))
 		return;
 
 	puts("==== MENU ====");

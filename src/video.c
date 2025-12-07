@@ -10,6 +10,7 @@
 #include <npll/video.h>
 #include <npll/timer.h>
 #include <npll/output.h>
+#include <npll/utils.h>
 
 static struct videoInfo *activeDriver = NULL;
 u32 *V_FbPtr;
@@ -47,6 +48,7 @@ static u32 color[2];
 static void maybeScroll(void) {
 	if (posY < videoOutDev.rows)
 		return;
+
 	posY = videoOutDev.rows - 1;
 	int fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
 	u8 *srcAddr = (((u8 *)V_FbPtr) + fontSz);
@@ -150,10 +152,10 @@ static struct outputDevice videoOutDev = {
 };
 
 void V_Flush(void) {
-	if (!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000))
+	if (__likely(!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000)))
 		return;
 
-	if (!activeDriver)
+	if (__unlikely(!activeDriver))
 		panic("Tried to V_Flush with no driver");
 
 	if (activeDriver->flush)
