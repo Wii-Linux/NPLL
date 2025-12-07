@@ -91,6 +91,9 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* we have AHBPROT, safe to continue */
 
+	/* set up SRAM access */
+	HW_SRNPROT |= SRNPROT_AHPEN;
+
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
 
