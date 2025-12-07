@@ -44,7 +44,13 @@ static const struct outputDevice outDev = {
 	.columns = 25
 };
 
+static int initialized = false;
 void O_DebugInit(void) {
+	if (initialized)
+		return;
+
+	initialized = true;
+
 	O_AddDevice(&outDev);
 	debugConWriteStr("H_PlatOps Debug Console initialized\n");
 	debugConWriteStr("Leaving O_DebugInit\n");
