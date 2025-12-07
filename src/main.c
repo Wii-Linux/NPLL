@@ -1,5 +1,5 @@
 /*
- * NPLL - NPLLain loop
+ * NPLL - Main loop
  *
  * Copyright (C) 2025 Techflash
  */
@@ -13,7 +13,7 @@ void __attribute__((noreturn)) mainLoop(void) {
 	while (1) {
 		D_RunCallbacks();
 		IN_HandleInputs();
-		M_Redraw();
+		UI_Redraw();
 		V_Flush();
 	}
 }

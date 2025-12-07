@@ -24,12 +24,12 @@ static struct menu curMenu = {
 	.entries = entries
 };
 
-void M_Init(void) {
+void UI_Init(void) {
 	memset(entries, 0, MAX_ENTRIES * sizeof(struct menuEntry));
 }
 
 static u64 lastTb = 0;
-void M_Redraw(void) {
+void UI_Redraw(void) {
 	int i;
 	u64 tb = mftb();
 	if (__unlikely(T_HasElapsed(lastTb, 1000 * 1000))) {
@@ -47,7 +47,7 @@ void M_Redraw(void) {
 	hasChanged = false;
 }
 
-void M_Switch(struct menu *m) {
+void UI_Switch(struct menu *m) {
 	curMenu.header = m->header;
 	curMenu.footer = m->footer;
 	lastEntry = 0;
@@ -56,7 +56,7 @@ void M_Switch(struct menu *m) {
 	memset(entries, 0, MAX_ENTRIES * sizeof(struct menuEntry));
 }
 
-void M_AddEntry(struct menuEntry *e) {
+void UI_AddEntry(struct menuEntry *e) {
 	hasChanged = true;
 	memcpy(&entries[lastEntry], e, sizeof(struct menuEntry));
 	lastEntry++;

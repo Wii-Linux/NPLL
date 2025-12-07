@@ -22,9 +22,9 @@ struct menu {
 	char *footer;
 };
 
-extern void M_Init(void);
-extern void M_Redraw(void);
-extern void M_Switch(struct menu *m);
-extern void M_AddEntry(struct menuEntry *e);
+extern void UI_Init(void);
+extern void UI_Redraw(void);
+extern void UI_Switch(struct menu *m);
+extern void UI_AddEntry(struct menuEntry *e);
 
 #endif /* _MENU_H */

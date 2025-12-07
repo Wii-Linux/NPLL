@@ -52,13 +52,14 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 - `D`   - Drivers
 - `H`   - Current Hardware
 - `B`   - Block devices
-- `M`   - Menu
+- `M`   - Memory
 - `FS`  - Filesystem
 - `IN`  - Input
 - `O`   - Output
 - `V`   - Video
 - `E`   - PowerPC Exception handling
 - `ELF` - ELF binary handling
+- `UI`  - Menu UI
 
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
