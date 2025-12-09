@@ -15,15 +15,29 @@ extern void __attribute__((noreturn)) ELF_DoEntry(const void *entry);
 int ELF_CheckValid(const void *data) {
 	const Elf32_Ehdr *ehdr = (const Elf32_Ehdr *)data;
 
-	if (memcmp(data, ELFMAG, SELFMAG))
+	if (memcmp(data, ELFMAG, SELFMAG)) {
+		puts("ELF: Invalid magic");
 		return ELF_ERR_WRONG_MAGIC;
+	}
 
 	/* check that it's for 32-bit BE PPC, and a standard executable */
-	if (ehdr->e_ident[EI_CLASS] != ELFCLASS32 ||
-	    ehdr->e_ident[EI_DATA] != ELFDATA2MSB ||
-	    ehdr->e_type != ET_EXEC ||
-	    ehdr->e_machine != EM_PPC)
+	if (ehdr->e_ident[EI_CLASS] != ELFCLASS32) {
+		puts("ELF: not 32-bit");
 		return ELF_ERR_INVALID_EXEC;
+	}
+
+	if (ehdr->e_ident[EI_DATA] != ELFDATA2MSB) {
+		puts("ELF: not big-endian");
+		return ELF_ERR_INVALID_EXEC;
+	}
+	if (ehdr->e_type != ET_EXEC) {
+		puts("ELF: not a standard executable");
+		return ELF_ERR_INVALID_EXEC;
+	}
+	if (ehdr->e_machine != EM_PPC) {
+		puts("ELF: not for PowerPC");
+		return ELF_ERR_INVALID_EXEC;
+	}
 
 	return 0;
 }
