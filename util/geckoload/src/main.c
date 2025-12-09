@@ -73,9 +73,9 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 
 	printf ("sending upload request\n");
 
-	memcpy(&b[0], "NPLLBIN", 7);
+	memcpy(&b[0], "NPLLBIN\x7f", 8);
 
-	if (gecko_write (b, 7)) {
+	if (gecko_write (b, 8)) {
 		gecko_close ();
 		fprintf (stderr, "error sending data\n");
 		return false;
@@ -92,6 +92,7 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 		return false;
 	}
 
+	sleep(5);
 	printf ("sending data");
 	fflush (stdout);
 
@@ -99,8 +100,8 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 	p = buf;
 	while (left) {
 		block = left;
-		if (block > 32768)
-			block = 32768;
+		if (block > 16384)
+			block = 16384;
 		left -= block;
 
 		if (gecko_write (p, block)) {

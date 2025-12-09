@@ -14,6 +14,7 @@
 #include <npll/drivers/exi.h>
 #include <npll/elf.h>
 #include <npll/timer.h>
+#include <npll/allocator.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,17 +43,17 @@ static int usbgeckoTXReady(int port) {
 	return usbgeckoTransaction(0xc000, port) & 0x0400;
 }
 
-static int usbgeckoRXEmpty(int port) {
+static int usbgeckoRXReady(int port) {
 	return usbgeckoTransaction(0xd000, port) & 0x0400;
 }
 
-static int usbgeckoGetChar(int port) {
+static int usbgeckoGetChar(int port, int retryCount) {
 	u16 data;
 	int i;
 
-	for (i = 0; i < 5; i++)
-		if (!usbgeckoRXEmpty(port))
-			return -1;
+	for (i = 0; i < retryCount; i++)
+		if (usbgeckoRXReady(port))
+			break;
 
 	data = usbgeckoTransaction(0xa000, port);
 	if (data & 0x0800)
@@ -77,11 +78,8 @@ static void usbgeckoWriteStr(const char *str) {
 	}
 }
 
-#if 0
-static u64 timeoutStart = 0;
-static int timeout = 0;
-#endif
-static u8 buf[512 * 1024] = { 0 };
+static u8 tinyBuf[16] = { 0 };
+static u8 *buf;
 static int bufIdx = 0;
 static u32 binSz = 0;
 static enum {
@@ -89,43 +87,31 @@ static enum {
 	STATE_GET_SIZE,
 	STATE_GET_DATA
 } usbgeckoState = STATE_IDLE;
-static const char bufMagic[7] = "NPLLBIN";
+static const u8 bufMagic[8] = { 'N', 'P', 'L', 'L', 'B', 'I', 'N', 0x7f };
+
 static void usbgeckoCallback(void) {
-	int ret;
+	int ret, retryCount = 50;
 	u8 data;
 
 again:
-
-#if 0
-	/* are we still in timeout? */
-	if (timeout && !T_HasElapsed(timeoutStart, 1000))
-		return;
-	timeout = 0;
-#endif
-
 	/* try to get a byte */
-	ret = usbgeckoGetChar(slot);
+	ret = usbgeckoGetChar(slot, retryCount);
 
-	/* did we get anything? */
-	if (ret == -1) {
-#if 0
-		/* nope, go back in timeout */
-		timeout = 1;
-		timeoutStart = mftb();
-#endif
+	if (ret == -1) /* didn't get anything */
 		return;
-	}
 
 	/* we got a byte */
 	data = (u8)(ret & 0xff);
+	if (bufIdx < 10) /* for debugging */
+		printf("GECKO: Got data: 0x%02x\r\n", data);
 
 	switch (usbgeckoState) {
 	case STATE_IDLE: {
-		buf[bufIdx] = data;
+		tinyBuf[bufIdx] = data;
 		bufIdx++;
 
 		/* is what we have so far right? */
-		if (memcmp(buf, bufMagic, bufIdx)) {
+		if (memcmp(tinyBuf, bufMagic, bufIdx)) {
 			/* nope :( */
 			puts("GECKO: bogus data");
 			bufIdx = 0;
@@ -143,7 +129,7 @@ again:
 		break;
 	}
 	case STATE_GET_SIZE: {
-		buf[bufIdx] = data;
+		tinyBuf[bufIdx] = data;
 		bufIdx++;
 
 		/* do we have enough? */
@@ -151,16 +137,32 @@ again:
 			break; /* not yet */
 
 		/* yes, interpret the size as a big-endian 32-bit integer */
-		binSz = ((u32 *)buf)[0];
+		binSz = ((u32 *)tinyBuf)[0];
 
 		/* is it sensical? */
-		if (binSz > sizeof(buf) || binSz <= sizeof(Elf32_Ehdr)) {
+		/* a binary of 16M should never OOM, even on GameCube (though the load would fail since it'd overwrite itself) - any larger doesn't make any sense to load over USB Gecko anyways since it'd be so miserably slow */
+		if (binSz > (16 * 1024 * 1024) || binSz <= sizeof(Elf32_Ehdr)) {
 			/* hey now you can't do that */
 			printf("GECKO: Cannot possibly receive binary of nonsense size: %u\r\n", binSz);
 			usbgeckoState = STATE_IDLE;
 			bufIdx = 0;
 			break;
 		}
+
+		/* allocate our scratch buffer in MEM2 if possible */
+		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
+			buf = M_PoolAlloc(POOL_MEM2, binSz);
+		else
+			buf = M_PoolAlloc(POOL_MEM1, binSz);
+
+		if (!buf) {
+			printf("GECKO: Memory allocation for binary of size %u failed\r\n", binSz);
+			usbgeckoState = STATE_IDLE;
+			bufIdx = 0;
+			break;
+		}
+
+		memset(buf, 0, binSz);
 
 		/* yes, we can receive that */
 		printf("GECKO: Receiving binary with size: %u...\r\n", binSz);
@@ -184,6 +186,7 @@ again:
 		ret = ELF_CheckValid(buf);
 		if (ret) {
 			printf("GECKO: Invalid ELF: %d\r\n", ret);
+			free(buf);
 			usbgeckoState = STATE_IDLE;
 			bufIdx = 0;
 			break;
@@ -193,13 +196,13 @@ again:
 		printf("GECKO: Launching ELF, goodbye!\r\n", ret);
 		ret = ELF_LoadMem(buf);
 		printf("GECKO: ELF launch failed: %d\r\n", ret);
+		free(buf);
 		usbgeckoState = STATE_IDLE;
 		bufIdx = 0;
 		break;
 	}
 	}
 
-	/* try to ingest as many bytes as we have */
 	goto again;
 }
 
