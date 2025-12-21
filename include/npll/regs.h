@@ -31,6 +31,7 @@
 #define HW_SRNPROT           _HOLLYWOOD_REG(0x60)
 #  define SRNPROT_AHPEN          (1 << 3)
 #define HW_AHBPROT           _HOLLYWOOD_REG(0x64)
+#  define AHBPROT_PPCKERN        (1 << 31)
 #define HW_AIPROT            _HOLLYWOOD_REG(0x70)
 #define HW_RESETS            _HOLLYWOOD_REG(0x194)
 #  define RESETS_RSTBINB         (1 << 0)
