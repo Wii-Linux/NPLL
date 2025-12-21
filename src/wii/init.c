@@ -174,6 +174,15 @@ static struct platOps wiiPlatOps = {
 void __attribute__((noreturn)) H_InitWii(void) {
 	u32 batl, batu, hid4, infohdr;
 
+	/* set plat ops */
+	H_PlatOps = &wiiPlatOps;
+
+	/* debug console */
+	H_TinyUGInit();
+
+	/* we want to get logs out immediately for crashing IOS or failing to get AHBPROT */
+	O_DebugInit();
+
 	/* We'd better have AHBPROT... */
 	if (HW_AHBPROT != 0xffffffff) {
 		/*
@@ -181,15 +190,13 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		 * Unlikely, but depending on the config,
 		 * we *might* just be able to set it and pray.
 		 * Might as well try...
-		 *
-		 * TODO: Use IOS exploits to set it?
-		 * Would need to implement an IPC stack, and
-		 * it assumes that we even *have* IOS...
 		 */
 		HW_AHBPROT = 0xfffffff;
 		udelay(1000 * 10); /* give it a sec to stick */
-		if (HW_AHBPROT != 0xffffffff)
-			wiiPanic("Can't turn on AHBPROT, cannot continue."); /* well crap */
+		if (HW_AHBPROT != 0xffffffff) {
+			printf("failed to turn on AHBPROT, cur value = 0x%08x\r\n", HW_AHBPROT);
+			panic("Can't turn on AHBPROT, cannot continue."); /* well crap */
+		}
 	}
 
 	/* we have AHBPROT, safe to continue */
@@ -197,14 +204,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	/* set up SRAM access */
 	HW_SRNPROT |= SRNPROT_AHPEN;
 
-	/* set plat ops */
-	H_PlatOps = &wiiPlatOps;
 
-	/* debug console */
-	H_TinyUGInit();
-
-	/* we want to get logs out immediately for crashing IOS */
-	O_DebugInit();
 
 	/* set up basic GPIOs for panic indicator */
 	HW_GPIO_OWNER |= GPIO_SLOT_LED;
