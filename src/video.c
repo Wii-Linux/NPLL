@@ -12,7 +12,7 @@
 #include <npll/output.h>
 #include <npll/utils.h>
 
-static struct videoInfo *activeDriver = NULL;
+struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
 int V_FbWidth;
 int V_FbHeight;
@@ -155,18 +155,18 @@ void V_Flush(void) {
 	if (__likely(!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000)))
 		return;
 
-	if (__unlikely(!activeDriver))
+	if (__unlikely(!V_ActiveDriver))
 		panic("Tried to V_Flush with no driver");
 
-	if (activeDriver->flush)
-		activeDriver->flush();
+	if (V_ActiveDriver->flush)
+		V_ActiveDriver->flush();
 }
 
 void V_Register(struct videoInfo *info) {
 	if (!info)
 		panic("Tried to register NULL videoInfo");
 
-	if (activeDriver)
+	if (V_ActiveDriver)
 		panic("Tried to register video driver but there's already an active one");
 
 	printf("VIDEO: Registering driver %s\r\n", info->driver->name);
@@ -178,7 +178,7 @@ void V_Register(struct videoInfo *info) {
 	V_FbWidth = info->width;
 	V_FbHeight = info->height;
 	V_FbStride = info->width * sizeof(u32);
-	activeDriver = info;
+	V_ActiveDriver = info;
 
 	color[0] = colors[C_LGRAY];
 	color[1] = colors[C_BLACK];

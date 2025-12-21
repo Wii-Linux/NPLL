@@ -21,6 +21,7 @@ struct videoInfo {
 extern void V_Flush(void);
 extern void V_Register(struct videoInfo *info);
 
+extern struct videoInfo *V_ActiveDriver;
 extern u32 *V_FbPtr;
 extern int V_FbWidth;
 extern int V_FbHeight;

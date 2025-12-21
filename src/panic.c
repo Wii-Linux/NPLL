@@ -14,7 +14,8 @@
 void __attribute__((noreturn)) panic(const char *str) {
 	/*__putcharNoGraphics = true;*/
 	printf("FATAL: PANIC: %s\r\n", str);
-	V_Flush();
+	if (V_ActiveDriver)
+		V_Flush();
 
 	H_PlatOps->panic(str);
 }
