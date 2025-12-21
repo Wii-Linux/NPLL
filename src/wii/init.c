@@ -20,6 +20,8 @@
 
 enum wiiRev H_WiiRev;
 
+extern int IOS_DevShaExploit(void);
+
 /* infloop: b [pc - 8] */
 static const u32 bombVal = 0xeafffffc;
 
@@ -173,6 +175,7 @@ static struct platOps wiiPlatOps = {
 
 void __attribute__((noreturn)) H_InitWii(void) {
 	u32 batl, batu, hid4, infohdr;
+	int error;
 
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
@@ -194,8 +197,14 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		HW_AHBPROT = 0xfffffff;
 		udelay(1000 * 10); /* give it a sec to stick */
 		if (HW_AHBPROT != 0xffffffff) {
-			printf("failed to turn on AHBPROT, cur value = 0x%08x\r\n", HW_AHBPROT);
-			panic("Can't turn on AHBPROT, cannot continue."); /* well crap */
+			printf("failed to turn on AHBPROT manually, cur value = 0x%08x\r\n", HW_AHBPROT);
+			error = IOS_DevShaExploit();
+			if (error || HW_AHBPROT != 0xffffffff) {
+				printf("failed to turn on AHBPROT with IOS exploit, cur value = 0x%08x\r\n", HW_AHBPROT);
+				panic("Can't turn on AHBPROT, cannot continue."); /* well crap */
+			}
+			else
+				printf("Successfully enabled HW_AHBPROT with IOS exploit, cur value = 0x%08x\r\n", HW_AHBPROT);
 		}
 	}
 
@@ -228,7 +237,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* BEPI = 0xd0000000, BL=256MB, Vs=1, Vp=1 */
 	batu = 0xd0001fff;
-	
+
 	setbat(3, SETBAT_TYPE_BOTH, batu, batl);
 
 
