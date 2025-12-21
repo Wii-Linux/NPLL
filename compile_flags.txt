@@ -1,0 +1,9 @@
+-Iinclude
+-nostdinc
+-ffreestanding
+-nostdlib
+-nostartfiles
+-O3
+-Wall
+-Wextra
+-Wformat=2
