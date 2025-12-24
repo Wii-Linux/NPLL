@@ -101,15 +101,12 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 	/* trying to allocate from nonexistant pool */
 	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
 		return NULL;
-	
-	bottom = (u32)pool->cur_bottom;
 
-	printf("allocator: allocating %u bytes from pool %s\r\n", size, pool->name);
+	bottom = (u32)pool->cur_bottom;
 
 	/* write out a 'struct block' at it's start */
 	mem = (void *)(bottom - size);
 	block = (struct block *)(((u32)mem) - sizeof(struct block));
-	printf("allocator: block @ 0x%08x, data @ 0x%08x\r\n", (u32)block, (u32)mem);
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
 	block->size = size;
@@ -118,7 +115,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 	bottom -= size - sizeof(struct block);
 	pool->cur_bottom = (void *)bottom;
 
-	printf("allocator: new pool bottom: 0x%08x, returning 0x%08x\r\n", bottom, mem);
+	printf("allocator: allocation of %u bytes from pool %s; new pool bottom: 0x%08x, block: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)block, (u32)mem);
 
 	return mem;
 }

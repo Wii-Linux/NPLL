@@ -40,7 +40,6 @@ void O_AddDevice(const struct outputDevice *dev) {
 		O_DebugCleanup();
 		O_MemlogCleanup();
 	}
-	puts("OUT: Success");
 }
 
 void O_RemoveDevice(const struct outputDevice *dev) {
