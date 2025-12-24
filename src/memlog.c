@@ -10,9 +10,9 @@
 #include <npll/output.h>
 
 /* TODO: really ensure that there's nothing here we're clobbering */
-#define memlogStart (char *)0x81500000
+#define memlogStart (char *)0x817f8000
 static char *memlogNext = memlogStart;
-static u32 maxSize = 0x00200000;
+static u32 maxSize = 0x00008000;
 
 static void memlogWriteChar(const char c) {
 	if ((u32)memlogNext >= ((u32)memlogNext + maxSize))
