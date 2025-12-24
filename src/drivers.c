@@ -8,6 +8,7 @@
 #include <npll/types.h>
 #include <npll/drivers.h>
 #include <npll/panic.h>
+#include <npll/utils.h>
 
 #define MAX_CALLBACKS 64
 
@@ -33,7 +34,7 @@ void D_Init(void) {
 	lastType = DRIVER_TYPE_OTHER;
 	curType = firstType;
 
-	puts("D_Init entered");
+	TRACE();
 
 	/* Initialize drivers in order of driverType */
 	for (; curType <= lastType; curType++) {

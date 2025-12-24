@@ -10,6 +10,7 @@ endif
 
 ASFLAGS :=
 CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong
+#CFLAGS  += -DDO_TRACE
 CFLAGS  += -O3 -Wall -Wextra -Wformat=2
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 

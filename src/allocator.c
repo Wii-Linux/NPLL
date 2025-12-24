@@ -199,7 +199,7 @@ void *malloc(size_t size) {
 }
 
 void M_Init(void) {
-	puts("M_Init entered");
+	TRACE();
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
 		/* MEM1 below our binary */

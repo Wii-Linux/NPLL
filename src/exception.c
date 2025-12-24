@@ -15,6 +15,7 @@
 #include <string.h>
 #include <npll/panic.h>
 #include <npll/types.h>
+#include <npll/utils.h>
 
 extern char exception_2200_start, exception_2200_end;
 
@@ -80,7 +81,7 @@ void E_Handler(int exception) {
 void E_Init(void) {
 	u32 vector;
 	u32 len_2200;
-	puts("E_Init entered");
+	TRACE();
 
 	for (vector = 0x100; vector < 0x2000; vector += 0x10) {
 		u32 *insn = (u32 *)(0x80000000 + vector);

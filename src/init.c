@@ -13,6 +13,7 @@
 #include <npll/exceptions.h>
 #include <npll/menu.h>
 #include <npll/allocator.h>
+#include <npll/utils.h>
 #include <stdio.h>
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
@@ -63,7 +64,7 @@ int init(void) {
 
 	/* it might be a Wii or a Wii U... check LT_CHIPREVID */
 	lt_chiprevid = LT_CHIPREVID;
-	
+
 	/* Quick check, do we even have the magic bytes?  If not, it's certainly a Wii. */
 	if ((lt_chiprevid & 0xFFFF0000) != 0xCAFE0000) {
 		puts("Detected hardware: Nintendo Wii");
@@ -80,7 +81,7 @@ int init(void) {
 }
 
 void __attribute__((noreturn)) I_InitCommon(void) {
-	puts("I_InitCommon entered");
+	TRACE();
 	O_DebugInit();
 	E_Init();
 	M_Init();
