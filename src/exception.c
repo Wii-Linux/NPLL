@@ -77,8 +77,7 @@ void E_Handler(int exception) {
 	panic("Got fatal exception");
 }
 
-void E_Init(void)
-{
+void E_Init(void) {
 	u32 vector;
 	u32 len_2200;
 	puts("E_Init entered");
@@ -96,6 +95,4 @@ void E_Init(void)
 	len_2200 = &exception_2200_end - &exception_2200_start;
 	memcpy((void *)0x80002200, &exception_2200_start, len_2200);
 	sync_before_exec((void *)0x80002200, len_2200);
-	puts("Leaving E_Init");
 }
-

@@ -26,25 +26,19 @@ extern int IOS_DevShaExploit(void);
 static const u32 bombVal = 0xeafffffc;
 
 static void crashIOSAndFixupMEM2(void) {
-	u32 srnprot, tmp, tmp2, tmp3, tmp4;
+	u32 srnprot, low_orig, low_after, high_orig, high_after;
 	vu32 *sram;
 	puts("IOS detected, trying to nuke it out of existance...");
 
-	printf("MEM_PROT_DDR: 0x%04x\n", HW_MEM_PROT_DDR);
-	printf("MEM_PROT_DDR_BASE: 0x%04x\n", HW_MEM_PROT_DDR_BASE);
-	printf("MEM_PROT_DDR_BASE (interpreted): 0x%08x\n", (HW_MEM_PROT_DDR_BASE << 12) | 0x10000000);
-	printf("MEM_PROT_DDR_END: 0x%04x\n", HW_MEM_PROT_DDR_END);
-	printf("MEM_PROT_DDR_END (interpreted): 0x%08x\n", (HW_MEM_PROT_DDR_END << 12) | 0x10000000);
+	printf("MEM_PROT_DDR: 0x%04x\r\n", HW_MEM_PROT_DDR);
+	printf("MEM_PROT_DDR_BASE: 0x%04x; interpreted: 0x%08x\r\n", HW_MEM_PROT_DDR_BASE, (HW_MEM_PROT_DDR_BASE << 12) | 0x10000000);
+	printf("MEM_PROT_DDR_END: 0x%04x; interpreted: 0x%08x\r\n", HW_MEM_PROT_DDR_END, (HW_MEM_PROT_DDR_END << 12) | 0x10000000);
 
-	tmp = *(vu32 *)0xd3fffffc; sync(); barrier();
-	tmp2 = *(vu32 *)0xd1000000; sync(); barrier();
-	printf("end orig: 0x%08x\r\n", tmp);
-	printf("start orig: 0x%08x\r\n", tmp2);
+	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
 	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
-	tmp3 = *(vu32 *)0xd3fffffc; sync(); barrier();
-	tmp4 = *(vu32 *)0xd1000000; sync(); barrier();
-	printf("end after: 0x%08x\r\n", tmp3);
-	printf("start after: 0x%08x\r\n", tmp4);
+	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_after = *(vu32 *)0xd1000000; sync(); barrier();
 
 	/*
 	 * ensure no artifacts of memory protection show up:
@@ -54,19 +48,28 @@ static void crashIOSAndFixupMEM2(void) {
 	 *   - lower MEM2 unexpectedly changed
 	 *   - write did not go through
 	 */
-	if ((tmp == tmp2 && tmp3 == tmp4) || tmp3 != 0xdeadbeef || tmp2 != tmp4)
-		puts("test value write unsuccessful (expected)");
-	else
-		puts("test value write successful???");
+	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after)
+		(void)0;
+		/*puts("test value write unsuccessful (expected)");*/
+	else {
+		puts("test value write already successful???");
+		printf("low orig: 0x%08x\r\n", low_orig);
+		printf("high orig: 0x%08x\r\n", high_orig);
+		printf("low after: 0x%08x\r\n", low_after);
+		printf("high after: 0x%08x\r\n", high_after);
+	}
+
 
 	srnprot = HW_SRNPROT;
-	printf("HW_SRNPROT: 0x%08x\r\n", srnprot);
+	printf("HW_SRNPROT: 0x%08x", srnprot);
 
 	if (!(srnprot & 0x8)) {
-		puts("no PPC SRAM access, enabling it");
+		puts("; no PPC SRAM access, enabling it");
 		srnprot |= 0x8;
 		HW_SRNPROT = srnprot;
 	}
+	else
+		puts("");
 
 	sram = (vu32 *)0xcd400000;
 	if (srnprot & 0x20) {
@@ -87,7 +90,7 @@ static void crashIOSAndFixupMEM2(void) {
 		}
 	}
 
-	puts("IOS is now probably crashed, giving ourselves access to all of MEM2...");
+	printf("IOS is now probably crashed, enabling full MEM2 access... ");
 	HW_MEM_PROT_SPL = 0;
 	HW_MEM_PROT_SPL_BASE = 0;
 	HW_MEM_PROT_SPL_END = 0;
@@ -95,17 +98,11 @@ static void crashIOSAndFixupMEM2(void) {
 	HW_MEM_PROT_DDR_BASE = 0;
 	HW_MEM_PROT_DDR_END = 0;
 
-	puts("Testing again...");
-
-	tmp = *(vu32 *)0xd3fffffc; sync(); barrier();
-	tmp2 = *(vu32 *)0xd1000000; sync(); barrier();
-	printf("end orig: 0x%08x\r\n", tmp);
-	printf("start orig: 0x%08x\r\n", tmp2);
+	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
 	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
-	tmp3 = *(vu32 *)0xd3fffffc; sync(); barrier();
-	tmp4 = *(vu32 *)0xd1000000; sync(); barrier();
-	printf("end after: 0x%08x\r\n", tmp3);
-	printf("start after: 0x%08x\r\n", tmp4);
+	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_after = *(vu32 *)0xd1000000; sync(); barrier();
 
 	/*
 	 * ensure no artifacts of memory protection show up:
@@ -115,10 +112,16 @@ static void crashIOSAndFixupMEM2(void) {
 	 *   - lower MEM2 unexpectedly changed
 	 *   - write did not go through
 	 */
-	if ((tmp == tmp2 && tmp3 == tmp4) || tmp3 != 0xdeadbeef || tmp2 != tmp4)
-		panic("test value write unsuccessful??");
+	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after) {
+		puts("unsuccessful???");
+		printf("low orig: 0x%08x\r\n", low_orig);
+		printf("high orig: 0x%08x\r\n", high_orig);
+		printf("low after: 0x%08x\r\n", low_after);
+		printf("high after: 0x%08x\r\n", high_after);
+		panic("Could not unlock MEM2");
+	}
 	else
-		puts("test value write successful");
+		puts("success");
 }
 
 static __attribute__((noreturn)) void wiiPanic(const char *str) {

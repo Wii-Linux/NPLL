@@ -115,7 +115,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 	bottom -= size - sizeof(struct block);
 	pool->cur_bottom = (void *)bottom;
 
-	printf("allocator: allocation of %u bytes from pool %s; new pool bottom: 0x%08x, block: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)block, (u32)mem);
+	printf("allocator: alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
 
 	return mem;
 }
@@ -199,6 +199,7 @@ void *malloc(size_t size) {
 }
 
 void M_Init(void) {
+	puts("M_Init entered");
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
 		/* MEM1 below our binary */
