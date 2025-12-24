@@ -218,8 +218,10 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	HW_SRNPROT |= SRNPROT_AHPEN;
 
 	/* we can only access this after we've gained some perms in AHBPROT */
-	if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000)
+	if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000) {
 		H_WiiIsvWii = 1;
+		puts("Detected Wii U vWii");
+	}
 
 	/* set up basic GPIOs for panic indicator */
 	HW_GPIO_OWNER |= GPIO_SLOT_LED;
