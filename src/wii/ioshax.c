@@ -40,11 +40,9 @@ static u32 arm_payload[] = {
 };
 
 int IOS_DevShaExploit(void) {
-	printf("AHBPROT: %08x\n", HW_AHBPROT);
 	// check if we already have permissions
 	if (HW_AHBPROT & AHBPROT_PPCKERN)
 		return 0;
-	printf("need PPCKERN, elevate permissions\n");
 
 	// backup the start, then copy our shellcode to mem1
 	u32 *mem1 = (u32 *)MEM1_CACHED_BASE;
@@ -72,9 +70,8 @@ int IOS_DevShaExploit(void) {
 	// trigger!
 	printf("triggering exploit...");
 	IOS_Ioctlv(fd, 0, 1, 2, vec);
-	printf("returned from trigger\n");
+	printf("returned from trigger\r\n");
 	udelay(250 * 1000);
-	printf("AHBPROT: %08x\n", HW_AHBPROT);
 	if (HW_AHBPROT & AHBPROT_PPCKERN)
 		return 0;
 	else
