@@ -54,7 +54,7 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 
 	/* set proper directions */
 	dir = ~(GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN | GPIO_EEP_MISO | GPIO_AVE_SDA);
-	if (H_ConsoleType == CONSOLE_TYPE_WII_U)
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
 		dir &= ~GPIO_GAMEPAD_EN;
 
 	HW_GPIOB_DIR = dir;
