@@ -34,6 +34,7 @@ struct platOps {
 
 extern enum consoleType H_ConsoleType;
 extern enum wiiRev H_WiiRev;
+extern int H_WiiIsvWii;
 extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
 

@@ -18,7 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 
-enum wiiRev H_WiiRev;
+enum wiiRev H_WiiRev = 0;
+int H_WiiIsvWii = 0;
 
 extern int IOS_DevShaExploit(void);
 
@@ -216,7 +217,9 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	/* set up SRAM access */
 	HW_SRNPROT |= SRNPROT_AHPEN;
 
-
+	/* we can only access this after we've gained some perms in AHBPROT */
+	if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000)
+		H_WiiIsvWii = 1;
 
 	/* set up basic GPIOs for panic indicator */
 	HW_GPIO_OWNER |= GPIO_SLOT_LED;
