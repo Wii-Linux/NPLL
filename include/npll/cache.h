@@ -36,6 +36,18 @@ static inline void dcache_flush(const void *p, u32 len) {
 	asm("sync ; isync");
 }
 
+static inline void dcache_invalidate(void *p, u32 len) {
+	u32 a, b;
+
+	a = (u32)p & ~0x1f;
+	b = ((u32)p + len + 0x1f) & ~0x1f;
+
+	for ( ; a < b; a += 32)
+		asm("dcbi 0,%0" : : "b"(a));
+
+	asm("sync ; isync");
+}
+
 #define sync() asm volatile("sync" ::: "memory")
 #define barrier() asm volatile ("" ::: "memory")
 
