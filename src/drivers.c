@@ -30,8 +30,8 @@ static inline const char *D_StateToStr(enum driverState state) {
 void D_Init(void) {
 	int curType, firstType, lastType;
 	struct driver *curDriver;
-	firstType = DRIVER_TYPE_CRITICAL;
-	lastType = DRIVER_TYPE_OTHER;
+	firstType = DRIVER_TYPE_START + 1;
+	lastType = DRIVER_TYPE_END - 1;
 	curType = firstType;
 
 	TRACE();
