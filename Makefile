@@ -5,7 +5,28 @@
 #
 
 ifneq ($(uname -m),ppc)
-CC      := powerpc-unknown-linux-gnu-gcc
+CROSS_PREFIX ?= $(word 1, \
+	$(if $(shell which powerpc-unknown-linux-gnu-gcc),powerpc-unknown-linux-gnu-) \
+	$(if $(shell which powerpc-linux-gnu-gcc),powerpc-linux-gnu-) \
+	)
+ifeq ($(CROSS_PREFIX),)
+$(warning WARNING using host CC=$(CC) AR=$(AR), you can set the powerpc prefix with CROSS_PREFIX)
+else
+$(info CROSS_PREFIX=$(CROSS_PREFIX))
+CC := $(CROSS_PREFIX)gcc
+AR := $(CROSS_PREFIX)ar
+endif
+endif
+
+ELF2DOL ?= elf2dol
+ifeq ($(shell which $(ELF2DOL)),)
+$(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools)
+endif
+
+ifeq ($(VERBOSE),1)
+HIDE :=
+else
+HIDE := @
 endif
 
 ASFLAGS :=
@@ -28,21 +49,22 @@ OUT_DOL := bin/npll.dol
 all: $(OUT_ELF) $(OUT_DOL)
 
 $(OUT_DOL): $(OUT_ELF)
-	elf2dol $< $@
+	$(HIDE)$(ELF2DOL) $< $@
+	$(info $s  ELF2DOL $@)
 
 $(OUT_ELF): $(OBJ)
-	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 	$(info $s  LD $@)
 
 build/%.o: src/%.c
-	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) -o $@ -c $<
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -o $@ -c $<
 	$(info $s  CC $<)
 
 build/%.o: src/%.S
-	@mkdir -p $(@D)
-	@$(CC) $(ASFLAGS) $(CFLAGS) -o $@ -c $<
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(ASFLAGS) $(CFLAGS) -o $@ -c $<
 	$(info $s  AS $<)
 
 

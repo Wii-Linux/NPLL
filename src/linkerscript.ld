@@ -16,9 +16,9 @@ MEMORY {
 	 * don't like putting us at 0x0.
 	 */
 
-	LOWPHYS (rwx): ORIGIN = 0x00004000, LENGTH = 0x017fc000 /* physical MEM1, the load address of our ELF */
+	LOWPHYS (rwx): ORIGIN = 0x00004000, LENGTH = 0x016fc000 /* physical MEM1, the load address of our ELF */
 	HIPHYS (rwx): ORIGIN = 0x01700000, LENGTH = 0x00100000 /* physical MEM1, the load address of our relocated code+data */
-	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x017fc000 /* virtual runtime addresses after BAT setup */
+	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x016fc000 /* virtual runtime addresses after BAT setup */
 	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x00100000 /* virtual runtime address after relocation */
 }
 
@@ -38,8 +38,7 @@ SECTIONS
 	/* start linker VMA at the virtual address where init code will run */
 	. = ORIGIN(LOWVIRT);
 	.init : AT(_lma) {
-		*(.init)
-		*(.init*)
+		KEEP(*(.init .init*))
 		. = ALIGN(32);
 	} > LOWVIRT :init
 	_lma = _lma + SIZEOF(.init);
@@ -91,7 +90,7 @@ SECTIONS
 
 	.drivers : AT(_lma) {
 		PROVIDE(__drivers_start = .);
-		*(.drivers)
+		KEEP(*(.drivers))
 		PROVIDE(__drivers_end = .);
 		. = ALIGN(32);
 	} > HIVIRT :data
@@ -141,3 +140,10 @@ __stack_bottom = (__bss_start + SIZEOF(.bss));
 
 PROVIDE(__stack_top = __stack_top);
 PROVIDE(__stack_bottom = __stack_bottom);
+
+/* the relocation code assumes cache-alignment and same size */
+ASSERT(__reloc_source_start % 32 == 0, "cache-align __reloc_source_start");
+ASSERT(__reloc_source_end % 32 == 0, "cache-align __reloc_source_end");
+ASSERT(__reloc_dest_start % 32 == 0, "cache-align __reloc_dest_start");
+ASSERT(__reloc_dest_end % 32 == 0, "cache-align __reloc_dest_end");
+ASSERT(__reloc_dest_end - __reloc_dest_start == __reloc_source_end - __reloc_source_start, "fix relocation size");
