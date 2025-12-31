@@ -6,11 +6,11 @@
 
 ifneq ($(uname -m),ppc)
 CROSS_PREFIX ?= $(word 1, \
-	$(if $(shell which powerpc-unknown-linux-gnu-gcc),powerpc-unknown-linux-gnu-) \
-	$(if $(shell which powerpc-linux-gnu-gcc),powerpc-linux-gnu-) \
+	$(if $(shell command -v powerpc-unknown-linux-gnu-gcc),powerpc-unknown-linux-gnu-) \
+	$(if $(shell command -v powerpc-linux-gnu-gcc),powerpc-linux-gnu-) \
 	)
 ifeq ($(CROSS_PREFIX),)
-$(warning WARNING using host CC=$(CC) AR=$(AR), you can set the powerpc prefix with CROSS_PREFIX)
+$(warning WARNING: Unable to autodetect PowerPC cross-toolchain, Using host CC=$(CC) AR=$(AR), you can set the PowerPC cross-toolchain prefix with CROSS_PREFIX)
 else
 $(info CROSS_PREFIX=$(CROSS_PREFIX))
 CC := $(CROSS_PREFIX)gcc
