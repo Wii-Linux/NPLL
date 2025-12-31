@@ -125,4 +125,6 @@ static inline int addrIsValidPhys(void *_addr) {
 #define TRACE() (void)0
 #endif
 
+#define ALIGN(x) __attribute__((aligned(x)))
+
 #endif /* _UTILS_H */
