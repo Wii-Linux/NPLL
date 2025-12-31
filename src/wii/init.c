@@ -144,6 +144,9 @@ static void crashIOSAndFixupMEM2(void) {
 	}
 	else
 		puts("success");
+
+	/* give MINI a bit to start up, we don't want to race it */
+	udelay(250 * 1000);
 }
 
 static __attribute__((noreturn)) void wiiPanic(const char *str) {
