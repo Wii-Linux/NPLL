@@ -105,15 +105,13 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 	bottom = (u32)pool->cur_bottom;
 
 	/* write out a 'struct block' at it's start */
-	mem = (void *)(bottom - size);
+	mem = (void *)((bottom - size) & ~31);
 	block = (struct block *)(((u32)mem) - sizeof(struct block));
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
 	block->size = size;
 
-	/* decrease cur_bottom */
-	bottom -= size - sizeof(struct block);
-	pool->cur_bottom = (void *)bottom;
+	pool->cur_bottom = (void *)block;
 
 	printf("allocator: alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
 
@@ -123,6 +121,9 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 /* public function to allocate from a specific (or any) pool */
 void *M_PoolAlloc(enum pool_idx pool, size_t size) {
 	u32 mem1_free, mem2_free;
+
+	/* 32B alignment */
+	size = ALIGN_UP(size, 32 - sizeof(struct block));
 
 	switch (pool) {
 	case POOL_MEM1:
@@ -193,8 +194,6 @@ void free(void *ptr) {
 
 /* C stdlib malloc() implementation */
 void *malloc(size_t size) {
-	/* 32B alignment */
-	size = ALIGN_UP(size, 32 - sizeof(struct block));
 	return M_PoolAlloc(POOL_ANY, size);
 }
 
