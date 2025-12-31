@@ -2,6 +2,9 @@
  * NPLL - Wii Init
  *
  * Copyright (C) 2025 Techflash
+ *
+ * Code to load MINI derived from ARMBootNow:
+ * Copyright (c) 2024 Emma / InvoxiPlayGames
  */
 
 #include <npll/types.h>
@@ -17,49 +20,31 @@
 #include <npll/hollywood/gpio.h>
 #include <stdio.h>
 #include <string.h>
+#include <npll/utils.h>
+#include "../armboot_bin.h"
+#include "ios_es.h"
 
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
 
 extern int IOS_DevShaExploit(void);
 
-/* infloop: b [pc - 8] */
-static const u32 bombVal = 0xeafffffc;
+#define MINI_BOOT_MAGIC_PTR (*(vu32 *)(MEM1_UNCACHED_BASE + 0xfffff0))
+/* 'NRST' */
+#define MINI_NO_RESET_MAGIC 0x4e525354
 
 static void crashIOSAndFixupMEM2(void) {
-	u32 srnprot, low_orig, low_after, high_orig, high_after;
-	vu32 *sram;
-	puts("IOS detected, trying to nuke it out of existance...");
+	u32 srnprot, low_orig, low_after, high_orig, high_after, trampoline_pointer, trampoline_addr;
+	vu32 *sram, *armbuf;
+	/* put them in low MEM1 */
+	tikview_t tikviews[4] ALIGN(32);
+	int i, trampoline_off, iosVer;
+	u32 num_tikviews ALIGN(32);
+	u64 titleID;
+	iosVer = IOS_GetVersion();
+	titleID = TITLE_ID_IOS | iosVer;
 
-	printf("MEM_PROT_DDR: 0x%04x\r\n", HW_MEM_PROT_DDR);
-	printf("MEM_PROT_DDR_BASE: 0x%04x; interpreted: 0x%08x\r\n", HW_MEM_PROT_DDR_BASE, (HW_MEM_PROT_DDR_BASE << 12) | 0x10000000);
-	printf("MEM_PROT_DDR_END: 0x%04x; interpreted: 0x%08x\r\n", HW_MEM_PROT_DDR_END, (HW_MEM_PROT_DDR_END << 12) | 0x10000000);
-
-	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
-	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
-	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_after = *(vu32 *)0xd1000000; sync(); barrier();
-
-	/*
-	 * ensure no artifacts of memory protection show up:
-	 *   - I/O to protected addresses hits bottom address
-	 *   - writes to protected addresses do not appear
-	 * so, check for:
-	 *   - lower MEM2 unexpectedly changed
-	 *   - write did not go through
-	 */
-	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after)
-		(void)0;
-		/*puts("test value write unsuccessful (expected)");*/
-	else {
-		puts("test value write already successful???");
-		printf("low orig: 0x%08x\r\n", low_orig);
-		printf("high orig: 0x%08x\r\n", high_orig);
-		printf("low after: 0x%08x\r\n", low_after);
-		printf("high after: 0x%08x\r\n", high_after);
-	}
-
+	printf("IOS (%d) detected, trying to load MINI\r\n", iosVer);
 
 	srnprot = HW_SRNPROT;
 	printf("HW_SRNPROT: 0x%08x", srnprot);
@@ -72,26 +57,62 @@ static void crashIOSAndFixupMEM2(void) {
 	else
 		puts("");
 
-	sram = (vu32 *)0xcd400000;
-	if (srnprot & 0x20) {
-		while (sram != (vu32 *)0xcd418000) {
-			*sram = bombVal;
-			sram++;
-		}
-	}
-	else {
-		while (sram != (vu32 *)0xcd408000) {
-			*sram = bombVal;
-			sram++;
-		}
-		sram = (vu32 *)0xcd410000;
-		while (sram != (vu32 *)0xcd420000) {
-			*sram = bombVal;
-			sram++;
+	sram = (vu32 *)0xcd410000;
+	armbuf = (vu32 *)0x91000000;
+	ES_Init();
+
+	/* copy it into MEM2 */
+	memcpy((void *)armbuf, __mini_armboot_bin_data, __mini_armboot_bin_size);
+	dcache_flush((void *)armbuf, __mini_armboot_bin_size);
+
+	/* find the "mov pc, r0" trampoline used to launch a new IOS image */
+	trampoline_addr = 0;
+	for (i = 0; i < 0x1000; i++) {
+		if (sram[i] == 0xE1A0F000) {
+			trampoline_addr = 0xFFFF0000 + (i * 4);
+			printf("found LaunchIOS trampoline at %08x\n", trampoline_addr);
+			break;
 		}
 	}
 
-	printf("IOS is now probably crashed, enabling full MEM2 access... ");
+	/*
+	 * if we found it, find the pointer to aforementioned trampoline,
+	 * this is called in the function that launches the next kernel
+	 */
+	trampoline_pointer = 0;
+	trampoline_off = 0;
+	if (trampoline_addr != 0) {
+		for (i = 0; i < 0x1000; i++) {
+			if (sram[i] == trampoline_addr) {
+				trampoline_pointer = 0xFFFF0000 + (i * 4);
+				trampoline_off = i;
+				printf("found LaunchIOS trampoline pointer at 0x%08x/0x%08x\r\n", trampoline_pointer, &sram[i]);
+				break;
+			}
+		}
+	}
+
+	/* write the pointer to our code there instead */
+	sram[trampoline_off] = (u32)virtToPhys((void *)armbuf) + armbuf[0];
+	printf("set trampoline ptr to %08x\r\n", sram[trampoline_off]);
+
+	/* tell MINI not to reset us pretty please */
+	MINI_BOOT_MAGIC_PTR = MINI_NO_RESET_MAGIC;
+
+	/* ES stuff so we can reload */
+	puts("Reloading...");
+	if (ES_GetTikViewsCount(titleID, &num_tikviews))
+		panic("ES_GetTikViewsCount failed");
+	printf("Number of tikviews for IOS%d: %d\r\n", iosVer, num_tikviews);
+	if (ES_GetTikViews(titleID, tikviews, num_tikviews))
+		panic("ES_GetTikViews failed");
+	puts("Got tikviews, launching...");
+
+	/* actually kick off the reload */
+	/* we don't check if this fails because it *will* time out... */
+	ES_LaunchTitle(titleID, &tikviews[0]);
+
+	printf("IOS is now replaced with MINI, enabling full MEM2 access... ");
 	HW_MEM_PROT_SPL = 0;
 	HW_MEM_PROT_SPL_BASE = 0;
 	HW_MEM_PROT_SPL_END = 0;
@@ -271,15 +292,17 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* now that we've mapped MEM2, check for MINI infohdr */
 	/* MINI stores a pointer to the infohdr at the tail end of MEM2 */
-	infohdr = *(vu32 *)0xd13ffffc;
+	infohdr = *(vu32 *)0xd3fffffc;
 	if (infohdr > 0x13fffffc || infohdr < 0x13f00000) {
 		/* no valid infohdr pointer, must be IOS */
+		printf("No valid MINI infohdr pointer (got 0x%08x), must be IOS\r\n", infohdr);
 		crashIOSAndFixupMEM2();
 	}
 	else {
 		/* keep digging... check if what it points to is a valid infohdr */
-		if (memcmp((void *)(infohdr | 0xc0000000), "IPC", 3)) {
+		if (memcmp((void *)physToUncached((void *)infohdr), "IPC", 3)) {
 			/* it isn't, we must be running under IOS and got fooled by garbage data for the pointer */
+			printf("supposed MINI infohdr pointer (0x%08x) has invalid magic, must be IOS\r\n", infohdr);
 			crashIOSAndFixupMEM2();
 		}
 	}
