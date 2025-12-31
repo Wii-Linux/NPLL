@@ -49,23 +49,23 @@ OUT_DOL := bin/npll.dol
 all: $(OUT_ELF) $(OUT_DOL)
 
 $(OUT_DOL): $(OUT_ELF)
-	$(HIDE)$(ELF2DOL) $< $@
 	$(info $s  ELF2DOL $@)
+	$(HIDE)$(ELF2DOL) $< $@
 
 $(OUT_ELF): $(OBJ)
+	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-	$(info $s  LD $@)
 
 build/%.o: src/%.c
+	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) -o $@ -c $<
-	$(info $s  CC $<)
 
 build/%.o: src/%.S
+	$(info $s  AS $<)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(ASFLAGS) $(CFLAGS) -o $@ -c $<
-	$(info $s  AS $<)
 
 
 clean:
