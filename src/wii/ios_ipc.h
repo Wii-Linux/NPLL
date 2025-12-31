@@ -3,8 +3,9 @@
  *
  * Copyright (C) 2025 Techflash
  *
- * Loosely based on the IPC code on PowerBlocks:
- * Copyright (C) 2025 Samuel Fitzsimons (rainbain)
+ * Based on the IPC code of The Homebrew Channel Reloader Stub:
+ *  Copyright (C) 2008 dhewg, #wiidev efnet
+ *  Copyright (C) 2008 marcan, #wiidev efnet
  */
 
 #ifndef _IOS_IPC_H
@@ -23,11 +24,12 @@ typedef struct {
 	u32 size;
 } ios_ioctlv_t;
 
-extern i32 IOS_Open(const char *path, u32 mode);
-extern i32 IOS_Close(i32 fd);
+extern int IOS_Open(const char *filename, u32 mode);
+extern int IOS_Close(int fd);
 extern i32 IOS_Read(i32 fd, void *buf, u32 len);
 extern i32 IOS_Write(i32 fd, const void *buf, u32 len);
 extern i32 IOS_Seek(i32 fd, i32 offset, u32 whence);
-extern i32 IOS_Ioctl(i32 fd, u32 cmd, void *inbuf, u32 inlen, void *outbuf, u32 outlen);
-extern i32 IOS_Ioctlv(i32 fd, u32 cmd, u32 in_cnt, u32 out_cnt, ios_ioctlv_t *vec);
+extern int IOS_Ioctlv(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_t *vec);
+extern int IOS_IoctlvReboot(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_t *vec);
+extern void IOS_Reset(void);
 #endif /* _IOS_IPC_H */
