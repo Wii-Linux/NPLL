@@ -1,2 +1,4 @@
 bin
 build
+util/bin2c
+src/armboot_bin.*
