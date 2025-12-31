@@ -4,6 +4,10 @@
 # Copyright (C) 2025 Techflash
 #
 
+ifeq ($(HOSTCC),)
+HOSTCC := $(CC)
+endif
+
 ifneq ($(uname -m),ppc)
 CROSS_PREFIX ?= $(word 1, \
 	$(if $(shell command -v powerpc-unknown-linux-gnu-gcc),powerpc-unknown-linux-gnu-) \
@@ -12,15 +16,23 @@ CROSS_PREFIX ?= $(word 1, \
 ifeq ($(CROSS_PREFIX),)
 $(warning WARNING: Unable to autodetect PowerPC cross-toolchain, Using host CC=$(CC) AR=$(AR), you can set the PowerPC cross-toolchain prefix with CROSS_PREFIX)
 else
-$(info CROSS_PREFIX=$(CROSS_PREFIX))
 CC := $(CROSS_PREFIX)gcc
 AR := $(CROSS_PREFIX)ar
 endif
 endif
 
+# for building MINI
+WIIDEV ?= $(word 1, \
+	$(if $(shell command -v armeb-eabi-gcc),$(shell command -v armeb-eabi-gcc)) \
+	)
+ifeq ($(WIIDEV),)
+$(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the WIIDEV environment variable or provide armeb-eabi-gcc in your PATH)
+endif
+
 ELF2DOL ?= elf2dol
 ifeq ($(shell which $(ELF2DOL)),)
-$(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools)
+$(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools, will skip building DOL)
+BUILD_DOL := 0
 endif
 
 ifeq ($(VERBOSE),1)
@@ -28,6 +40,8 @@ HIDE :=
 else
 HIDE := @
 endif
+
+HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
 CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong
@@ -39,6 +53,7 @@ SOURCE  := entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ioshax.c wiiu/in
 SOURCE  += allocator.c timer.c panic.c init.c drivers.c output.c main.c menu.c video.c input.c elf.c elf_asm.S memlog.c platOps_debug.c tiny_usbgecko.c exception.c exception_2200.S
 SOURCE  += libc/printf.c libc/output.c libc/string.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c
 SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdhc.c drivers/hollywood_sdmmc.c
+SOURCE  += armboot_bin.c
 
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
 OUT_ELF := bin/npll.elf
@@ -46,7 +61,11 @@ OUT_DOL := bin/npll.dol
 
 .PHONY: all clean
 
+ifeq ($(BUILD_DOL),0)
+all: $(OUT_ELF)
+else
 all: $(OUT_ELF) $(OUT_DOL)
+endif
 
 $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
@@ -67,6 +86,23 @@ build/%.o: src/%.S
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(ASFLAGS) $(CFLAGS) -o $@ -c $<
 
+# to make it bail if the user doesn't have MINI pulled
+external/mini/armboot.bin: external/mini
+	$(HIDE)$(MAKE) -C external/mini
+
+src/armboot_bin.c: util/bin2c external/mini/armboot.bin
+	$(info $s  BIN2C $@)
+	$(HIDE)util/bin2c
+
+# not quite true but close enough
+src/armboot_bin.h: src/armboot_bin.c
+src/wii/init.c: src/armboot_bin.h
+
+util/bin2c: util/bin2c.c
+	$(HIDE)mkdir -p $(@D)
+	$(info $s  HOSTCC    $<)
+	$(HIDE)$(HOSTCC) $(HOSTCFLAGS) $< -o $@
 
 clean:
-	rm -rf bin build
+	rm -rf bin build utils/bin2c
+	$(MAKE) -C externals/mini clean
