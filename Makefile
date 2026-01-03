@@ -105,4 +105,4 @@ util/bin2c: util/bin2c.c
 
 clean:
 	rm -rf bin build utils/bin2c
-	$(MAKE) -C externals/mini clean
+	$(MAKE) -C external/mini clean
