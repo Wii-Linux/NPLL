@@ -30,7 +30,7 @@ $(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for buil
 endif
 
 ELF2DOL ?= elf2dol
-ifeq ($(shell which $(ELF2DOL)),)
+ifeq ($(shell command -v $(ELF2DOL)),)
 $(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools, will skip building DOL)
 BUILD_DOL := 0
 endif
