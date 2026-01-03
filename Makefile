@@ -22,12 +22,17 @@ endif
 endif
 
 # for building MINI
+# the basename dance is a hack, since MINI needs a very specific value of WIIDEV.
+# If the path to your cross compiler looks like:
+# /path/to/whatever/armeb-eabi-gcc/bin/armeb-eabi-gcc
+# Then MINI needs WIIDEV=/path/to/whatever/armeb-eabi-gcc
 WIIDEV ?= $(word 1, \
-	$(if $(shell command -v armeb-eabi-gcc),$(shell command -v armeb-eabi-gcc)) \
+	$(if $(shell command -v armeb-eabi-gcc),$(shell dirname "$$(dirname "$$(command -v armeb-eabi-gcc)")")) \
 	)
 ifeq ($(WIIDEV),)
 $(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the WIIDEV environment variable or provide armeb-eabi-gcc in your PATH)
 endif
+export WIIDEV
 
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
