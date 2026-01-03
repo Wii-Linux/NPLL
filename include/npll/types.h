@@ -7,6 +7,9 @@
 #ifndef _TYPES_H
 #define _TYPES_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 typedef unsigned char       u8;
 typedef volatile u8         vu8;
 typedef char                i8;
@@ -27,17 +30,5 @@ typedef unsigned long long  u64;
 typedef volatile u64        vu64;
 typedef long long           i64;
 typedef volatile i64        vi64;
-
-#define NULL ((void *)0)
-
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ > 201710L
-/* bool, true, and false are already defined */
-#else /* __STDC_VERSION__ && __STDC_VERSION__ > 201710L */
-typedef int bool;
-#define true ((bool)1)
-#define false ((bool)0)
-#endif /* !(__STDC_VERSION__ && __STDC_VERSION__ > 201710L) */
-
-typedef u32 size_t;
 
 #endif /* _TYPES_H */

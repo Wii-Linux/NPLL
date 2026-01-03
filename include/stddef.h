@@ -18,4 +18,6 @@ typedef u32 uintptr_t;
 typedef i32 intmax_t;
 typedef u32 uintmax_t;
 
+#define NULL ((void *)0)
+
 #endif /* _STDDEF_H */
