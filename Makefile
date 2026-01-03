@@ -87,7 +87,7 @@ build/%.o: src/%.S
 	$(HIDE)$(CC) $(ASFLAGS) $(CFLAGS) -o $@ -c $<
 
 # to make it bail if the user doesn't have MINI pulled
-external/mini/armboot.bin: external/mini
+external/mini/armboot.bin: external/mini/Makefile
 	$(HIDE)$(MAKE) -C external/mini
 
 src/armboot_bin.c: util/bin2c external/mini/armboot.bin
