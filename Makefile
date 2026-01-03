@@ -26,13 +26,28 @@ endif
 # If the path to your cross compiler looks like:
 # /path/to/whatever/armeb-eabi-gcc/bin/armeb-eabi-gcc
 # Then MINI needs WIIDEV=/path/to/whatever/armeb-eabi-gcc
-WIIDEV ?= $(word 1, \
-	$(if $(shell command -v armeb-eabi-gcc),$(shell dirname "$$(dirname "$$(command -v armeb-eabi-gcc)")")) \
-	)
-ifeq ($(WIIDEV),)
-$(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the WIIDEV environment variable or provide armeb-eabi-gcc in your PATH)
+# List of toolchain prefixes to try (in order of preference)
+ARM_TOOLCHAIN_PREFIXES := armeb-eabi- arm-none-eabi-
+
+define find_arm_toolchain
+$(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES), \
+	$(if $(shell command -v $(prefix)gcc), \
+		$(prefix)))
+endef
+
+TOOLCHAIN_PREFIX ?= $(word 1,$(strip $(find_arm_toolchain)))
+
+ifeq ($(TOOLCHAIN_PREFIX),)
+$(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the TOOLCHAIN_PREFIX environment variable or provide one of the following in your PATH: $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES),$(prefix)gcc ))
 endif
+
+WIIDEV ?= $(shell dirname "$$(dirname "$$(command -v $(TOOLCHAIN_PREFIX)gcc)")")
+ifeq ($(WIIDEV),)
+$(error FATAL: Unable to determine WIIDEV path from $(TOOLCHAIN_PREFIX)gcc)
+endif
+
 export WIIDEV
+export TOOLCHAIN_PREFIX
 
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
