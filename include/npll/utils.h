@@ -126,5 +126,6 @@ static inline int addrIsValidPhys(void *_addr) {
 #endif
 
 #define ALIGN(x) __attribute__((aligned(x)))
+#define BIT(nr) (1 << (nr))
 
 #endif /* _UTILS_H */
