@@ -35,19 +35,19 @@ $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES), \
 		$(prefix)))
 endef
 
-TOOLCHAIN_PREFIX ?= $(word 1,$(strip $(find_arm_toolchain)))
+ARM_TOOLCHAIN_PREFIX ?= $(word 1,$(strip $(find_arm_toolchain)))
 
-ifeq ($(TOOLCHAIN_PREFIX),)
-$(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the TOOLCHAIN_PREFIX environment variable or provide one of the following in your PATH: $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES),$(prefix)gcc ))
+ifeq ($(ARM_TOOLCHAIN_PREFIX),)
+$(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the ARM_TOOLCHAIN_PREFIX environment variable or provide one of the following in your PATH: $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES),$(prefix)gcc ))
 endif
 
-WIIDEV ?= $(shell dirname "$$(dirname "$$(command -v $(TOOLCHAIN_PREFIX)gcc)")")
+WIIDEV ?= $(shell dirname "$$(dirname "$$(command -v $(ARM_TOOLCHAIN_PREFIX)gcc)")")
 ifeq ($(WIIDEV),)
-$(error FATAL: Unable to determine WIIDEV path from $(TOOLCHAIN_PREFIX)gcc)
+$(error FATAL: Unable to determine WIIDEV path from $(ARM_TOOLCHAIN_PREFIX)gcc)
 endif
 
 export WIIDEV
-export TOOLCHAIN_PREFIX
+export ARM_TOOLCHAIN_PREFIX
 
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
