@@ -38,7 +38,13 @@ endef
 ARM_TOOLCHAIN_PREFIX ?= $(word 1,$(strip $(find_arm_toolchain)))
 
 ifeq ($(ARM_TOOLCHAIN_PREFIX),)
+ifneq ($(DEVKITARM),)
+# use devkitPro devkitarm-gcc
+ARM_TOOLCHAIN_PREFIX := arm-none-eabi-
+WIIDEV := $(DEVKITARM)
+else
 $(error FATAL: Unable to autodetect ARM Big-Endian EABI cross-toolchain for building MINI.  Please set the ARM_TOOLCHAIN_PREFIX environment variable or provide one of the following in your PATH: $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES),$(prefix)gcc ))
+endif
 endif
 
 WIIDEV ?= $(shell dirname "$$(dirname "$$(command -v $(ARM_TOOLCHAIN_PREFIX)gcc)")")
