@@ -13,18 +13,48 @@
 static REGISTER_DRIVER(gpioDrv);
 
 static u32 prevIn = 0;
+#include <stdint.h>
+#include <stddef.h>
+
 /* TODO: translate power/eject (and check PI for reset on GCN/Wii) into inputs */
 static void gpioCallback(void) {
-	u32 in = HW_GPIOB_IN;
+	u32 in, mask, set, clearred;
+	u8 i, numSet, numClearred, setIdx[32], clearredIdx[32];
 
-	if (in & GPIO_POWER && !(prevIn & GPIO_POWER))
+	in = HW_GPIOB_IN;
+	set = in & ~prevIn;
+	clearred = prevIn & ~in;
+	numSet = numClearred = 0;
+
+	if (set & GPIO_POWER)
 		puts("GPIO: Power button pressed");
-	if (in & GPIO_EJECT_BTN && !(prevIn & GPIO_EJECT_BTN))
+	if (set & GPIO_EJECT_BTN)
 		puts("GPIO: Eject button pressed");
-	if (in & GPIO_SLOT_IN && !(prevIn & GPIO_SLOT_IN))
+	if (set & GPIO_SLOT_IN)
 		puts("GPIO: Disc inserted");
-	else if (!(in & GPIO_SLOT_IN) && prevIn & GPIO_SLOT_IN)
+	else if (clearred & GPIO_SLOT_IN)
 		puts("GPIO: Disc removed");
+
+	if (in != prevIn) {
+		for (i = 0; i < 32; i++) {
+			mask = 1u << i;
+			if (set & mask)      setIdx[numSet++] = i;
+			if (clearred & mask) clearredIdx[numClearred++] = i;
+		}
+
+		if (numSet) {
+			printf("GPIO: Now high:");
+			for (i = 0; i < numSet; i++)
+				printf(" %d", setIdx[i]);
+			puts("");
+		}
+		if (numClearred) {
+			printf("GPIO: Now low:");
+			for (i = 0; i < numClearred; i++)
+				printf(" %d", clearredIdx[i]);
+			puts("");
+		}
+	}
 
 	prevIn = in;
 }
