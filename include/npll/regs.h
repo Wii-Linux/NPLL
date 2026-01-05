@@ -12,7 +12,7 @@
 #define _FLIPPER_REG(x) (*(vu32 *)(0xcc000000 + x))
 #define _HOLLYWOOD_REG(x) (*(vu32 *)(0xcd800000 + x))
 #define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(0xcd8b4200 + x))
-#define _LATTE_REG(x) _HOLLYWOOD_REG(x)
+#define _LATTE_REG(x) (*(vu32 *)(0xcd800400 + x))
 
 /* Flipper Registers */
 #define PI_RESET             _FLIPPER_REG(0x3024)
@@ -45,6 +45,7 @@
 
 
 /* Latte Registers */
-#define LT_CHIPREVID _LATTE_REG(0x5a0)
+#define LT_CHIPREVID _LATTE_REG(0x1a0)
+#define LT_PIMCOMPAT _LATTE_REG(0x1b0)
 
 #endif /* _REGS_H */
