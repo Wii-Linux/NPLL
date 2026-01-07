@@ -60,7 +60,7 @@ static void gpioCallback(void) {
 }
 
 static void gpioInit(void) {
-	u32 dir;
+	u32 dir, out;
 #if 0
 	printf(
 "=== GPIO REGISTER DUMP ===\r\n\
@@ -82,17 +82,23 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	/* all enabled */
 	HW_GPIO_ENABLE = 0xffffffff;
 
+	/* set up outputs properly */
+	out = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR | GPIO_SLOT_LED;
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
+		out |= GPIO_GAMEPAD_EN | GPIO_PADPD;
+	HW_GPIOB_OUT = out;
+	HW_GPIO_OUT  = out;
+
 	/* set proper directions */
 	dir = ~(GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN | GPIO_EEP_MISO | GPIO_AVE_SDA);
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
-		dir &= ~GPIO_GAMEPAD_EN;
+		dir |= GPIO_GAMEPAD_EN | GPIO_PADPD;
 
 	HW_GPIOB_DIR = dir;
 	HW_GPIO_DIR  = dir;
 
-	/* set up outputs properly */
-	HW_GPIOB_OUT = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR | GPIO_SLOT_LED;
-	HW_GPIO_OUT  = HW_GPIOB_OUT;
+	/* register the current state of the inputs */
+	prevIn = HW_GPIOB_IN;
 
 	/* register our callback to check GPIOs */
 	D_AddCallback(gpioCallback);

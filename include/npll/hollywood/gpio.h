@@ -50,4 +50,7 @@
  */
 #define GPIO_GAMEPAD_EN (1 << 28)
 
+/* seems to also be important for GamePad */
+#define GPIO_PADPD      (1 << 8)
+
 #endif /* _GPIO_H */
