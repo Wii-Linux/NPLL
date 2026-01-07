@@ -13,8 +13,6 @@
 static REGISTER_DRIVER(gpioDrv);
 
 static u32 prevIn = 0;
-#include <stdint.h>
-#include <stddef.h>
 
 /* TODO: translate power/eject (and check PI for reset on GCN/Wii) into inputs */
 static void gpioCallback(void) {
