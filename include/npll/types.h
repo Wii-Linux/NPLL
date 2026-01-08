@@ -32,6 +32,7 @@ typedef volatile i64        vi64;
 
 
 /* stddef.h compat */
+typedef i32 ssize_t;
 typedef u32 size_t;
 typedef u32 ptrdiff_t;
 typedef u32 uintptr_t;
