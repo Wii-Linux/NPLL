@@ -4,6 +4,7 @@
  * Copyright (C) 2025 Techflash
  */
 
+#include "npll/utils.h"
 #include <npll/elf_abi.h>
 #include <npll/elf.h>
 #include <npll/cache.h>
@@ -45,7 +46,7 @@ int ELF_CheckValid(const void *data) {
 int ELF_LoadMem(const void *data) {
 	const Elf32_Ehdr *ehdr = (const Elf32_Ehdr *)data;
 	const Elf32_Phdr *phdr;
-	Elf32_Addr addr;
+	void *addr;
 	u32 size;
 	int i;
 
@@ -60,9 +61,9 @@ int ELF_LoadMem(const void *data) {
 		}
 
 		/* get the address */
-		addr = phdr->p_paddr;
+		addr = (void *)phdr->p_paddr;
 		if (!addr)
-			addr = phdr->p_vaddr;
+			addr = (void *)phdr->p_vaddr;
 		if (!addr) {
 			puts("ELF: Skipping segment: no address");
 			continue;
@@ -79,24 +80,26 @@ int ELF_LoadMem(const void *data) {
 		if (size > phdr->p_memsz)
 			size = phdr->p_memsz;
 
-
 		/* make it virtual */
-		addr |= 0x80000000;
+		addr = physToCached(addr);
 
-		/* TODO: check that the address is in-range */
+		if (!addrIsValidCached(addr)) {
+			printf("ELF: address 0x%08x is not valid on this platform\r\n", addr);
+			return ELF_ERR_INVALID_EXEC;
+		}
 
 		/* copy it into memory */
-		memcpy((void *)addr, (void *)((u32)data + phdr->p_offset), size);
+		memcpy(addr, (void *)((u32)data + phdr->p_offset), size);
 		printf("ELF: Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, addr, size);
 
 		/* and flush the cache - ELF_DoEntry will turn caches off */
-		dcache_flush((void *)addr, size);
+		dcache_flush(addr, size);
 
 		phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
 	}
 
 	/* lets do this thing */
-	ELF_DoEntry((void *)(ehdr->e_entry & (~0x80000000)));
+	ELF_DoEntry(virtToPhys((void *)ehdr->e_entry));
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
