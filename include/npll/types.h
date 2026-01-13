@@ -1,7 +1,7 @@
 /*
  * NPLL - Common types
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _TYPES_H

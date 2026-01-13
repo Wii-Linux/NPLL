@@ -1,7 +1,7 @@
 /*
  * NPLL - libc - stddef
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _STDDEF_H

@@ -1,7 +1,7 @@
 /*
  * NPLL - Top-Level Init
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <npll/types.h>
