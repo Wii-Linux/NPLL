@@ -1,9 +1,10 @@
 /*
  * NPLL - Top-level video handling
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <npll/panic.h>
@@ -128,7 +129,7 @@ static void odevWriteChar(char c) {
 
 	/* done writing */
 	posX++;
-	
+
 	/* do we need to wrap? */
 	if (posX >= videoOutDev.columns) {
 		posX = 0;
@@ -155,19 +156,15 @@ void V_Flush(void) {
 	if (__likely(!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000)))
 		return;
 
-	if (__unlikely(!V_ActiveDriver))
-		panic("Tried to V_Flush with no driver");
+	assert_msg(V_ActiveDriver, "Tried to V_Flush with no driver");
 
 	if (V_ActiveDriver->flush)
 		V_ActiveDriver->flush();
 }
 
 void V_Register(struct videoInfo *info) {
-	if (!info)
-		panic("Tried to register NULL videoInfo");
-
-	if (V_ActiveDriver)
-		panic("Tried to register video driver but there's already an active one");
+	assert_msg(info, "Tried to register NULL videoInfo");
+	assert_msg(!V_ActiveDriver, "Tried to register video driver but there's already an active one");
 
 	printf("VIDEO: Registering driver %s\r\n", info->driver->name);
 	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
@@ -185,4 +182,3 @@ void V_Register(struct videoInfo *info) {
 
 	O_AddDevice(&videoOutDev);
 }
-

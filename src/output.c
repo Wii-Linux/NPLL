@@ -1,9 +1,10 @@
 /*
  * NPLL - Character output
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -18,8 +19,7 @@ static int deviceNum = 0; /* 0 = memlog, 1 = debug, >1 = real device */
 
 void O_AddDevice(const struct outputDevice *dev) {
 	char *name = "NULL", *driver = "NULL";
-	if (O_NumDevices >= MAX_DEV)
-		panic("Trying to add too many output devices");
+	assert_msg(O_NumDevices < MAX_DEV, "Trying to add too many output devices");
 
 	if (dev->name)
 		name = dev->name;
