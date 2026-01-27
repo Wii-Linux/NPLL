@@ -10,7 +10,12 @@
 #include <npll/panic.h>
 #include <npll/utils.h>
 
-#define assert(cond) if (!(cond)) { panic("Assertion " __stringify(cond) " failed"); }
+#ifdef NDEBUG
+#define assert(cond) __assume(cond)
+#define assert_msg(cond, msg) __assume(cond)
+#else
+#define assert(cond) assert_msg(cond, "Assertion " __stringify(cond) " failed")
 #define assert_msg(cond, msg) if (!(cond)) { panic(msg); }
+#endif /* !NDEBUG */
 
 #endif /* _ASSERT_H */
