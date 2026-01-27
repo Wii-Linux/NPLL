@@ -81,7 +81,7 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	HW_GPIO_ENABLE = 0xffffffff;
 
 	/* set up outputs properly */
-	out = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR;
+	out = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR | GPIO_DI_SPIN;
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
 		out |= GPIO_GAMEPAD_EN | GPIO_PADPD;
 	HW_GPIOB_OUT = out;
