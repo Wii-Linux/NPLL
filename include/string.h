@@ -1,7 +1,11 @@
 /*
+ * NPLL - libc - string
+ *
+ * Copyright (C) 2025 Techflash
+ *
+ * Based on code from EverythingNet:
  * Copyright (C) 2023-2025 Techflash
  */
-
 #include <stddef.h>
 
 extern int memcmp(const void *s1, const void *s2, size_t n);

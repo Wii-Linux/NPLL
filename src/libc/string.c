@@ -1,5 +1,5 @@
 /*
- * NPLL - libc - stdring
+ * NPLL - libc - string
  *
  * Copyright (C) 2025 Techflash
  *
@@ -55,7 +55,7 @@ void *memmove(void *dest, const void *src, size_t n) {
 
 char *strcat(char *dest, const char *src) {
 	char *ptr = dest + strlen(dest);
-	
+
 	while (*src != '\0') {
 		*ptr++ = *src++;
 	}
@@ -126,5 +126,3 @@ char *strstr(const char *haystack, const char *needle) {
 	}
 	return NULL;
 }
-
-
