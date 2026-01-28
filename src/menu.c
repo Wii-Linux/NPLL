@@ -4,60 +4,87 @@
  * Copyright (C) 2025 Techflash
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <npll/menu.h>
-#include <npll/timer.h>
 #include <npll/video.h>
 #include <npll/utils.h>
+#include <npll/timer.h>
 
-#define MAX_ENTRIES 24
-static bool hasChanged = false;
-static int lastEntry = 0;
+static bool hasChanged = true;
 static int selected = 0;
-static struct menuEntry entries[MAX_ENTRIES];
 
-static struct menu curMenu = {
-	.header = "Menu Header",
-	.footer = "Menu Footer",
-	.entries = entries
-};
-
-void UI_Init(void) {
-	memset(entries, 0, MAX_ENTRIES * sizeof(struct menuEntry));
+static void rootMenuSelectedCB(struct menuEntry *ent) {
+	printf("Root Menu Selected Callback for entry %s\r\n",  ent->name);
+	V_Flush();
+	udelay(500 * 1000);
 }
 
-static u64 lastTb = 0;
+static struct menuEntry rootMenuEntries[] = {
+	{ .name = "foo", .selected = rootMenuSelectedCB, .data = { 69 } },
+};
+
+static struct menu rootMenu = {
+	.entries = rootMenuEntries,
+	.numEntries = 1,
+	.header = "NPLL - Main Menu",
+	.footer = FOOTER_CONTROLS,
+	.init = NULL,
+	.cleanup = NULL,
+	.destroy = NULL,
+	.previous = NULL
+};
+
+static struct menu *curMenu = NULL;
+
+void UI_Init(void) {
+	UI_Switch(&rootMenu);
+}
+
 void UI_Redraw(void) {
 	int i;
-	u64 tb = mftb();
-	if (__unlikely(T_HasElapsed(lastTb, 1000 * 1000))) {
-		puts("a");
-		lastTb = tb;
-		return;
-	}
 	if (__likely(!hasChanged))
 		return;
 
-	puts("==== MENU ====");
-	for (i = 0; i < lastEntry; i++)
-		printf(" %c %d: %s\r\n", selected == i ? '*' : ' ', i, entries[i].name);
+	puts("\x1b[1;1H\x1b[2J==== MENU ====");
+	for (i = 0; i < curMenu->numEntries; i++)
+		printf(" %c %d: %s\r\n", selected == i ? '*' : ' ', i, curMenu->entries[i].name);
 
 	hasChanged = false;
 }
 
 void UI_Switch(struct menu *m) {
-	curMenu.header = m->header;
-	curMenu.footer = m->footer;
-	lastEntry = 0;
 	selected = 0;
-	hasChanged = false;
-	memset(entries, 0, MAX_ENTRIES * sizeof(struct menuEntry));
+	hasChanged = true;
+
+	if (curMenu && curMenu->cleanup)
+		curMenu->cleanup(curMenu);
+
+	curMenu = m;
+
+	if (m->init)
+		m->init(m);
 }
 
 void UI_AddEntry(struct menuEntry *e) {
 	hasChanged = true;
-	memcpy(&entries[lastEntry], e, sizeof(struct menuEntry));
-	lastEntry++;
+	memcpy(&curMenu->entries[curMenu->numEntries++], e, sizeof(struct menuEntry));
+}
+
+void UI_UpLevel(void) {
+	struct menu *prev;
+
+	hasChanged = true;
+	prev = curMenu->previous;
+
+	if (curMenu->cleanup)
+		curMenu->cleanup(curMenu);
+
+	if (curMenu->destroy)
+		curMenu->destroy(curMenu);
+
+	assert(prev);
+	curMenu = prev;
 }
