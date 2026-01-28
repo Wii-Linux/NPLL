@@ -2,10 +2,20 @@
  * NPLL - Top-level video handling
  *
  * Copyright (C) 2025-2026 Techflash
+ *
+ * ANSI Escape code parsing based on code from U-Boot:
+ * Copyright (c) 2015 Google, Inc
+ * (C) Copyright 2001-2015
+ * DENX Software Engineering -- wd@denx.de
+ * Compulab Ltd - http://compulab.co.il/
+ * Bernecker & Rainer Industrieelektronik GmbH - http://www.br-automation.com
  */
 
+#include <ctype.h>
+#include <stdbool.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <npll/panic.h>
 #include <npll/video.h>
@@ -32,19 +42,240 @@ static struct outputDevice videoOutDev;
 
 static char odevName[MAX_NAME];
 static int posX = 0, posY = 0;
+static bool isInEscape = false;
+static int escapeLen = 0;
+static char escapeBuf[8];
 
-static int nextByteIsColor = 0;
-
-/* mostly stolen from the VGA color palette */
-static u32 colors[10] = {
-	0xFFFFFFFF, /* white */   0xFF000000, /* black */
-	0xFFAA0000, /* red */     0xFF00AA00, /* green */
-	0xFF0000AA, /* blue */    0xFF00AAAA, /* cyan */
-	0xFFAA00AA, /* purple */  0xFFAAAAAA, /* light gray */
-	0xFFAA5500, /* orange */  0xFFFFFF00  /* yellow */
+/* stolen from the VGA color palette */
+static u32 colors[16] = {
+	0xFF000000, /* black */      0xFF555555, /* gray */
+	0xFFAA0000, /* red */        0xFFFF0000, /* bright red */
+	0xFF00AA00, /* green */      0xFF55FF55, /* bright green */
+	0xFFAA5500, /* brown */      0xFFFFFF55, /* yellow */
+	0xFF0000AA, /* blue */       0xFF5555FF, /* light blue */
+	0xFFAA00AA, /* magenta */    0xFFFF55FF, /* bright magenta */
+	0xFF00AAAA, /* cyan */       0xFF55FFFF, /* bright cyan */
+	0xFFAAAAAA, /* light gray */ 0xFFFFFFFF, /* white */
 };
 
 static u32 color[2];
+static void odevWriteChar(char c);
+
+static char *parsenum(const char *s, int *num) {
+	char *end;
+	*num = strtol(s, &end, 10);
+	return end;
+}
+
+static void handleEscape(char c) {
+	int num, mode, i, tmp, val;
+	char *s, *end;
+
+	/* Sanity checking for bogus ESC sequences: */
+	if (escapeLen >= sizeof(escapeBuf))
+		goto error;
+	if (escapeLen == 0) {
+		switch (c) {
+		case '[':
+			break;
+		default:
+			goto error;
+		}
+	}
+
+	escapeBuf[escapeLen++] = c;
+
+	/*
+	 * Escape sequences are terminated by a letter, so keep
+	 * accumulating until we get one:
+	 */
+	if (!isalpha(c))
+		return;
+
+	/*
+	 * clear escape mode first, otherwise things will get highly
+	 * surprising if you hit any debug prints that come back to
+	 * this console.
+	 */
+	isInEscape = false;
+
+	switch (c) {
+	case 'A':
+	case 'B':
+	case 'C':
+	case 'D':
+	case 'E':
+	case 'F': {
+		s = escapeBuf;
+
+		/*
+		 * Cursor up/down: [%dA, [%dB, [%dE, [%dF
+		 * Cursor left/right: [%dD, [%dC
+		 */
+		s++;    /* [ */
+		s = parsenum(s, &num);
+		if (num == 0)			/* No digit in sequence ... */
+			num = 1;		/* ... means "move by 1". */
+
+		if (c == 'A' || c == 'F')
+			posY -= num;
+		if (c == 'C')
+			posX += num;
+		if (c == 'D')
+			posX -= num;
+		if (c == 'B' || c == 'E')
+			posY += num;
+		if (c == 'E' || c == 'F')
+			posX = 0;
+		if (posX < 0)
+			posX = 0;
+		if (posY < 0)
+			posY += 0;
+		break;
+	}
+	case 'H':
+	case 'f': {
+		s = escapeBuf;
+
+		/*
+		 * Set cursor position: [%d;%df or [%d;%dH
+		 */
+		s++;    /* [ */
+		s = parsenum(s, &posX);
+		s++;    /* ; */
+		s = parsenum(s, &posY);
+
+		/*
+		 * Video origin is [0, 0], terminal origin is [1, 1].
+		 */
+		if (posX)
+			--posX;
+		if (posY)
+			--posY;
+
+		break;
+	}
+	case 'J': {
+		/*
+		 * Clear part/all screen:
+		 *   [J or [0J - clear screen from cursor down
+		 *   [1J       - clear screen from cursor up
+		 *   [2J       - clear entire screen
+		 *
+		 * TODO we really only handle entire-screen case, others
+		 * probably require some additions to video-uclass (and
+		 * are not really needed yet by efi_console)
+		 */
+		parsenum(escapeBuf + 1, &mode);
+
+		if (mode == 2) {
+			memset(V_FbPtr, 0, V_FbStride * V_FbHeight);
+			V_Flush();
+			posX = 0;
+			posY = 0;
+		} else {
+			printf("clear mode was %d\r\n", mode);
+			assert_msg(false, "invalid clear mode");
+		}
+		break;
+	}
+	case 'K': {
+		/*
+		 * Clear (parts of) current line
+		 *   [0K       - clear line to end
+		 *   [2K       - clear entire line
+		 */
+		parsenum(escapeBuf + 1, &mode);
+
+		if (mode == 2) {
+			for (i = posX; i < videoOutDev.columns; i++) {
+				odevWriteChar(' ');
+			}
+		}
+		break;
+	}
+	case 'm': {
+		s = escapeBuf;
+		end = &escapeBuf[escapeLen];
+
+		/*
+		 * Set graphics mode: [%d;...;%dm
+		 *
+		 * Currently only supports the color attributes:
+		 *
+		 * Foreground Colors:
+		 *
+		 *   30	Black
+		 *   31	Red
+		 *   32	Green
+		 *   33	Yellow
+		 *   34	Blue
+		 *   35	Magenta
+		 *   36	Cyan
+		 *   37	White
+		 *
+		 * Background Colors:
+		 *
+		 *   40	Black
+		 *   41	Red
+		 *   42	Green
+		 *   43	Yellow
+		 *   44	Blue
+		 *   45	Magenta
+		 *   46	Cyan
+		 *   47	White
+		 */
+
+		s++;    /* [ */
+		while (s < end) {
+			s = parsenum(s, &val);
+			s++;
+
+			switch (val) {
+			case 0:
+				/* all attributes off */
+				color[0] = colors[C_LGRAY];
+				color[1] = colors[C_BLACK];
+				break;
+			case 1:
+				/* bold */
+				color[0] |= 1;
+				break;
+			case 7:
+				/* reverse video */
+				tmp = color[0];
+				color[0] = color[1];
+				color[1] = tmp;
+				break;
+			case 30 ... 37:
+				/* foreground color */
+				/* basically a fast way of changing the color whilst keeping bold state */
+				color[0] = ((val - 30) << 1) | (colors[0] & 1);
+				break;
+			case 40 ... 47:
+				/* background color */
+				/* same as above */
+				color[1] = ((val - 40) << 1) | (colors[1] & 1);
+				break;
+			default:
+				/* ignore unsupported SGR parameter */
+				break;
+			}
+		}
+
+		break;
+	}
+	default:
+		printf("unrecognized escape sequence: %*s\n",
+		      escapeLen, escapeBuf);
+	}
+
+	return;
+
+error:
+	/* something went wrong, just revert to normal mode: */
+	isInEscape = false;
+}
 
 static void maybeScroll(void) {
 	if (posY < videoOutDev.rows)
@@ -64,18 +295,10 @@ static void odevWriteChar(char c) {
 	u8 *row, dat;
 	int x, y;
 
-	if ((u8)c == 0xff) { /* fg */
-		nextByteIsColor = 1;
+	/* handle ANSI escape code */
+	if (isInEscape) {
+		handleEscape(c);
 		return;
-	}
-	else if ((u8)c == 0xfe) { /* bg */
-		nextByteIsColor = 2;
-		return;
-	}
-
-	if (nextByteIsColor) {
-		color[nextByteIsColor - 1] = colors[(u8)c];
-		nextByteIsColor = 0;
 	}
 
 	/* special chars */
@@ -102,6 +325,12 @@ static void odevWriteChar(char c) {
 			odevWriteChar(' ');
 			spc--;
 		}
+		return;
+	}
+	case 0x1b: {
+		isInEscape = true;
+		escapeLen = 0;
+		memset(escapeBuf, 0, sizeof(escapeBuf));
 		return;
 	}
 	}

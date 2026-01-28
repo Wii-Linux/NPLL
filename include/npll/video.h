@@ -27,7 +27,23 @@ extern int V_FbWidth;
 extern int V_FbHeight;
 extern int V_FbStride;
 
-#define C_LGRAY 7
-#define C_BLACK 1
+enum {
+	C_BLACK,
+	C_GRAY,
+	C_RED,
+	C_BRED,
+	C_GREEN,
+	C_BGREEN,
+	C_BROWN,
+	C_YELLOW,
+	C_BLUE,
+	C_LBLUE,
+	C_MAGENTA,
+	C_BMAGENTA,
+	C_CYAN,
+	C_BCYAN,
+	C_LGRAY,
+	C_WHITE
+};
 
 #endif /* _VIDEO_H */
