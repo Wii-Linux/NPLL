@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <npll/menu.h>
+#include <npll/output.h>
 #include <npll/video.h>
 #include <npll/utils.h>
 #include <npll/timer.h>
@@ -24,11 +25,12 @@ static void rootMenuSelectedCB(struct menuEntry *ent) {
 
 static struct menuEntry rootMenuEntries[] = {
 	{ .name = "foo", .selected = rootMenuSelectedCB, .data = { 69 } },
+	{ .name = "bar", .selected = rootMenuSelectedCB, .data = { 420 } },
 };
 
 static struct menu rootMenu = {
 	.entries = rootMenuEntries,
-	.numEntries = 1,
+	.numEntries = 2,
 	.header = "NPLL - Main Menu",
 	.footer = FOOTER_CONTROLS,
 	.init = NULL,
@@ -44,13 +46,18 @@ void UI_Init(void) {
 }
 
 void UI_Redraw(void) {
-	int i;
+	int i, j;
 	if (__likely(!hasChanged))
 		return;
 
-	puts("\x1b[1;1H\x1b[2J==== MENU ====");
+	printf("\x2b[1;1H\x1b[2J");
+	if (curMenu->header)
+		printf("%s\r\n", curMenu->header);
+
+	puts("==========");
+
 	for (i = 0; i < curMenu->numEntries; i++)
-		printf(" %c %d: %s\r\n", selected == i ? '*' : ' ', i, curMenu->entries[i].name);
+		printf("%s %d: %s\r\n", selected == i ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ", i, curMenu->entries[i].name);
 
 	hasChanged = false;
 }
