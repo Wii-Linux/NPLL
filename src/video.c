@@ -58,6 +58,7 @@ static u32 colors[16] = {
 	0xFFAAAAAA, /* light gray */ 0xFFFFFFFF, /* white */
 };
 
+static int colorIdx[2];
 static u32 color[2];
 static void odevWriteChar(char c);
 
@@ -234,12 +235,15 @@ static void handleEscape(char c) {
 			switch (val) {
 			case 0:
 				/* all attributes off */
-				color[0] = colors[C_LGRAY];
-				color[1] = colors[C_BLACK];
+				colorIdx[0] = C_LGRAY;
+				colorIdx[1] = C_BLACK;
+				color[0] = colors[colorIdx[0]];
+				color[1] = colors[colorIdx[1]];
 				break;
 			case 1:
 				/* bold */
-				color[0] |= 1;
+				colorIdx[0] |= 1;
+				color[0] = colors[colorIdx[0]];
 				break;
 			case 7:
 				/* reverse video */
@@ -250,12 +254,14 @@ static void handleEscape(char c) {
 			case 30 ... 37:
 				/* foreground color */
 				/* basically a fast way of changing the color whilst keeping bold state */
-				color[0] = ((val - 30) << 1) | (colors[0] & 1);
+				colorIdx[0] = ((val - 30) << 1) | (colorIdx[0] & 1);
+				color[0] = colors[colorIdx[0]];
 				break;
 			case 40 ... 47:
 				/* background color */
 				/* same as above */
-				color[1] = ((val - 40) << 1) | (colors[1] & 1);
+				colorIdx[1] = ((val - 40) << 1) | (colorIdx[1] & 1);
+				color[1] = colors[colorIdx[1]];
 				break;
 			default:
 				/* ignore unsupported SGR parameter */
@@ -406,8 +412,10 @@ void V_Register(struct videoInfo *info) {
 	V_FbStride = info->width * sizeof(u32);
 	V_ActiveDriver = info;
 
-	color[0] = colors[C_LGRAY];
-	color[1] = colors[C_BLACK];
+	colorIdx[0] = C_LGRAY;
+	colorIdx[1] = C_BLACK;
+	color[0] = colors[colorIdx[0]];
+	color[1] = colors[colorIdx[1]];
 
 	O_AddDevice(&videoOutDev);
 }
