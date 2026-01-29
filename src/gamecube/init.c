@@ -13,6 +13,8 @@
 #include <npll/tiny_usbgecko.h>
 #include <npll/drivers.h>
 
+enum gcnRev H_GCNRev = 0;
+
 static __attribute__((noreturn)) void gamecubePanic(const char *str) {
 	(void)str;
 

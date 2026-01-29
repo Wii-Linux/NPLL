@@ -44,12 +44,14 @@ void __attribute__((noreturn)) init(void) {
 	/* see console.h for reason behind not more types */
 	case HW_VERSION_PROD_HOLLYWOOD:
 	case HW_VERSION_PROD_BOLLYWOOD: {
+		H_GCNRev = 0;
 		H_WiiRev = hw_version;
 		H_WiiURev = 0;
 		H_ConsoleType = CONSOLE_TYPE_WII;
 		break;
 	}
 	default: {
+		H_GCNRev = PI_CHIPID;
 		H_WiiRev = 0;
 		H_WiiURev = 0;
 		H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
