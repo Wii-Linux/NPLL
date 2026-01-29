@@ -13,6 +13,13 @@ enum consoleType {
 	CONSOLE_TYPE_WII_U
 };
 
+/* see comment in regs.h */
+enum gcnRev {
+	PI_CHIPID_REV_A = 0x046500b0, /* some values pulled from Dolphin */
+	PI_CHIPID_REV_B = 0x146500b1,
+	PI_CHIPID_REV_C = 0x246500b1 /* only value I've seen on real hardware, YAGCD seems to verify that this is the only retail value */
+};
+
 /*
  * https://wiki.wii-linux.org/wiki/Wii_Hardware/Hollywood/Revisions
  */
@@ -40,6 +47,7 @@ struct platOps {
 };
 
 extern enum consoleType H_ConsoleType;
+extern enum gcnRev H_GCNRev;
 extern enum wiiRev H_WiiRev;
 extern int H_WiiIsvWii;
 extern enum wiiuRev H_WiiURev;

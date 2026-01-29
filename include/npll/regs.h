@@ -35,10 +35,6 @@
 #  define PI_CHIPID_REV          0xf0000000 /* some masks */
 #  define PI_CHIPID_ID           0x0ffff000
 #  define PI_CHIPID_UNK          0x00000fff
-#  define PI_CHIPID_REV_A        0x046500B0 /* some values pulled from Dolphin */
-#  define PI_CHIPID_REV_B        0x146500B1
-#  define PI_CHIPID_REV_C        0x246500B1 /* only value I've seen on real hardware, YAGCD seems to verify that this is the only retail value */
-
 
 /* Hollywood Registers */
 #define HW_IPC_PPCMSG        _HOLLYWOOD_REG(0x00)
