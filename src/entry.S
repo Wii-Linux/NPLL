@@ -5,6 +5,7 @@
 
 .section .init
 .global _start
+.global __argv
 .extern init
 
 #define __ASSEMBLY__
@@ -32,6 +33,16 @@
 #
 # 7. Call into the C init function, where we can do things like hardware detection
 _start:
+	b _realStart  # this is safe, apparently PPC branch instructions are relative by default
+	.ascii "_arg" # HBC-style argv marker
+__argv:
+	.long 0 # magic
+	.long 0 # cmdline
+	.long 0 # cmdline length
+	.long 0 # argc
+	.long 0 # argv
+	.long 0 # argv end
+_realStart:
 	# Load r0 with address of routine to do BATs setup
 	lis r0, setupBATs@h
 	ori r0, r0, setupBATs@l
@@ -92,7 +103,7 @@ setupBATs:
 
 	# [I/D]BAT0L: BPRN=0x00000000, WIMG=0000 (cached), PP=RW
 	li r3, 2
-	
+
 	# [I/D]BAT0U: BEPI=0x80000000, BL=256MB, VS=1, VP=1
 	lis r4, 0x8000
 	ori r4, r4, 0x1fff
@@ -106,7 +117,7 @@ setupBATs:
 
 	# [I/D]BAT1L: BPRN=0x00000000, WIMG=0101 (uncached, guarded (it's customary to do MMIO here, and largely not actually care about memory access)), PP=RW
 	li r3, 42
-	
+
 	# [I/D]BAT1U: BEPI=0xc0000000, BL=256MB, VS=1, VP=1
 	lis r4, 0xc000
 	ori r4, r4, 0x1fff
