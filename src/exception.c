@@ -1,7 +1,7 @@
 /*
  * NPLL - PowerPC Exception handling
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Based on code in BootMii ppcskel:
  * Copyright (C) 2008		Segher Boessenkool <segher@kernel.crashing.org>
@@ -13,23 +13,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <npll/cache.h>
 #include <npll/panic.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 
 extern char exception_2200_start, exception_2200_end;
-
-static void sync_before_exec(const void *p, u32 len) {
-	u32 a, b;
-
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
-
-	for ( ; a < b; a += 32)
-		asm("dcbst 0,%0 ; sync ; icbi 0,%0" : : "b"(a));
-
-	asm("sync ; isync");
-}
 
 static void dump_stack_trace(u32 *sp) {
 	u32 prev_sp, lr;
@@ -51,13 +40,13 @@ static void dump_stack_trace(u32 *sp) {
 }
 
 
-void E_Handler(int exception) {
+void __attribute__((noreturn)) E_Handler(int exception) {
 	u32 *x, sp;
 	int i;
 
 	printf("\r\nException %04x occurred!\r\n", exception);
 
-	x = (u32 *)0x80002000;
+	x = (u32 *)physToCached((void *)0x2000);
 	sp = x[1];
 
 	printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
@@ -65,7 +54,7 @@ void E_Handler(int exception) {
 		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[8], x[16], x[24]);
 		x++;
 	}
-	x = (u32 *)0x80002080;
+	x = (u32 *)physToCached((void *)0x2080);
 
 	printf("\r\n CR/XER    LR/CTR  SRR0/SRR1 DAR/DSISR\r\n");
 	for (i = 0; i < 2; i++) {
@@ -84,16 +73,16 @@ void E_Init(void) {
 	TRACE();
 
 	for (vector = 0x100; vector < 0x2000; vector += 0x10) {
-		u32 *insn = (u32 *)(0x80000000 + vector);
+		u32 *insn = physToCached((void *)vector);
 
 		insn[0] = 0xbc002000;			// stmw 0,0x2000(0)
 		insn[1] = 0x38600000 | (u32)vector;	// li 3,vector
 		insn[2] = 0x48002202;			// ba 0x2200
 		insn[3] = 0;
 	}
-	sync_before_exec((void *)0x80000100, 0x1f00);
+	dcache_flush_icache_invalidate(physToCached((void *)0x100), 0x1f00);
 
 	len_2200 = &exception_2200_end - &exception_2200_start;
-	memcpy((void *)0x80002200, &exception_2200_start, len_2200);
-	sync_before_exec((void *)0x80002200, len_2200);
+	memcpy(physToCached((void *)0x2200), &exception_2200_start, len_2200);
+	dcache_flush_icache_invalidate(physToCached((void *)0x2200), len_2200);
 }
