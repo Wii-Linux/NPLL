@@ -6,12 +6,29 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
+#include <npll/cpu.h>
 #include <npll/console.h>
 #include <npll/regs.h>
 #include <npll/irq.h>
 
 static irqHandler_t IRQ_Handlers[IRQDEV_MAX];
+
+bool IRQ_DisableSave(void) {
+	u32 msr;
+	bool ret;
+
+	asm("mfmsr	%0" : "=r" (msr));
+	ret = !!(msr & MSR_EE);
+
+	if (ret)
+		IRQ_Disable();
+
+	/* else already disabled, no need */
+
+	return ret;
+}
 
 void IRQ_Init(void) {
 	/* mask all Flipper IRQs */
