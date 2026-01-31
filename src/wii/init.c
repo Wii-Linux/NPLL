@@ -26,6 +26,7 @@
 
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
+int H_WiiBootIOS = -1;
 
 extern int IOS_DevShaExploit(void);
 
@@ -33,8 +34,44 @@ extern int IOS_DevShaExploit(void);
 /* 'NRST' */
 #define MINI_NO_RESET_MAGIC 0x4e525354
 
+static void fixupMEM2(void) {
+	u32 low_orig, low_after, high_orig, high_after;
+
+	HW_MEM_PROT_SPL = 0;
+	HW_MEM_PROT_SPL_BASE = 0;
+	HW_MEM_PROT_SPL_END = 0;
+	HW_MEM_PROT_DDR = 0;
+	HW_MEM_PROT_DDR_BASE = 0;
+	HW_MEM_PROT_DDR_END = 0;
+
+	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
+	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
+	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
+	low_after = *(vu32 *)0xd1000000; sync(); barrier();
+
+	/*
+	 * ensure no artifacts of memory protection show up:
+	 *   - I/O to protected addresses hits bottom address
+	 *   - writes to protected addresses do not appear
+	 * so, check for:
+	 *   - lower MEM2 unexpectedly changed
+	 *   - write did not go through
+	 */
+	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after) {
+		puts("unsuccessful???");
+		printf("low orig: 0x%08x\r\n", low_orig);
+		printf("high orig: 0x%08x\r\n", high_orig);
+		printf("low after: 0x%08x\r\n", low_after);
+		printf("high after: 0x%08x\r\n", high_after);
+		panic("Could not unlock MEM2");
+	}
+	else
+		puts("success");
+}
+
 static void crashIOSAndFixupMEM2(void) {
-	u32 srnprot, low_orig, low_after, high_orig, high_after, trampoline_pointer, trampoline_addr;
+	u32 srnprot, trampoline_pointer, trampoline_addr;
 	vu32 *sram, *armbuf;
 	/* put them in low MEM1 */
 	tikview_t tikviews[4] ALIGN(32);
@@ -44,6 +81,7 @@ static void crashIOSAndFixupMEM2(void) {
 	iosVer = IOS_GetVersion();
 	titleID = TITLE_ID_IOS | iosVer;
 
+	H_WiiBootIOS = iosVer;
 	printf("IOS (%d) detected, trying to load MINI\r\n", iosVer);
 
 	srnprot = HW_SRNPROT;
@@ -113,37 +151,7 @@ static void crashIOSAndFixupMEM2(void) {
 	ES_LaunchTitle(titleID, &tikviews[0]);
 
 	printf("IOS is now replaced with MINI, enabling full MEM2 access... ");
-	HW_MEM_PROT_SPL = 0;
-	HW_MEM_PROT_SPL_BASE = 0;
-	HW_MEM_PROT_SPL_END = 0;
-	HW_MEM_PROT_DDR = 0;
-	HW_MEM_PROT_DDR_BASE = 0;
-	HW_MEM_PROT_DDR_END = 0;
-
-	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
-	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
-	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_after = *(vu32 *)0xd1000000; sync(); barrier();
-
-	/*
-	 * ensure no artifacts of memory protection show up:
-	 *   - I/O to protected addresses hits bottom address
-	 *   - writes to protected addresses do not appear
-	 * so, check for:
-	 *   - lower MEM2 unexpectedly changed
-	 *   - write did not go through
-	 */
-	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after) {
-		puts("unsuccessful???");
-		printf("low orig: 0x%08x\r\n", low_orig);
-		printf("high orig: 0x%08x\r\n", high_orig);
-		printf("low after: 0x%08x\r\n", low_after);
-		printf("high after: 0x%08x\r\n", high_after);
-		panic("Could not unlock MEM2");
-	}
-	else
-		puts("success");
+	fixupMEM2();
 
 	/* give MINI a bit to start up, we don't want to race it */
 	udelay(250 * 1000);
@@ -314,6 +322,11 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* we want to load Wii drivers */
 	D_DriverMask = DRIVER_ALLOW_WII;
+
+	/* final sanity check, these should pass if all went well; don't use assert() since it gets compiled out of release builds */
+	if (HW_AHBPROT != 0xffffffff)
+		panic("AHBPROT not enabled at end of H_InitWii");
+	fixupMEM2(); /* will panic itself on fail */
 
 	/* kick off the real init */
 	I_InitCommon();
