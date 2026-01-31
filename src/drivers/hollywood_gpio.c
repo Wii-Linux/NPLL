@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/irq.h>
+#include <npll/input.h>
+#include <npll/regs.h>
 #include <npll/types.h>
 #include <npll/hollywood/gpio.h>
 
@@ -14,20 +17,30 @@ static REGISTER_DRIVER(gpioDrv);
 
 static u32 prevIn = 0;
 
-/* TODO: translate power/eject (and check PI for reset on GCN/Wii) into inputs */
-static void gpioCallback(void) {
+static void gpioIRQHandler(enum irqDev dev) {
 	u32 in, mask, set, clearred;
 	u8 i, numSet, numClearred, setIdx[32], clearredIdx[32];
+	inputEvent_t ev;
+	(void)dev;
 
 	in = HW_GPIOB_IN;
+	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
+	HW_GPIOB_INTLVL = ~in;
+	printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x", dev, in, prevIn);
+
 	set = in & ~prevIn;
 	clearred = prevIn & ~in;
 	numSet = numClearred = 0;
+	ev = 0;
 
-	if (set & GPIO_POWER)
+	if (set & GPIO_POWER) {
 		puts("GPIO: Power button pressed");
-	if (set & GPIO_EJECT_BTN)
+		ev |= INPUT_EV_DOWN;
+	}
+	if (set & GPIO_EJECT_BTN) {
 		puts("GPIO: Eject button pressed");
+		ev |= INPUT_EV_SELECT;
+	}
 	if (set & GPIO_SLOT_IN)
 		puts("GPIO: Disc inserted");
 	else if (clearred & GPIO_SLOT_IN)
@@ -53,6 +66,9 @@ static void gpioCallback(void) {
 			puts("");
 		}
 	}
+
+	if (ev)
+		IN_NewEvent(ev);
 
 	prevIn = in;
 }
@@ -98,15 +114,24 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	/* register the current state of the inputs */
 	prevIn = HW_GPIOB_IN;
 
-	/* register our callback to check GPIOs */
-	D_AddCallback(gpioCallback);
+	/* register our IRQ handler */
+	IRQ_Disable();
+	IRQ_RegisterHandler(IRQDEV_GPIOB, gpioIRQHandler);
+	IRQ_RegisterHandler(IRQDEV_GPIO, gpioIRQHandler);
+
+	/* set up the interrupts properly */
+	HW_GPIOB_INTLVL = ~prevIn;
+	HW_GPIOB_INTMASK = 0xffffffff;
+
+	/* ack all existing interrupts */
+	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
+	IRQ_Enable();
 
 	/* we're all good */
 	gpioDrv.state = DRIVER_STATE_READY;
 }
 
 static void gpioCleanup(void) {
-	D_RemoveCallback(gpioCallback);
 	gpioDrv.state = DRIVER_STATE_NOT_READY;
 }
 
