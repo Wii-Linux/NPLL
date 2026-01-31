@@ -50,6 +50,7 @@ extern enum consoleType H_ConsoleType;
 extern enum gcnRev H_GCNRev;
 extern enum wiiRev H_WiiRev;
 extern int H_WiiIsvWii;
+extern int H_WiiBootIOS;
 extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
 
