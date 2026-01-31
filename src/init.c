@@ -4,6 +4,7 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#include <npll/irq.h>
 #include <npll/types.h>
 #include <npll/regs.h>
 #include <npll/console.h>
@@ -103,6 +104,8 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	TRACE();
 	O_DebugInit();
 	E_Init();
+	IRQ_Init();
+	IRQ_Enable();
 	M_Init();
 	D_Init();
 	UI_Init();

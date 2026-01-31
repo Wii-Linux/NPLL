@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <npll/cache.h>
+#include <npll/irq.h>
 #include <npll/panic.h>
 #include <npll/types.h>
 #include <npll/utils.h>
@@ -40,9 +41,25 @@ static void dump_stack_trace(u32 *sp) {
 }
 
 
+static void __attribute__((noreturn)) E_DecrementerHandler(void) {
+	u32 val = 0xffffffff;
+
+	asm("mtdec	%0" : "=r" (val));
+	IRQ_Return();
+}
+
 void __attribute__((noreturn)) E_Handler(int exception) {
 	u32 *x, sp;
 	int i;
+
+	if (exception == 0x0500) {
+		IRQ_Handle();
+		__builtin_unreachable();
+	}
+	else if (exception == 0x0900) {
+		E_DecrementerHandler();
+		__builtin_unreachable();
+	}
 
 	printf("\r\nException %04x occurred!\r\n", exception);
 
