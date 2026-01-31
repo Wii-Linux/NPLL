@@ -1,13 +1,15 @@
 /*
  * NPLL - Menu
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <npll/drivers.h>
+#include <npll/input.h>
 #include <npll/menu.h>
 #include <npll/output.h>
 #include <npll/video.h>
@@ -45,16 +47,50 @@ void UI_Init(void) {
 	UI_Switch(&rootMenu);
 }
 
+void UI_HandleInputs(void) {
+	inputEvent_t ev;
+	bool any = false;
+
+	assert(curMenu);
+
+	ev = IN_ConsumeEvent();
+	while (ev) {
+		any = true;
+		if (ev & INPUT_EV_DOWN) {
+			if (selected < (curMenu->numEntries - 1))
+				selected++;
+		}
+		if (ev & INPUT_EV_UP) {
+			if (selected > 0)
+				selected--;
+		}
+		if (ev & INPUT_EV_SELECT) {
+			curMenu->entries[selected].selected(&curMenu->entries[selected]);
+			break;
+		}
+
+		ev = IN_ConsumeEvent();
+	}
+
+	if (any)
+		hasChanged = true;
+}
+
 void UI_Redraw(void) {
-	int i, j;
+	int i;
 	if (__likely(!hasChanged))
 		return;
 
 	printf("\x2b[1;1H\x1b[2J");
 	if (curMenu->header)
-		printf("%s\r\n", curMenu->header);
+		puts(curMenu->header);
 
 	puts("==========");
+
+	if (curMenu->content) {
+		puts(curMenu->content);
+		puts("");
+	}
 
 	for (i = 0; i < curMenu->numEntries; i++)
 		printf("%s %d: %s\r\n", selected == i ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ", i, curMenu->entries[i].name);
@@ -63,16 +99,21 @@ void UI_Redraw(void) {
 }
 
 void UI_Switch(struct menu *m) {
+	struct menu *prev;
+
 	selected = 0;
 	hasChanged = true;
 
 	if (curMenu && curMenu->cleanup)
 		curMenu->cleanup(curMenu);
 
+	prev = curMenu;
 	curMenu = m;
 
 	if (m->init)
 		m->init(m);
+
+	m->previous = prev;
 }
 
 void UI_AddEntry(struct menuEntry *e) {
@@ -80,8 +121,10 @@ void UI_AddEntry(struct menuEntry *e) {
 	memcpy(&curMenu->entries[curMenu->numEntries++], e, sizeof(struct menuEntry));
 }
 
-void UI_UpLevel(void) {
+void UI_UpLevel(struct menuEntry *_dummy) {
 	struct menu *prev;
+
+	(void)_dummy;
 
 	hasChanged = true;
 	prev = curMenu->previous;

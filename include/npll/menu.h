@@ -20,6 +20,7 @@ struct menu {
 	struct menuEntry *entries;
 	int numEntries;
 	char *header;
+	char *content;
 	char *footer;
 
 	/* called during UI_Switch to this menu, if present */
@@ -44,9 +45,12 @@ struct menu {
 #define FOOTER_CONTROLS_WIIU "Use the Wii U GamePad to navigate the menu.\r\nD-Pad: navigate between options; A button: select an option"
 
 extern void UI_Init(void);
+extern void UI_HandleInputs(void);
 extern void UI_Redraw(void);
 extern void UI_Switch(struct menu *m);
 extern void UI_AddEntry(struct menuEntry *e);
-extern void UI_UpLevel(void);
+
+/* has dummy param so that it can be used directly as a .selected() */
+extern void UI_UpLevel(struct menuEntry *_dummy);
 
 #endif /* _MENU_H */

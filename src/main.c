@@ -5,14 +5,13 @@
  */
 
 #include <npll/drivers.h>
-#include <npll/input.h>
 #include <npll/menu.h>
 #include <npll/video.h>
 
 void __attribute__((noreturn)) mainLoop(void) {
 	while (1) {
 		D_RunCallbacks();
-		IN_HandleInputs();
+		UI_HandleInputs();
 		UI_Redraw();
 		V_Flush();
 	}
