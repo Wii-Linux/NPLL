@@ -20,13 +20,14 @@
  * of Crazy Nation and the GC Linux project.
 */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/timer.h>
 #include <npll/video.h>
+#include <npll/log.h>
 #include <npll/flipper/vi.h>
 #include <npll/hollywood/gpio.h>
 #include <npll/allocator.h>
@@ -41,7 +42,7 @@ static u32 *rgbFb;
 static u16 *xfb;
 
 #ifdef VI_DEBUG
-#define  VI_debug(f, arg...) printf("VI: " f, ##arg);
+#define  VI_debug(f, arg...) log_printf("VI: " f, ##arg);
 #else
 #define  VI_debug(f, arg...) while(0)
 #endif
@@ -124,7 +125,7 @@ void VIDEO_Init(int VideoMode)
 		video_initstate = VIDEO_Mode640X480NtsciYUV16;
 		break;
 	}
-	
+
 	VI_debug("Configuring VI...\n");
 	for(Counter=0; Counter<64; Counter++)
 	{
@@ -140,9 +141,9 @@ void VIDEO_Init(int VideoMode)
 #ifdef VI_DEBUG
 	VI_debug("VI dump:\n");
 	for(Counter=0; Counter<32; Counter++)
-		printf("%02x: %04x %04x,\n", Counter*4, *(vu16 *)(MEM_VIDEO_BASE + Counter*4), *(vu16 *)(MEM_VIDEO_BASE + Counter*4+2));
+		log_printf("%02x: %04x %04x,\n", Counter*4, *(vu16 *)(MEM_VIDEO_BASE + Counter*4), *(vu16 *)(MEM_VIDEO_BASE + Counter*4+2));
 
-	printf("---\n");
+	log_printf("---\n");
 #endif
 }
 
@@ -440,18 +441,18 @@ typedef union {
 
 static int make_yuv(rgb c1, rgb c2) {
   int y1, cb1, cr1, y2, cb2, cr2, cb, cr;
- 
+
   y1 = (299 * c1.as_xrgb.r + 587 * c1.as_xrgb.g  + 114 * c1.as_xrgb.b) / 1000;
   cb1 = (-16874 * c1.as_xrgb.r  - 33126 * c1.as_xrgb.g + 50000 * c1.as_xrgb.b + 12800000) / 100000;
   cr1 = (50000 * c1.as_xrgb.r  - 41869 * c1.as_xrgb.g - 8131 * c1.as_xrgb.b + 12800000) / 100000;
- 
+
   y2 = (299 * c2.as_xrgb.r  + 587 * c2.as_xrgb.g + 114 * c2.as_xrgb.b) / 1000;
   cb2 = (-16874 * c2.as_xrgb.r  - 33126 * c2.as_xrgb.g + 50000 * c2.as_xrgb.b + 12800000) / 100000;
   cr2 = (50000 * c2.as_xrgb.r  - 41869 * c2.as_xrgb.g - 8131 * c2.as_xrgb.b + 12800000) / 100000;
- 
+
   cb = (cb1 + cb2) >> 1;
   cr = (cr1 + cr2) >> 1;
- 
+
   return ((y1 << 24) | (cb << 16) | (y2 << 8) | cr);
 }
 
@@ -534,7 +535,7 @@ static void viDrvInit(void) {
 }
 
 static void viDrvCleanup(void) {
-	puts("TODO: VI Cleanup");
+	log_puts("TODO: VI Cleanup");
 }
 
 static REGISTER_DRIVER(viDrv) = {

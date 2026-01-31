@@ -22,7 +22,7 @@ static int selected = 0;
 static void rootMenuSelectedCB(struct menuEntry *ent) {
 	printf("Root Menu Selected Callback for entry %s\r\n",  ent->name);
 	V_Flush();
-	udelay(500 * 1000);
+	udelay(1000 * 1000);
 }
 
 static struct menuEntry rootMenuEntries[] = {

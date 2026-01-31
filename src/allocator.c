@@ -38,13 +38,12 @@
 #define BLOCK_HDR_MAGIC "\x7fMBL"
 #define BLOCK_HDR_MAGIC_SIZE 4
 
+#include <npll/allocator.h>
+#include <npll/log.h>
 #include <npll/panic.h>
 #include <npll/types.h>
-#include <npll/allocator.h>
 #include <npll/utils.h>
 #include <string.h>
-#include <stdint.h>
-#include <stdio.h>
 
 extern u32 __reloc_dest_start;
 
@@ -113,7 +112,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 
 	pool->cur_bottom = (void *)block;
 
-	printf("allocator: alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
+	log_printf("allocator: alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
 
 	return mem;
 }
@@ -186,7 +185,7 @@ void free(void *ptr) {
 
 			bottom += sizeof(struct block) + block->size;
 			pools[i].cur_bottom = (void *)bottom;
-			puts("successfully freed block!");
+			log_puts("successfully freed block!");
 			break;
 		}
 	}
@@ -242,9 +241,9 @@ void M_Init(void) {
 		break;
 	}
 	}
-	printf("Memory pool 0: \"%s\", 0x%08x down to 0x%08x\r\n", pools[0].name, pools[0].top, pools[0].bottom);
+	log_printf("Memory pool 0: \"%s\", 0x%08x down to 0x%08x\r\n", pools[0].name, pools[0].top, pools[0].bottom);
 	if (!memcmp(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE))
-		printf("Memory pool 1: \"%s\", 0x%08x down to 0x%08x\r\n", pools[1].name, pools[1].top, pools[1].bottom);
+		log_printf("Memory pool 1: \"%s\", 0x%08x down to 0x%08x\r\n", pools[1].name, pools[1].top, pools[1].bottom);
 
 	return;
 }

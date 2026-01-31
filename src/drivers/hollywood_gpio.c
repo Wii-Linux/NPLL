@@ -4,11 +4,12 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/input.h>
+#include <npll/log.h>
 #include <npll/regs.h>
 #include <npll/types.h>
 #include <npll/hollywood/gpio.h>
@@ -26,7 +27,7 @@ static void gpioIRQHandler(enum irqDev dev) {
 	in = HW_GPIOB_IN;
 	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
 	HW_GPIOB_INTLVL = ~in;
-	printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x", dev, in, prevIn);
+	log_printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x", dev, in, prevIn);
 
 	set = in & ~prevIn;
 	clearred = prevIn & ~in;
@@ -34,17 +35,17 @@ static void gpioIRQHandler(enum irqDev dev) {
 	ev = 0;
 
 	if (set & GPIO_POWER) {
-		puts("GPIO: Power button pressed");
+		log_puts("GPIO: Power button pressed");
 		ev |= INPUT_EV_DOWN;
 	}
 	if (set & GPIO_EJECT_BTN) {
-		puts("GPIO: Eject button pressed");
+		log_puts("GPIO: Eject button pressed");
 		ev |= INPUT_EV_SELECT;
 	}
 	if (set & GPIO_SLOT_IN)
-		puts("GPIO: Disc inserted");
+		log_puts("GPIO: Disc inserted");
 	else if (clearred & GPIO_SLOT_IN)
-		puts("GPIO: Disc removed");
+		log_puts("GPIO: Disc removed");
 
 	if (in != prevIn) {
 		for (i = 0; i < 32; i++) {
@@ -54,16 +55,16 @@ static void gpioIRQHandler(enum irqDev dev) {
 		}
 
 		if (numSet) {
-			printf("GPIO: Now high:");
+			log_printf("GPIO: Now high:");
 			for (i = 0; i < numSet; i++)
-				printf(" %d", setIdx[i]);
-			puts("");
+				log_printf(" %d", setIdx[i]);
+			log_puts("");
 		}
 		if (numClearred) {
-			printf("GPIO: Now low:");
+			log_printf("GPIO: Now low:");
 			for (i = 0; i < numClearred; i++)
-				printf(" %d", clearredIdx[i]);
-			puts("");
+				log_printf(" %d", clearredIdx[i]);
+			log_puts("");
 		}
 	}
 
@@ -76,7 +77,7 @@ static void gpioIRQHandler(enum irqDev dev) {
 static void gpioInit(void) {
 	u32 dir, out;
 #if 0
-	printf(
+	log_printf(
 "=== GPIO REGISTER DUMP ===\r\n\
 HW_GPIO_OWNER:  0x%08x\r\n\
 HW_GPIO_ENABLE: 0x%08x\r\n\
@@ -96,7 +97,7 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	/* all enabled */
 	HW_GPIO_ENABLE = 0xffffffff;
 
-	/* set up outputs properly */
+	/* set up outlog_puts properly */
 	out = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR | GPIO_DI_SPIN;
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
 		out |= GPIO_GAMEPAD_EN | GPIO_PADPD;
@@ -111,7 +112,7 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	HW_GPIOB_DIR = dir;
 	HW_GPIO_DIR  = dir;
 
-	/* register the current state of the inputs */
+	/* register the current state of the inlog_puts */
 	prevIn = HW_GPIOB_IN;
 
 	/* register our IRQ handler */

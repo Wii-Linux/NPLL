@@ -11,7 +11,7 @@
  * see file COPYING or http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
 */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/irq.h>
@@ -24,13 +24,13 @@ extern char exception_2200_start, exception_2200_end;
 static void dump_stack_trace(u32 *sp) {
 	u32 prev_sp, lr;
 	int depth;
-	printf("Stack trace:\n");
+	log_printf("Stack trace:\n");
 
 	for (depth = 0; sp && depth < 32; depth++) {
 		prev_sp = sp[0];
 		lr = sp[1];
 
-		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (u32)sp, lr);
+		log_printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (u32)sp, lr);
 
 		// sanity checks
 		if (prev_sp <= (u32)sp || prev_sp == 0 || prev_sp == 0xffffffff)
@@ -61,21 +61,21 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 		__builtin_unreachable();
 	}
 
-	printf("\r\nException %04x occurred!\r\n", exception);
+	log_printf("\r\nException %04x occurred!\r\n", exception);
 
 	x = (u32 *)physToCached((void *)0x2000);
 	sp = x[1];
 
-	printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
+	log_printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
 	for (i = 0; i < 8; i++) {
-		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[8], x[16], x[24]);
+		log_printf("%08x  %08x  %08x  %08x\r\n", x[0], x[8], x[16], x[24]);
 		x++;
 	}
 	x = (u32 *)physToCached((void *)0x2080);
 
-	printf("\r\n CR/XER    LR/CTR  SRR0/SRR1 DAR/DSISR\r\n");
+	log_printf("\r\n CR/XER    LR/CTR  SRR0/SRR1 DAR/DSISR\r\n");
 	for (i = 0; i < 2; i++) {
-		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[2], x[4], x[6]);
+		log_printf("%08x  %08x  %08x  %08x\r\n", x[0], x[2], x[4], x[6]);
 		x++;
 	}
 

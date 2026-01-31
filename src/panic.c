@@ -4,7 +4,7 @@
  * Copyright (C) 2025 Techflash
  */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <stdbool.h>
 #include <npll/console.h>
 #include <npll/video.h>
@@ -13,7 +13,7 @@
 
 void __attribute__((noreturn)) panic(const char *str) {
 	/*__putcharNoGraphics = true;*/
-	printf("FATAL: PANIC: %s\r\n", str);
+	log_printf("FATAL: PANIC: %s\r\n", str);
 	if (V_ActiveDriver)
 		V_Flush();
 

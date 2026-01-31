@@ -5,7 +5,6 @@
  */
 
 #include <assert.h>
-#include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include <npll/cpu.h>
@@ -78,8 +77,6 @@ static void IRQ_DoHandle(enum irqDev dev) {
 
 void __attribute__((noreturn)) IRQ_Handle(void) {
 	u32 intsr;
-
-	puts("got irq");
 
 	/* TODO: Handle Flipper PIC IRQs */
 

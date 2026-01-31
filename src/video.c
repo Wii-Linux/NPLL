@@ -14,7 +14,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <assert.h>
-#include <stdio.h>
+#include <npll/log.h>
 #include <stdlib.h>
 #include <string.h>
 #include <npll/panic.h>
@@ -175,7 +175,7 @@ static void handleEscape(char c) {
 			posX = 0;
 			posY = 0;
 		} else {
-			printf("clear mode was %d\r\n", mode);
+			log_printf("clear mode was %d\r\n", mode);
 			assert_msg(false, "invalid clear mode");
 		}
 		break;
@@ -272,7 +272,7 @@ static void handleEscape(char c) {
 		break;
 	}
 	default:
-		printf("unrecognized escape sequence: %*s\n",
+		log_printf("unrecognized escape sequence: %*s\n",
 		      escapeLen, escapeBuf);
 	}
 
@@ -401,7 +401,7 @@ void V_Register(struct videoInfo *info) {
 	assert_msg(info, "Tried to register NULL videoInfo");
 	assert_msg(!V_ActiveDriver, "Tried to register video driver but there's already an active one");
 
-	printf("VIDEO: Registering driver %s\r\n", info->driver->name);
+	log_printf("VIDEO: Registering driver %s\r\n", info->driver->name);
 	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
 	videoOutDev.columns = info->width / FONT_WIDTH;
 	videoOutDev.rows = info->height / FONT_HEIGHT;

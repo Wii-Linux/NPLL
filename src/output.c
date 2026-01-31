@@ -5,7 +5,7 @@
  */
 
 #include <assert.h>
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 #include <stdbool.h>
 #include <npll/irq.h>
@@ -29,7 +29,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 	if (dev->driver && dev->driver->name)
 		driver = (char *)dev->driver->name;
 
-	printf("OUT: Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
+	log_printf("OUT: Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
 
 	irqs = IRQ_DisableSave();
 	O_Devices[O_NumDevices++] = dev;
@@ -41,7 +41,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 		deviceNum++;
 	else if (deviceNum == 2) { /* added real device */
 		deviceNum++;
-		puts("OUT: Cleaning out debug devices");
+		log_puts("OUT: Cleaning out debug devices");
 		O_DebugCleanup();
 		O_MemlogCleanup();
 	}

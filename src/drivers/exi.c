@@ -7,8 +7,8 @@
  * Copyright (C) 2025 Techflash
  */
 
-#include <stdio.h>
 #include <npll/types.h>
+#include <npll/log.h>
 #include <npll/regs.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
@@ -22,7 +22,7 @@
  *        - goto step 1
  */
 #if 0
-#define dbg(...) printf(__VA_ARGS__)
+#define dbg(...) log_printf(__VA_ARGS__)
 #else
 #define dbg(...) (void)0
 #endif
@@ -131,7 +131,7 @@ int H_EXIXferImm(unsigned int channel,
 	if (len > 4 ||
 	    !len    ||
 	    channel > 2) {
-		printf("H_EXIXferImm with invalid params: chan=%d, len=%d, mode=%d\r\n", channel, len, mode);
+		log_printf("H_EXIXferImm with invalid params: chan=%d, len=%d, mode=%d\r\n", channel, len, mode);
 		return -1;
 	}
 
@@ -153,7 +153,7 @@ int H_EXIXferImm(unsigned int channel,
 	 * we've done something very wrong
 	 */
 	if (cr & EXI_CR_TSTART) {
-		puts("H_EXIXferImm while transfer in progress?!");
+		log_puts("H_EXIXferImm while transfer in progress?!");
 		while (regs->channels[channel].cr & EXI_CR_TSTART);
 	}
 
@@ -237,7 +237,7 @@ int H_EXIXferImm(unsigned int channel,
 }
 
 static void exiCallback(void) {
-	
+
 }
 
 static void exiInit(void) {

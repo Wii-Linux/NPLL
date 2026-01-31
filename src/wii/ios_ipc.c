@@ -15,7 +15,7 @@
 #include <npll/cache.h>
 #include <npll/utils.h>
 #include <npll/timer.h>
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 
 #define IPC_TIMEOUT (250 * 1000)
@@ -28,7 +28,7 @@ static int ipc_wait_ack(void) {
 	u64 tb = mftb();
 	while ((HW_IPC_PPCCTRL & 0x22) != 0x22) {
 		if (T_HasElapsed(tb, IPC_TIMEOUT)) {
-			printf("IOS: Timeout waiting for IOS reply\r\n");
+			log_printf("IOS: Timeout waiting for IOS reply\r\n");
 			return -1;
 		}
 	}
@@ -41,7 +41,7 @@ static int ipc_wait_reply(void) {
 	u64 tb = mftb();
 	while ((HW_IPC_PPCCTRL & 0x14) != 0x14) {
 		if (T_HasElapsed(tb, IPC_TIMEOUT)) {
-			printf("IOS: Timeout waiting for IOS reply\r\n");
+			log_printf("IOS: Timeout waiting for IOS reply\r\n");
 			return -1;
 		}
 	}
@@ -122,7 +122,7 @@ static int ipc_recv_reply(void) {
 		if (((u32 *)reply) == virtToPhys(&ipc))
 			break;
 
-		printf("Ignoring unexpected IPC reply @ 0x%08x\r\n", reply);
+		log_printf("Ignoring unexpected IPC reply @ 0x%08x\r\n", reply);
 	}
 
 	dcache_invalidate(&ipc, sizeof ipc);
@@ -247,19 +247,19 @@ static void ipc_cleanup_request(void) {
 void IOS_Reset(void) {
 	int i;
 
-	printf("Flushing IPC transactions");
+	log_printf("Flushing IPC transactions");
 	for (i = 0; i < 10; i++) {
 		ipc_cleanup_request();
 		ipc_cleanup_reply();
 		udelay(1000);
-		printf(".");
+		log_printf(".");
 	}
-	printf(" Done.\r\n");
+	log_printf(" Done.\r\n");
 
-	printf("Closing file descriptors");
+	log_printf("Closing file descriptors");
 	for (i = 0; i < 32; i++) {
 		IOS_Close(i);
-		printf(".");
+		log_printf(".");
 	}
-	printf(" Done.\r\n");
+	log_printf(" Done.\r\n");
 }

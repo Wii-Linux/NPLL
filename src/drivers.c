@@ -4,10 +4,10 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include <stdio.h>
 #include <npll/types.h>
 #include <npll/drivers.h>
 #include <npll/panic.h>
+#include <npll/log.h>
 #include <npll/irq.h>
 #include <npll/utils.h>
 
@@ -61,9 +61,9 @@ void D_Init(void) {
 
 			/* make sure it's the right time to try / try again to load it */
 			if (curDriver->type <= (u32)curType) {
-				printf("DRV: Initializing driver: %s\r\n", curDriver->name);
+				log_printf("DRV: Initializing driver: %s\r\n", curDriver->name);
 				curDriver->init();
-				printf("DRV: Driver %s now in state: %s\r\n", curDriver->name, D_StateToStr(curDriver->state));
+				log_printf("DRV: Driver %s now in state: %s\r\n", curDriver->name, D_StateToStr(curDriver->state));
 			}
 
 noload:
@@ -100,7 +100,7 @@ void D_RemoveCallback(drvCallback_t cb) {
 			return;
 		}
 	}
-	printf("WARNING: Tried to remove nonexistant callback %p\r\n", cb);
+	log_printf("WARNING: Tried to remove nonexistant callback %p\r\n", cb);
 }
 
 void D_RunCallbacks(void) {

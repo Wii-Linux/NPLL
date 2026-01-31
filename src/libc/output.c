@@ -1,5 +1,5 @@
 /*
- * NPLL - libc - putchar/puts
+ * NPLL - libc - putchar/log_puts
  *
  * Copyright (C) 2025 Techflash
  */

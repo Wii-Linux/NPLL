@@ -9,7 +9,7 @@
 #include <npll/cache.h>
 #include <npll/panic.h>
 #include <npll/utils.h>
-#include <stdio.h>
+#include <npll/log.h>
 
 /* ES-related stuff for booting MINI */
 static int esFd = -1;
@@ -18,7 +18,7 @@ static int esFd = -1;
 int ES_Init(void) {
 	__assume(esFd == -1);
 	esFd = IOS_Open("/dev/es", IOS_MODE_NONE);
-	printf("/dev/es fd: %d\r\n", esFd);
+	log_printf("/dev/es fd: %d\r\n", esFd);
 	if (esFd < 0)
 		panic("ES_Init: Failed to open /dev/es");
 

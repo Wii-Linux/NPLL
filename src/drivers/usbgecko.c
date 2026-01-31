@@ -15,7 +15,7 @@
 #include <npll/elf.h>
 #include <npll/timer.h>
 #include <npll/allocator.h>
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 
 static REGISTER_DRIVER(usbgeckoDrv);
@@ -60,7 +60,7 @@ static int usbgeckoGetChar(int port, int retryCount) {
 		return data & 0xff;
 	else
 		return -1;
-} 
+}
 
 
 static void usbgeckoWriteChar(const char c) {
@@ -103,7 +103,7 @@ again:
 	/* we got a byte */
 	data = (u8)(ret & 0xff);
 	if (bufIdx < 10) /* for debugging */
-		printf("GECKO: Got data: 0x%02x\r\n", data);
+		log_printf("GECKO: Got data: 0x%02x\r\n", data);
 
 	switch (usbgeckoState) {
 	case STATE_IDLE: {
@@ -113,7 +113,7 @@ again:
 		/* is what we have so far right? */
 		if (memcmp(tinyBuf, bufMagic, bufIdx)) {
 			/* nope :( */
-			puts("GECKO: bogus data");
+			log_puts("GECKO: bogus data");
 			bufIdx = 0;
 			break;
 		}
@@ -123,7 +123,7 @@ again:
 			break; /* not yet */
 
 		/* yes, move on to the next state */
-		puts("GECKO: awaiting size");
+		log_puts("GECKO: awaiting size");
 		usbgeckoState = STATE_GET_SIZE;
 		bufIdx = 0;
 		break;
@@ -143,7 +143,7 @@ again:
 		/* a binary of 16M should never OOM, even on GameCube (though the load would fail since it'd overwrite itself) - any larger doesn't make any sense to load over USB Gecko anyways since it'd be so miserably slow */
 		if (binSz > (16 * 1024 * 1024) || binSz <= sizeof(Elf32_Ehdr)) {
 			/* hey now you can't do that */
-			printf("GECKO: Cannot possibly receive binary of nonsense size: %u\r\n", binSz);
+			log_printf("GECKO: Cannot possibly receive binary of nonsense size: %u\r\n", binSz);
 			usbgeckoState = STATE_IDLE;
 			bufIdx = 0;
 			break;
@@ -156,7 +156,7 @@ again:
 			buf = M_PoolAlloc(POOL_MEM1, binSz);
 
 		if (!buf) {
-			printf("GECKO: Memory allocation for binary of size %u failed\r\n", binSz);
+			log_printf("GECKO: Memory allocation for binary of size %u failed\r\n", binSz);
 			usbgeckoState = STATE_IDLE;
 			bufIdx = 0;
 			break;
@@ -165,7 +165,7 @@ again:
 		memset(buf, 0, binSz);
 
 		/* yes, we can receive that */
-		printf("GECKO: Receiving binary with size: %u...\r\n", binSz);
+		log_printf("GECKO: Receiving binary with size: %u...\r\n", binSz);
 		usbgeckoState = STATE_GET_DATA;
 		bufIdx = 0;
 		break;
@@ -181,11 +181,11 @@ again:
 			break; /* not yet */
 
 		/* yes, let's do this thing */
-		puts("GECKO: Preparing to launch...");
+		log_puts("GECKO: Preparing to launch...");
 
 		ret = ELF_CheckValid(buf);
 		if (ret) {
-			printf("GECKO: Invalid ELF: %d\r\n", ret);
+			log_printf("GECKO: Invalid ELF: %d\r\n", ret);
 			free(buf);
 			usbgeckoState = STATE_IDLE;
 			bufIdx = 0;
@@ -193,9 +193,9 @@ again:
 		}
 
 		/* valid ELF, let's load it... */
-		printf("GECKO: Launching ELF, goodbye!\r\n", ret);
+		log_printf("GECKO: Launching ELF, goodbye!\r\n", ret);
 		ret = ELF_LoadMem(buf);
-		printf("GECKO: ELF launch failed: %d\r\n", ret);
+		log_printf("GECKO: ELF launch failed: %d\r\n", ret);
 		free(buf);
 		usbgeckoState = STATE_IDLE;
 		bufIdx = 0;

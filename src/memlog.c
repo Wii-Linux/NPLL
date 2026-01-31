@@ -4,7 +4,7 @@
  * Copyright (C) 2025 Techflash
  */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 #include <npll/drivers.h>
 #include <npll/output.h>
@@ -46,5 +46,5 @@ void O_MemlogInit(void) {
 
 void O_MemlogCleanup(void) {
 	O_RemoveDevice(&outDev);
-	printf("%s", memlogStart); /* dump out everything we've got */
+	log_printf("%s", memlogStart); /* dump out everything we've got */
 }

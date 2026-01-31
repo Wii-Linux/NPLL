@@ -12,7 +12,7 @@
  *  (exploit discovery, THUMB shellcode)
 */
 
-#include <stdio.h>
+#include <npll/log.h>
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/regs.h>
@@ -53,7 +53,7 @@ int IOS_DevShaExploit(void) {
 
 	// open /dev/sha
 	int fd = IOS_Open("/dev/sha", IOS_MODE_NONE);
-	printf("Opened /dev/sha with fd=%d\r\n", fd);
+	log_printf("Opened /dev/sha with fd=%d\r\n", fd);
 	// prepare our exploit ioctl
 	ios_ioctlv_t vec[3]; // 1 input, 2 output
 	vec[0].data = NULL;
@@ -68,9 +68,9 @@ int IOS_DevShaExploit(void) {
 	vec[2].data = MEM1_PHYS_BASE;
 	vec[2].size = 0x20;
 	// trigger!
-	printf("triggering exploit...");
+	log_printf("triggering exploit...");
 	IOS_Ioctlv(fd, 0, 1, 2, vec);
-	printf("returned from trigger\r\n");
+	log_printf("returned from trigger\r\n");
 	udelay(250 * 1000);
 	if (HW_AHBPROT & AHBPROT_PPCKERN)
 		return 0;

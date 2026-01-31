@@ -4,7 +4,6 @@
  * Copyright (C) 2025 Techflash
  */
 
-#include <stdio.h>
 #include <string.h>
 #include <npll/drivers.h>
 #include <npll/output.h>
@@ -79,7 +78,6 @@ static void drcInit(void) {
 
 	drcWriteStr("Wii U GamePad Text Console driver is now enabled\n");
 	O_AddDevice(&outDev);
-	
 }
 
 static REGISTER_DRIVER(drcDrv) = {

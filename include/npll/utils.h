@@ -7,8 +7,9 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
-#include <npll/types.h>
 #include <npll/console.h>
+#include <npll/log.h>
+#include <npll/types.h>
 
 /* branch predictor helpers */
 #define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
@@ -120,7 +121,7 @@ static inline int addrIsValidPhys(void *_addr) {
 }
 
 #ifdef DO_TRACE
-#define TRACE() printf("TRACE: %s entered\r\n", __func__)
+#define TRACE() log_printf("TRACE: %s entered\r\n", __func__)
 #else
 #define TRACE() (void)0
 #endif
