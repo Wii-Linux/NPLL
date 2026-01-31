@@ -115,8 +115,8 @@ setupBATs:
 	mtspr DBAT0U, r4
 
 
-	# [I/D]BAT1L: BPRN=0x00000000, WIMG=0101 (uncached, guarded (it's customary to do MMIO here, and largely not actually care about memory access)), PP=RW
-	li r3, 42
+	# [I/D]BAT1L: BPRN=0x00000000, WIMG=1111 (uncached; write-through, caching inhibited, memory coherent, guarded (it's customary to do MMIO here, and largely not actually care about memory access)), PP=RW
+	li r3, 122
 
 	# [I/D]BAT1U: BEPI=0xc0000000, BL=256MB, VS=1, VP=1
 	lis r4, 0xc000
