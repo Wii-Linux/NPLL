@@ -8,8 +8,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <npll/panic.h>
+#include <npll/irq.h>
 #include <npll/output.h>
+#include <npll/panic.h>
 
 #define MAX_DEV 16
 
@@ -18,7 +19,9 @@ const struct outputDevice *O_Devices[MAX_DEV];
 static int deviceNum = 0; /* 0 = memlog, 1 = debug, >1 = real device */
 
 void O_AddDevice(const struct outputDevice *dev) {
+	bool irqs;
 	char *name = "NULL", *driver = "NULL";
+
 	assert_msg(O_NumDevices < MAX_DEV, "Trying to add too many output devices");
 
 	if (dev->name)
@@ -27,8 +30,10 @@ void O_AddDevice(const struct outputDevice *dev) {
 		driver = (char *)dev->driver->name;
 
 	printf("OUT: Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
-	O_Devices[O_NumDevices] = dev;
-	O_NumDevices++;
+
+	irqs = IRQ_DisableSave();
+	O_Devices[O_NumDevices++] = dev;
+	IRQ_Restore(irqs);
 
 	if (deviceNum == 0) /* added memlog */
 		deviceNum++;
@@ -44,7 +49,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 
 void O_RemoveDevice(const struct outputDevice *dev) {
 	int i, size;
-	bool found = false;
+	bool irqs, found = false;
 
 	for (i = 0; i < MAX_DEV; i++) {
 		if (O_Devices[i] == dev) {
@@ -57,8 +62,10 @@ void O_RemoveDevice(const struct outputDevice *dev) {
 
 	/* shift the array back */
 	size = (MAX_DEV - i - 1) * sizeof(struct outputDevice *);
+
+	irqs = IRQ_DisableSave();
 	memmove(&O_Devices[i], &O_Devices[i + 1], size);
 	O_Devices[MAX_DEV - 1] = NULL;
-
 	O_NumDevices--;
+	IRQ_Restore(irqs);
 }

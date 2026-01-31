@@ -1,13 +1,14 @@
 /*
  * NPLL - Driver helpers
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <stdio.h>
 #include <npll/types.h>
 #include <npll/drivers.h>
 #include <npll/panic.h>
+#include <npll/irq.h>
 #include <npll/utils.h>
 
 #define MAX_CALLBACKS 64
@@ -73,9 +74,13 @@ noload:
 
 void D_AddCallback(drvCallback_t cb) {
 	int i;
+	bool irqs;
+
 	for (i = 0; i < MAX_CALLBACKS; i++) {
 		if (!callbacks[i]) {
+			irqs = IRQ_DisableSave();
 			callbacks[i] = cb;
+			IRQ_Restore(irqs);
 			return;
 		}
 	}
@@ -85,9 +90,13 @@ void D_AddCallback(drvCallback_t cb) {
 
 void D_RemoveCallback(drvCallback_t cb) {
 	int i;
+	bool irqs;
+
 	for (i = 0; i < MAX_CALLBACKS; i++) {
 		if (callbacks[i] == cb) {
+			irqs = IRQ_DisableSave();
 			callbacks[i] = NULL;
+			IRQ_Restore(irqs);
 			return;
 		}
 	}
