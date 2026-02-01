@@ -344,6 +344,13 @@ static void odevWriteChar(char c) {
 	}
 	}
 
+	/* do we need to wrap? */
+	if (posX >= videoOutDev.columns) {
+		posX = 0;
+		posY++;
+		maybeScroll();
+	}
+
 	row = font + (c * FONT_HEIGHT);
 
 	for (y = 0; y < FONT_HEIGHT; y++) {
@@ -368,12 +375,6 @@ static void odevWriteChar(char c) {
 	/* done writing */
 	posX++;
 
-	/* do we need to wrap? */
-	if (posX >= videoOutDev.columns) {
-		posX = 0;
-		posY++;
-		maybeScroll();
-	}
 }
 
 static void odevWriteStr(const char *str) {
