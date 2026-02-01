@@ -499,14 +499,9 @@ static void viFlush(void) {
 }
 
 static struct videoInfo viVidInfo = {
-#if 0
-	.fb = rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 2),
-	.width = XFB_WIDTH,
-	.height = XFB_HEIGHT - (XFB_OS_COMP_PIX * 2),
-#endif
 	.fb = NULL,
 	.width = XFB_WIDTH,
-	.height = XFB_HEIGHT,
+	.height = XFB_HEIGHT - (XFB_OS_COMP_PIX * 2),
 	.flush = viFlush,
 	.driver = &viDrv
 };
@@ -521,7 +516,7 @@ static void viDrvInit(void) {
 
 	/* rgbFB can go wherever */
 	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
-	viVidInfo.fb = rgbFb;
+	viVidInfo.fb = (u32 *)((u32)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
 
 	VIDEO_Init(0);
 	VIDEO_SetFrameBuffer(xfb);
