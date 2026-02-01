@@ -10,14 +10,16 @@
  *
  *  based on the work of https://github.com/mkwcat
  *  (exploit discovery, THUMB shellcode)
-*/
+ */
 
-#include <npll/log.h>
+#define MODULE "IOS"
+
 #include <string.h>
 #include <npll/cache.h>
+#include <npll/log.h>
 #include <npll/regs.h>
-#include <npll/utils.h>
 #include <npll/timer.h>
+#include <npll/utils.h>
 #include "ios_ipc.h"
 
 static u32 mem1_prepare[7] = {

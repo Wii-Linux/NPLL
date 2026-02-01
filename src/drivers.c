@@ -4,6 +4,8 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#define MODULE "DRV"
+
 #include <npll/types.h>
 #include <npll/drivers.h>
 #include <npll/panic.h>
@@ -61,9 +63,9 @@ void D_Init(void) {
 
 			/* make sure it's the right time to try / try again to load it */
 			if (curDriver->type <= (u32)curType) {
-				log_printf("DRV: Initializing driver: %s\r\n", curDriver->name);
+				log_printf("Initializing driver: %s\r\n", curDriver->name);
 				curDriver->init();
-				log_printf("DRV: Driver %s now in state: %s\r\n", curDriver->name, D_StateToStr(curDriver->state));
+				log_printf("Driver %s now in state: %s\r\n", curDriver->name, D_StateToStr(curDriver->state));
 			}
 
 noload:

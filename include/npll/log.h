@@ -7,9 +7,14 @@
 #ifndef _LOG_H
 #define _LOG_H
 
-#include <stdio.h>
+#include <npll/log_internal.h>
 
-#define log_puts puts
-#define log_printf printf
+#ifndef MODULE
+#warning "MODULE is not defined, defaulting to 'UNK'"
+#define MODULE "UNK"
+#endif
+
+#define log_puts(x) _log_puts(MODULE ": " x)
+#define log_printf(...) _log_printf(MODULE ": " __VA_ARGS__)
 
 #endif /* _LOG_H */

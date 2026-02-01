@@ -4,6 +4,8 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#define MODULE "OUT"
+
 #include <assert.h>
 #include <npll/log.h>
 #include <string.h>
@@ -16,7 +18,7 @@
 
 int O_NumDevices = 0;
 const struct outputDevice *O_Devices[MAX_DEV];
-static int deviceNum = 0; /* 0 = memlog, 1 = debug, >1 = real device */
+static int deviceNum = 0; /* 0 = debug, >=1 = real device */
 
 void O_AddDevice(const struct outputDevice *dev) {
 	bool irqs;
@@ -29,21 +31,18 @@ void O_AddDevice(const struct outputDevice *dev) {
 	if (dev->driver && dev->driver->name)
 		driver = (char *)dev->driver->name;
 
-	log_printf("OUT: Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
+	log_printf("Adding new device (cur=%d total=%d): %s [driver: %s]\r\n", O_NumDevices, deviceNum, name, driver);
 
 	irqs = IRQ_DisableSave();
 	O_Devices[O_NumDevices++] = dev;
 	IRQ_Restore(irqs);
 
-	if (deviceNum == 0) /* added memlog */
+	if (deviceNum == 0) /* added debug */
 		deviceNum++;
-	else if (deviceNum == 1) /* added debug */
+	else if (deviceNum == 1) { /* added real device */
 		deviceNum++;
-	else if (deviceNum == 2) { /* added real device */
-		deviceNum++;
-		log_puts("OUT: Cleaning out debug devices");
+		log_puts("Cleaning out debug devices");
 		O_DebugCleanup();
-		O_MemlogCleanup();
 	}
 }
 

@@ -7,6 +7,8 @@
  * Copyright (C) 2025 Techflash
  */
 
+#define MODULE "EXI"
+
 #include <npll/types.h>
 #include <npll/log.h>
 #include <npll/regs.h>

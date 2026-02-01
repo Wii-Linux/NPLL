@@ -8,6 +8,8 @@
  *  Copyright (C) 2008 marcan, #wiidev efnet
  */
 
+#define MODULE "IOS"
+
 #include "ios_ipc.h"
 #include <npll/types.h>
 #include <npll/regs.h>
@@ -28,7 +30,7 @@ static int ipc_wait_ack(void) {
 	u64 tb = mftb();
 	while ((HW_IPC_PPCCTRL & 0x22) != 0x22) {
 		if (T_HasElapsed(tb, IPC_TIMEOUT)) {
-			log_printf("IOS: Timeout waiting for IOS reply\r\n");
+			log_printf("Timeout waiting for IOS reply\r\n");
 			return -1;
 		}
 	}
@@ -41,7 +43,7 @@ static int ipc_wait_reply(void) {
 	u64 tb = mftb();
 	while ((HW_IPC_PPCCTRL & 0x14) != 0x14) {
 		if (T_HasElapsed(tb, IPC_TIMEOUT)) {
-			log_printf("IOS: Timeout waiting for IOS reply\r\n");
+			log_printf("Timeout waiting for IOS reply\r\n");
 			return -1;
 		}
 	}

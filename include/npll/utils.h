@@ -8,7 +8,7 @@
 #define _UTILS_H
 
 #include <npll/console.h>
-#include <npll/log.h>
+#include <npll/log_internal.h>
 #include <npll/types.h>
 
 /* branch predictor helpers */
@@ -121,7 +121,8 @@ static inline int addrIsValidPhys(void *_addr) {
 }
 
 #ifdef DO_TRACE
-#define TRACE() log_printf("TRACE: %s entered\r\n", __func__)
+/* to avoid the lack of MODULE */
+#define TRACE() _log_printf("TRACE: %s entered\r\n", __func__)
 #else
 #define TRACE() (void)0
 #endif

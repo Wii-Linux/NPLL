@@ -4,7 +4,6 @@
  * Copyright (C) 2025 Techflash
  */
 
-#include <npll/log.h>
 #include <string.h>
 #include <npll/console.h>
 #include <npll/drivers.h>

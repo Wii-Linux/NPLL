@@ -15,7 +15,7 @@
 #include <npll/menu.h>
 #include <npll/allocator.h>
 #include <npll/utils.h>
-#include <npll/log.h>
+#include <npll/log_internal.h>
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
 struct platOps *H_PlatOps = NULL;
@@ -26,7 +26,7 @@ void __attribute__((noreturn)) init(void) {
 	u32 hw_version, lt_chiprevid;
 
 	/* Initialize super early in-memory logging */
-	O_MemlogInit();
+	L_Init();
 
 	/*
 	 * Alright, first thing's first.  What console are we?
@@ -62,7 +62,7 @@ void __attribute__((noreturn)) init(void) {
 
 	/* it's a GameCube, there is nothing else to determine */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		log_puts("Detected hardware: Nintendo GameCube");
+		_log_puts("Detected hardware: Nintendo GameCube");
 		H_InitGameCube();
 		__builtin_unreachable();
 	}
@@ -77,7 +77,7 @@ void __attribute__((noreturn)) init(void) {
 	 * once we've gained AHBPROT perms in H_InitWii.
 	 */
 	if ((lt_chiprevid & 0xFFFF0000) != 0xCAFE0000) {
-		log_puts("Detected hardware: Nintendo Wii");
+		_log_puts("Detected hardware: Nintendo Wii");
 detectedWii:
 		H_InitWii();
 		__builtin_unreachable();
@@ -86,14 +86,14 @@ detectedWii:
 	/* it's a Wii U */
 	/* check if LT_PIMCOMPAT is non-zero, if it is, we must be in native mode, else it's vWii */
 	if (LT_PIMCOMPAT) {
-		log_puts("Detected hardware: Nintendo Wii U (native)");
+		_log_puts("Detected hardware: Nintendo Wii U (native)");
 		H_ConsoleType = CONSOLE_TYPE_WII_U;
 		H_WiiURev = lt_chiprevid;
 		H_InitWiiU();
 		__builtin_unreachable();
 	}
 	else {
-		log_puts("Detected hardware: Nintendo Wii U (vWii)");
+		_log_puts("Detected hardware: Nintendo Wii U (vWii)");
 		H_WiiIsvWii = 1;
 		goto detectedWii;
 	}
@@ -109,7 +109,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	M_Init();
 	D_Init();
 	UI_Init();
-	log_puts("Driver initialization done, entering mainLoop");
+	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();
 }

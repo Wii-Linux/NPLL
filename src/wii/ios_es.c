@@ -4,6 +4,8 @@
  * Copyright (C) 2025 Techflash
  */
 
+#define MODULE "IOS-ES"
+
 #include "ios_ipc.h"
 #include "ios_es.h"
 #include <npll/cache.h>

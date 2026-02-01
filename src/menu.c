@@ -18,6 +18,13 @@
 
 static bool hasChanged = true;
 static int selected = 0;
+struct logLine {
+	const char *start;
+	int len;
+};
+
+static struct logLine logLines[5];
+
 
 static void rootMenuSelectedCB(struct menuEntry *ent) {
 	printf("Root Menu Selected Callback for entry %s\r\n",  ent->name);
@@ -44,6 +51,7 @@ static struct menu rootMenu = {
 static struct menu *curMenu = NULL;
 
 void UI_Init(void) {
+	memset(logLines, 0, sizeof(logLines));
 	UI_Switch(&rootMenu);
 }
 
@@ -137,4 +145,8 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 
 	assert(prev);
 	curMenu = prev;
+}
+
+void UI_LogPutchar(char c) {
+
 }

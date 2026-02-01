@@ -4,6 +4,8 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#define MODULE "GPIO"
+
 #include <npll/log.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
@@ -22,12 +24,13 @@ static void gpioIRQHandler(enum irqDev dev) {
 	u32 in, mask, set, clearred;
 	u8 i, numSet, numClearred, setIdx[32], clearredIdx[32];
 	inputEvent_t ev;
+	bool irqs;
 	(void)dev;
 
 	in = HW_GPIOB_IN;
 	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
 	HW_GPIOB_INTLVL = ~in;
-	log_printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x", dev, in, prevIn);
+	log_printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x\r\n", dev, in, prevIn);
 
 	set = in & ~prevIn;
 	clearred = prevIn & ~in;
@@ -35,17 +38,17 @@ static void gpioIRQHandler(enum irqDev dev) {
 	ev = 0;
 
 	if (set & GPIO_POWER) {
-		log_puts("GPIO: Power button pressed");
+		log_puts("Power button pressed");
 		ev |= INPUT_EV_DOWN;
 	}
 	if (set & GPIO_EJECT_BTN) {
-		log_puts("GPIO: Eject button pressed");
+		log_puts("Eject button pressed");
 		ev |= INPUT_EV_SELECT;
 	}
 	if (set & GPIO_SLOT_IN)
-		log_puts("GPIO: Disc inserted");
+		log_puts("Disc inserted");
 	else if (clearred & GPIO_SLOT_IN)
-		log_puts("GPIO: Disc removed");
+		log_puts("Disc removed");
 
 	if (in != prevIn) {
 		for (i = 0; i < 32; i++) {
@@ -54,18 +57,21 @@ static void gpioIRQHandler(enum irqDev dev) {
 			if (clearred & mask) clearredIdx[numClearred++] = i;
 		}
 
+		/* ensure that this looks right */
+		irqs = IRQ_DisableSave();
 		if (numSet) {
-			log_printf("GPIO: Now high:");
+			log_printf("Now high:");
 			for (i = 0; i < numSet; i++)
-				log_printf(" %d", setIdx[i]);
-			log_puts("");
+				_log_printf(" %d", setIdx[i]);
+			_log_puts("");
 		}
 		if (numClearred) {
-			log_printf("GPIO: Now low:");
+			log_printf("Now low:");
 			for (i = 0; i < numClearred; i++)
-				log_printf(" %d", clearredIdx[i]);
-			log_puts("");
+				_log_printf(" %d", clearredIdx[i]);
+			_log_puts("");
 		}
+		IRQ_Restore(irqs);
 	}
 
 	if (ev)

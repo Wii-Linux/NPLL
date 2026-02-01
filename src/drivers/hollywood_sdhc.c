@@ -25,6 +25,8 @@
  * Simplified Specification Version 1.00 (www.sdcard.com).
  */
 
+#define MODULE "sdhc"
+
 #include <string.h>
 #include <errno.h>
 #include <npll/cache.h>
@@ -166,7 +168,7 @@ static int sdhc_host_found(bus_space_tag_t iot, bus_space_handle_t ioh, int used
 	u16 version;
 
 	version = bus_space_read_2(ioh, SDHC_HOST_CTL_VERSION);
-	log_printf("sdhc: SD Host Specification/Vendor Version ");
+	log_printf("SD Host Specification/Vendor Version ");
 
 	switch(SDHC_SPEC_VERSION(version)) {
 	case 0x00:
@@ -204,11 +206,11 @@ static int sdhc_host_found(bus_space_tag_t iot, bus_space_handle_t ioh, int used
 		sc_host.clkbase = SDHC_BASE_FREQ_KHZ(caps);
 	if (sc_host.clkbase == 0) {
 		/* The attachment driver must tell us. */
-		log_printf("sdhc: base clock frequency unknown\r\n");
+		log_printf("base clock frequency unknown\r\n");
 		goto err;
 	} else if (sc_host.clkbase < 10000 || sc_host.clkbase > 63000) {
 		/* SDHC 1.0 supports only 10-63 MHz. */
-		log_printf("sdhc: base clock frequency out of range: %u MHz\r\n",
+		log_printf("base clock frequency out of range: %u MHz\r\n",
 		    sc_host.clkbase / 1000);
 		goto err;
 	}
@@ -371,7 +373,7 @@ int sdhc_bus_clock(struct sdhc_host *hp, int freq) {
 		udelay(10);
 	}
 	if (timo == 0) {
-		log_printf("sdhc: internal clock never stabilized\r\n");
+		log_printf("internal clock never stabilized\r\n");
 		return ETIMEDOUT;
 	}
 
@@ -391,7 +393,7 @@ static int sdhc_wait_state(struct sdhc_host *hp, u32 mask, u32 value) {
 			return 0;
 		udelay(10000);
 	}
-	DPRINTF(0,("sdhc: timeout waiting for %x (state=%d)\r\n", value, state));
+	DPRINTF(0,("timeout waiting for %x (state=%d)\r\n", value, state));
 	return ETIMEDOUT;
 }
 
@@ -461,7 +463,7 @@ void sdhc_exec_command(struct sdhc_host *hp, struct sdmmc_command *cmd) {
 	if (cmd->c_error == 0 && cmd->c_datalen > 0)
 		sdhc_transfer_data(hp, cmd);
 
-	DPRINTF(1,("sdhc: cmd %u done (flags=%#x error=%d prev state=%d)\r\n",
+	DPRINTF(1,("cmd %u done (flags=%#x error=%d prev state=%d)\r\n",
 	    cmd->c_opcode, cmd->c_flags, cmd->c_error, (cmd->c_resp[0] >> 9) & 15));
 	SET(cmd->c_flags, SCF_ITSDONE);
 	hp->data_command = 0;
@@ -474,7 +476,7 @@ static int sdhc_start_command(struct sdhc_host *hp, struct sdmmc_command *cmd) {
 	u16 command;
 	int error;
 
-	DPRINTF(1,("sdhc: start cmd %u arg=%#x data=%p dlen=%d flags=%#x\r\n",
+	DPRINTF(1,("start cmd %u arg=%#x data=%p dlen=%d flags=%#x\r\n",
 		cmd->c_opcode, cmd->c_arg, cmd->c_data, cmd->c_datalen, cmd->c_flags));
 
 	/*
@@ -488,14 +490,14 @@ static int sdhc_start_command(struct sdhc_host *hp, struct sdmmc_command *cmd) {
 		blkcount = cmd->c_datalen / blksize;
 		if (cmd->c_datalen % blksize > 0) {
 			/* XXX: Split this command. (1.7.4) */
-			log_printf("sdhc: data not a multiple of %d bytes\r\n", blksize);
+			log_printf("data not a multiple of %d bytes\r\n", blksize);
 			return EINVAL;
 		}
 	}
 
 	/* Check limit imposed by 9-bit block count. (1.7.2) */
 	if (blkcount > SDHC_BLOCK_COUNT_MAX) {
-		log_printf("sdhc: too much data\r\n");
+		log_printf("too much data\r\n");
 		return EINVAL;
 	}
 
@@ -548,7 +550,7 @@ static int sdhc_start_command(struct sdhc_host *hp, struct sdmmc_command *cmd) {
 		HWRITE4(hp, SDHC_DMA_ADDR, (u32)virtToPhys(cmd->c_data));
 	}
 
-	DPRINTF(1,("sdhc: cmd=%#x mode=%#x blksize=%d blkcount=%d\r\n",
+	DPRINTF(1,("cmd=%#x mode=%#x blksize=%d blkcount=%d\r\n",
 	    command, mode, blksize, blkcount));
 
 	/*
@@ -589,7 +591,7 @@ static void sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd) 
 				break;
 			}
 			if (ISSET(status, SDHC_DMA_INTERRUPT)) {
-				DPRINTF(2,("sdhc: dma left:%#x\r\n", HREAD2(hp, SDHC_BLOCK_COUNT)));
+				DPRINTF(2,("dma left:%#x\r\n", HREAD2(hp, SDHC_BLOCK_COUNT)));
 				HWRITE4(hp, SDHC_DMA_ADDR,
 						(u32)virtToPhys((void *)HREAD4(hp, SDHC_DMA_ADDR)));
 				continue;
@@ -604,7 +606,7 @@ static void sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd) 
 	/* XXX I forgot why I wanted to know when this happens :-( */
 	if ((cmd->c_opcode == 52 || cmd->c_opcode == 53) &&
 	    ISSET(MMC_R1(cmd->c_resp), 0xcb00))
-		log_printf("sdhc: CMD52/53 error response flags %#x\r\n",
+		log_printf("CMD52/53 error response flags %#x\r\n",
 		    MMC_R1(cmd->c_resp) & 0xff00);
 #endif
 
@@ -612,7 +614,7 @@ static void sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd) 
 		cmd->c_error = error;
 	SET(cmd->c_flags, SCF_ITSDONE);
 
-	DPRINTF(1,("sdhc: data transfer done (error=%d)\r\n", cmd->c_error));
+	DPRINTF(1,("data transfer done (error=%d)\r\n", cmd->c_error));
 	return;
 }
 
@@ -620,7 +622,7 @@ static void sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd) 
 static int sdhc_soft_reset(struct sdhc_host *hp, int mask) {
 	int timo;
 
-	DPRINTF(1,("sdhc: software reset reg=%#x\r\n", mask));
+	DPRINTF(1,("software reset reg=%#x\r\n", mask));
 
 	HWRITE1(hp, SDHC_SOFTWARE_RESET, mask);
 	for (timo = 10; timo > 0; timo--) {
@@ -630,7 +632,7 @@ static int sdhc_soft_reset(struct sdhc_host *hp, int mask) {
 		HWRITE1(hp, SDHC_SOFTWARE_RESET, 0);
 	}
 	if (timo == 0) {
-		DPRINTF(1,("sdhc: timeout reg=%#x\r\n", HREAD1(hp, SDHC_SOFTWARE_RESET)));
+		DPRINTF(1,("timeout reg=%#x\r\n", HREAD1(hp, SDHC_SOFTWARE_RESET)));
 		HWRITE1(hp, SDHC_SOFTWARE_RESET, 0);
 		return (ETIMEDOUT);
 	}
@@ -655,7 +657,7 @@ int sdhc_intr(void) {
 
 	/* Acknowledge the interrupts we are about to handle. */
 	HWRITE2(&sc_host, SDHC_NINTR_STATUS, status);
-	DPRINTF(2,("sdhc: interrupt status=%d\n", status));
+	DPRINTF(2,("interrupt status=%d\n", status));
 
 	/* Service error interrupts. */
 	if (ISSET(status, SDHC_ERROR_INTERRUPT)) {
@@ -677,7 +679,7 @@ int sdhc_intr(void) {
 		HWRITE2(&sc_host, SDHC_EINTR_STATUS, error);
 		HWRITE2(&sc_host, SDHC_EINTR_SIGNAL_EN, signal);
 
-		DPRINTF(2,("sdhc: error interrupt, status=%d\n", error));
+		DPRINTF(2,("error interrupt, status=%d\n", error));
 
 		if (ISSET(error, SDHC_CMD_TIMEOUT_ERROR|
 	 	    SDHC_DATA_TIMEOUT_ERROR)) {
@@ -688,7 +690,7 @@ int sdhc_intr(void) {
 
 	/* Wake up the sdmmc event thread to scan for cards. */
 	if (ISSET(status, SDHC_CARD_REMOVAL|SDHC_CARD_INSERTION))
-		log_puts("sdhc: card changed!");
+		log_puts("card changed!");
 
 	/*
 	 * Wake up the blocking process to service command
@@ -702,7 +704,7 @@ int sdhc_intr(void) {
 
 	/* Service SD card interrupts. */
 	if  (ISSET(status, SDHC_CARD_INTERRUPT)) {
-		DPRINTF(0,("sdhc: card interrupt\n"));
+		DPRINTF(0,("card interrupt\n"));
 		HCLR2(&sc_host, SDHC_NINTR_STATUS_EN, SDHC_CARD_INTERRUPT);
 	}
 	return 1;
@@ -733,7 +735,7 @@ static int sdhc_wait_intr_debug(const char *funcname, int line, struct sdhc_host
 	}
 	hp->intr_status &= ~status;
 
-	DPRINTF(2,("sdhc: funcname=%s, line=%d, timo=%d status=%#x intr status=%#x error %#x\r\n",
+	DPRINTF(2,("funcname=%s, line=%d, timo=%d status=%#x intr status=%#x error %#x\r\n",
 		funcname, line, timo, status, hp->intr_status, hp->intr_error_status));
 
 	/* Command timeout has higher priority than command complete. */

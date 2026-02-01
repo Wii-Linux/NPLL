@@ -28,6 +28,9 @@
  * hint to the compiler about various conditions, for optimization.
  */
 
+
+#define MODULE "allocator"
+
 /* MEM1 and MEM2 */
 #define MAX_POOLS 2
 
@@ -95,7 +98,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 		return NULL;
 
 	if (__unlikely(memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
-		panic("allocator: _poolAlloc: corrupted pool metadata");
+		panic("_poolAlloc: corrupted pool metadata");
 
 	/* trying to allocate from nonexistant pool */
 	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
@@ -112,7 +115,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 
 	pool->cur_bottom = (void *)block;
 
-	log_printf("allocator: alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
+	log_printf("alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
 
 	return mem;
 }
@@ -136,9 +139,9 @@ void *M_PoolAlloc(enum pool_idx pool, size_t size) {
 
 		/* sanity check the data before we use it */
 		if (memcmp(pools[POOL_MEM1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE))
-			panic("allocator: M_PoolAlloc: corrupted MEM1 pool metadata");
+			panic("M_PoolAlloc: corrupted MEM1 pool metadata");
 		if (memcmp(pools[POOL_MEM2].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE))
-			panic("allocator: M_PoolAlloc: corrupted MEM2 pool metadata");
+			panic("M_PoolAlloc: corrupted MEM2 pool metadata");
 
 		mem1_free = (u32)pools[POOL_MEM1].cur_bottom - (u32)pools[POOL_MEM1].bottom;
 		mem2_free = (u32)pools[POOL_MEM2].cur_bottom - (u32)pools[POOL_MEM2].bottom;
@@ -169,7 +172,7 @@ void free(void *ptr) {
 
 	for (i = 0; i < MAX_POOLS; i++) {
 		if (__unlikely(memcmp(pools[i].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
-			panic("allocator: free: corrupted pool metadata");
+			panic("free: corrupted pool metadata");
 
 		if (__unlikely(!pools[i].top && !pools[i].bottom && !pools[i].cur_bottom))
 			continue;
@@ -181,7 +184,7 @@ void free(void *ptr) {
 		if (mem == bottom) {
 			block = (struct block *)mem;
 			if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
-				panic("allocator: free: corrupted block metadata");
+				panic("free: corrupted block metadata");
 
 			bottom += sizeof(struct block) + block->size;
 			pools[i].cur_bottom = (void *)bottom;

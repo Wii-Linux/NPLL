@@ -11,17 +11,20 @@
  * Bernecker & Rainer Industrieelektronik GmbH - http://www.br-automation.com
  */
 
+#define MODULE "VIDEO"
+
+#include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
-#include <assert.h>
-#include <npll/log.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <npll/panic.h>
-#include <npll/video.h>
-#include <npll/timer.h>
+#include <npll/log.h>
 #include <npll/output.h>
+#include <npll/panic.h>
+#include <npll/timer.h>
 #include <npll/utils.h>
+#include <npll/video.h>
 
 struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
@@ -401,7 +404,7 @@ void V_Register(struct videoInfo *info) {
 	assert_msg(info, "Tried to register NULL videoInfo");
 	assert_msg(!V_ActiveDriver, "Tried to register video driver but there's already an active one");
 
-	log_printf("VIDEO: Registering driver %s\r\n", info->driver->name);
+	log_printf("Registering driver %s\r\n", info->driver->name);
 	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
 	videoOutDev.columns = info->width / FONT_WIDTH;
 	videoOutDev.rows = info->height / FONT_HEIGHT;

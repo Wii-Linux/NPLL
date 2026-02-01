@@ -20,7 +20,8 @@
  * of Crazy Nation and the GC Linux project.
 */
 
-#include <npll/log.h>
+#define MODULE "VI"
+
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/console.h>
@@ -42,7 +43,7 @@ static u32 *rgbFb;
 static u16 *xfb;
 
 #ifdef VI_DEBUG
-#define  VI_debug(f, arg...) log_printf("VI: " f, ##arg);
+#define  VI_debug(f, arg...) log_printf(f, ##arg);
 #else
 #define  VI_debug(f, arg...) while(0)
 #endif

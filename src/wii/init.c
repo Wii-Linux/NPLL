@@ -1,11 +1,13 @@
 /*
  * NPLL - Wii Init
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Code to load MINI derived from ARMBootNow:
  * Copyright (c) 2024 Emma / InvoxiPlayGames
  */
+
+#define MODULE "Wii"
 
 #include <npll/types.h>
 #include <npll/regs.h>
@@ -59,7 +61,7 @@ static void fixupMEM2(void) {
 	 *   - write did not go through
 	 */
 	if ((high_orig == low_orig && high_after == low_after) || high_after != 0xdeadbeef || low_orig != low_after) {
-		log_puts("unsuccessful???");
+		_log_puts("unsuccessful???");
 		log_printf("low orig: 0x%08x\r\n", low_orig);
 		log_printf("high orig: 0x%08x\r\n", high_orig);
 		log_printf("low after: 0x%08x\r\n", low_after);
@@ -67,7 +69,7 @@ static void fixupMEM2(void) {
 		panic("Could not unlock MEM2");
 	}
 	else
-		log_puts("success");
+		_log_puts("success");
 }
 
 static void crashIOSAndFixupMEM2(void) {
@@ -88,12 +90,12 @@ static void crashIOSAndFixupMEM2(void) {
 	log_printf("HW_SRNPROT: 0x%08x", srnprot);
 
 	if (!(srnprot & 0x8)) {
-		log_puts("; no PPC SRAM access, enabling it");
+		_log_puts("; no PPC SRAM access, enabling it");
 		srnprot |= 0x8;
 		HW_SRNPROT = srnprot;
 	}
 	else
-		log_puts("");
+		_log_puts("");
 
 	sram = (vu32 *)0xcd410000;
 	armbuf = (vu32 *)0x91000000;
