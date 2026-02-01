@@ -40,9 +40,17 @@ struct menu {
 /* magic value to tell the menu to use the controls footers */
 #define FOOTER_CONTROLS (void *)('C'<<24 | 'T'<<16 | 'R'<<8 | 'L')
 
-#define FOOTER_CONTROLS_GCN "Use the GameCube controller to navigate the menu.\r\nD-Pad: navigate between options; A button: select an option"
-#define FOOTER_CONTROLS_WII "Use a GameCube controller or the front buttons to navigate the menu.\r\n[GameCube Controller] D-Pad: navigate between options; A button: select an option\r\n[Front Buttons] Power: Move forward an option; Reset (Press): Move backward an option; Reset (Hold): Select an option; Eject: Select an option"
-#define FOOTER_CONTROLS_WIIU "Use the Wii U GamePad to navigate the menu.\r\nD-Pad: navigate between options; A button: select an option"
+#define FOOTER_CONTROLS_GCN "\
+Use the GameCube controller to navigate the menu.\r\n\
+DPad: navigate between options; A button: select an option"
+#define FOOTER_CONTROLS_WII "\
+Use a GameCube controller or the front buttons to navigate the menu.\r\n\
+[GameCube Controller] DPad: navigate between options; A button: select an option\r\n\
+[Front Buttons] Power: Move forward an option; Reset (Press): Move backward an\r\n\
+                option; Reset (Hold): Select an option; Eject: Select an option"
+#define FOOTER_CONTROLS_WIIU "\
+Use the Wii U GamePad to navigate the menu.\r\n\
+DPad: navigate between options; A button: select an option"
 
 extern void UI_Init(void);
 extern void UI_HandleInputs(void);
