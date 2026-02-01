@@ -214,8 +214,8 @@ static const struct outputDevice outDev = {
 	.name = "USB Gecko",
 	.driver = &usbgeckoDrv,
 	.ansiEscSupport = true,
-	.rows = 80,
-	.columns = 25
+	.columns = 80,
+	.rows = 25
 };
 
 static void usbgeckoInit(void) {
