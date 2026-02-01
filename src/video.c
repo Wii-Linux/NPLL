@@ -145,9 +145,9 @@ static void handleEscape(char c) {
 		 * Set cursor position: [%d;%df or [%d;%dH
 		 */
 		s++;    /* [ */
-		s = parsenum(s, &posX);
-		s++;    /* ; */
 		s = parsenum(s, &posY);
+		s++;    /* ; */
+		s = parsenum(s, &posX);
 
 		/*
 		 * Video origin is [0, 0], terminal origin is [1, 1].
