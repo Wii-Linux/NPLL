@@ -24,32 +24,39 @@
 #define CACHED_BASE        0x80000000
 #define UNCACHED_BASE      0xc0000000
 
-static inline void *physToCached(void *_addr) {
+static inline void *_physToCached(void *_addr) {
 	u32 addr = (u32)_addr;
 	addr |= CACHED_BASE;
 	return (void *)addr;
 }
 
-static inline void *physToUncached(void *_addr) {
+static inline void *_physToUncached(void *_addr) {
 	u32 addr = (u32)_addr;
 	addr |= UNCACHED_BASE;
 	return (void *)addr;
 }
 
-static inline void *virtToPhys(void *_addr) {
+static inline void *_virtToPhys(void *_addr) {
 	u32 addr = (u32)_addr;
 	addr &= ~UNCACHED_BASE; /* works for both cached and uncached */
 	return (void *)addr;
 }
 
+#define physToCached(x) _physToCached((void *)(x))
+#define physToUncached(x) _physToUncached((void *)(x))
+#define cachedToUncached(x) physToUncached(x)
+#define uncachedToCached(x) physToCached(uncachedToPhys(x))
+#define virtToPhys(x) _virtToPhys((void *)(x))
+#define cachedToPhys(x) virtToPhys(x)
+#define uncachedToPhys(x) virtToPhys(x)
 
 #define MEM1_PHYS_BASE     0x00000000
-#define MEM1_CACHED_BASE   ((u32)physToCached((void *)MEM1_PHYS_BASE))
-#define MEM1_UNCACHED_BASE ((u32)physToUncached((void *)MEM1_PHYS_BASE))
+#define MEM1_CACHED_BASE   ((u32)physToCached(MEM1_PHYS_BASE))
+#define MEM1_UNCACHED_BASE ((u32)physToUncached(MEM1_PHYS_BASE))
 
 #define MEM2_PHYS_BASE     0x10000000
-#define MEM2_CACHED_BASE   ((u32)physToCached((void *)MEM2_PHYS_BASE))
-#define MEM2_UNCACHED_BASE ((u32)physToUncached((void *)MEM2_PHYS_BASE))
+#define MEM2_CACHED_BASE   ((u32)physToCached(MEM2_PHYS_BASE))
+#define MEM2_UNCACHED_BASE ((u32)physToUncached(MEM2_PHYS_BASE))
 
 #define MEM1_SIZE_GCN      0x01800000
 #define MEM1_SIZE_WII      MEM1_SIZE_GCN
@@ -62,7 +69,7 @@ static inline void *virtToPhys(void *_addr) {
 #define MEM2_SIZE_WIIU     0x10000000
 
 
-static inline int addrIsValidCached(void *_addr) {
+static inline bool addrIsValidCached(void *_addr) {
 	u32 addr = (u32)_addr;
 
 	switch (H_ConsoleType) {
@@ -81,7 +88,7 @@ static inline int addrIsValidCached(void *_addr) {
 	__builtin_unreachable();
 }
 
-static inline int addrIsValidUncached(void *_addr) {
+static inline bool addrIsValidUncached(void *_addr) {
 	u32 addr = (u32)_addr;
 
 	switch (H_ConsoleType) {
@@ -101,7 +108,7 @@ static inline int addrIsValidUncached(void *_addr) {
 }
 
 /* don't check >= MEM1_PHYS_BASE, since it inherently must be at least 0 */
-static inline int addrIsValidPhys(void *_addr) {
+static inline bool addrIsValidPhys(void *_addr) {
 	u32 addr = (u32)_addr;
 
 	switch (H_ConsoleType) {

@@ -133,7 +133,7 @@ static void crashIOSAndFixupMEM2(void) {
 	}
 
 	/* write the pointer to our code there instead */
-	sram[trampoline_off] = (u32)virtToPhys((void *)armbuf) + armbuf[0];
+	sram[trampoline_off] = (u32)virtToPhys(armbuf) + armbuf[0];
 	log_printf("set trampoline ptr to %08x\r\n", sram[trampoline_off]);
 
 	/* tell MINI not to reset us pretty please */
@@ -313,7 +313,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	}
 	else {
 		/* keep digging... check if what it points to is a valid infohdr */
-		if (memcmp((void *)physToUncached((void *)infohdr), "IPC", 3)) {
+		if (memcmp(physToUncached(infohdr), "IPC", 3)) {
 			/* it isn't, we must be running under IOS and got fooled by garbage data for the pointer */
 			log_printf("supposed MINI infohdr pointer (0x%08x) has invalid magic, must be IOS\r\n", infohdr);
 			crashIOSAndFixupMEM2();

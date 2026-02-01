@@ -63,7 +63,7 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 
 	printf("\r\nException %04x occurred!\r\n", exception);
 
-	x = (u32 *)physToCached((void *)0x2000);
+	x = (u32 *)physToCached(0x2000);
 	sp = x[1];
 
 	printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
@@ -71,7 +71,7 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[8], x[16], x[24]);
 		x++;
 	}
-	x = (u32 *)physToCached((void *)0x2080);
+	x = (u32 *)physToCached(0x2080);
 
 	printf("\r\n CR/XER    LR/CTR  SRR0/SRR1 DAR/DSISR\r\n");
 	for (i = 0; i < 2; i++) {
@@ -90,16 +90,16 @@ void E_Init(void) {
 	TRACE();
 
 	for (vector = 0x100; vector < 0x2000; vector += 0x10) {
-		u32 *insn = physToCached((void *)vector);
+		u32 *insn = physToCached(vector);
 
 		insn[0] = 0xbc002000;			// stmw 0,0x2000(0)
 		insn[1] = 0x38600000 | (u32)vector;	// li 3,vector
 		insn[2] = 0x48002202;			// ba 0x2200
 		insn[3] = 0;
 	}
-	dcache_flush_icache_invalidate(physToCached((void *)0x100), 0x1f00);
+	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
 
 	len_2200 = &exception_2200_end - &exception_2200_start;
-	memcpy(physToCached((void *)0x2200), &exception_2200_start, len_2200);
-	dcache_flush_icache_invalidate(physToCached((void *)0x2200), len_2200);
+	memcpy(physToCached(0x2200), &exception_2200_start, len_2200);
+	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
 }

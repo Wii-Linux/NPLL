@@ -186,7 +186,7 @@ static int _ios_ioctlv(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_
 	for (i = 0; i < in_count + out_count; i++) {
 		if (addrIsValidCached(vec[i].data)) {
 			dcache_flush(vec[i].data, vec[i].size);
-			vec[i].data = (void *)virtToPhys(vec[i].data);
+			vec[i].data = virtToPhys(vec[i].data);
 		}
 	}
 

@@ -593,7 +593,7 @@ static void sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd) 
 			if (ISSET(status, SDHC_DMA_INTERRUPT)) {
 				DPRINTF(2,("dma left:%#x\r\n", HREAD2(hp, SDHC_BLOCK_COUNT)));
 				HWRITE4(hp, SDHC_DMA_ADDR,
-						(u32)virtToPhys((void *)HREAD4(hp, SDHC_DMA_ADDR)));
+						(u32)virtToPhys(HREAD4(hp, SDHC_DMA_ADDR)));
 				continue;
 			}
 		}

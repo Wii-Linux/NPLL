@@ -101,7 +101,7 @@ int ELF_LoadMem(const void *data) {
 	}
 
 	/* lets do this thing */
-	ELF_DoEntry(virtToPhys((void *)ehdr->e_entry));
+	ELF_DoEntry(virtToPhys(ehdr->e_entry));
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
