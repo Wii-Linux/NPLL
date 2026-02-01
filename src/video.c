@@ -405,7 +405,7 @@ void V_Register(struct videoInfo *info) {
 	assert_msg(info, "Tried to register NULL videoInfo");
 	assert_msg(!V_ActiveDriver, "Tried to register video driver but there's already an active one");
 
-	log_printf("Registering driver %s\r\n", info->driver->name);
+	log_printf("Registering driver %s: %dx%d @ 0x%08x\r\n", info->driver->name, info->width, info->height, info->fb);
 	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
 	videoOutDev.columns = info->width / FONT_WIDTH;
 	videoOutDev.rows = info->height / FONT_HEIGHT;
