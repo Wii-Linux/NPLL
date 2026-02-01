@@ -110,6 +110,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	D_Init();
 	UI_Init();
 	_log_puts("Driver initialization done, entering mainLoop");
+	L_Method = LOG_METHOD_MENU_WINDOW;
 	mainLoop();
 	__builtin_unreachable();
 }
