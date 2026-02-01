@@ -57,13 +57,12 @@ void UI_Init(void) {
 
 void UI_HandleInputs(void) {
 	inputEvent_t ev;
-	bool any = false;
 
 	assert(curMenu);
 
 	ev = IN_ConsumeEvent();
 	while (ev) {
-		any = true;
+		hasChanged = true;
 		if (ev & INPUT_EV_DOWN) {
 			if (selected < (curMenu->numEntries - 1))
 				selected++;
@@ -79,9 +78,6 @@ void UI_HandleInputs(void) {
 
 		ev = IN_ConsumeEvent();
 	}
-
-	if (any)
-		hasChanged = true;
 }
 
 void UI_Redraw(void) {
