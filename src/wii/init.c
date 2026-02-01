@@ -24,6 +24,7 @@
 #include <string.h>
 #include <npll/utils.h>
 #include "../armboot_bin.h"
+#include "ios_ipc.h"
 #include "ios_es.h"
 
 enum wiiRev H_WiiRev = 0;
@@ -99,6 +100,7 @@ static void crashIOSAndFixupMEM2(void) {
 
 	sram = (vu32 *)0xcd410000;
 	armbuf = (vu32 *)0x91000000;
+	IOS_Reset();
 	ES_Init();
 
 	/* copy it into MEM2 */

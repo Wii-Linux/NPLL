@@ -254,14 +254,14 @@ void IOS_Reset(void) {
 		ipc_cleanup_request();
 		ipc_cleanup_reply();
 		udelay(1000);
-		log_printf(".");
+		_log_printf(".");
 	}
-	log_printf(" Done.\r\n");
+	_log_puts(" Done.\r\n");
 
 	log_printf("Closing file descriptors");
 	for (i = 0; i < 32; i++) {
 		IOS_Close(i);
-		log_printf(".");
+		_log_printf(".");
 	}
-	log_printf(" Done.\r\n");
+	_log_puts(" Done.\r\n");
 }
