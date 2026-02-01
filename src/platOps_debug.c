@@ -1,7 +1,7 @@
 /*
  * NPLL - H_PlatOps debugging
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <string.h>
@@ -38,7 +38,8 @@ static const struct outputDevice outDev = {
 	.writeStr = debugConWriteStr,
 	.name = "H_PlatOps Debug Console",
 	.driver = NULL,
-	.isGraphical = false,
+	/* possible but cannot be garuanteed */
+	.ansiEscSupport = false,
 	.rows = 80,
 	.columns = 25
 };

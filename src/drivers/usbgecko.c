@@ -1,7 +1,7 @@
 /*
  * NPLL - EXI devices - USB Gecko
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Derived in part from the Linux USB Gecko udbg driver:
  * Copyright (C) 2008-2009 The GameCube Linux Team
@@ -213,7 +213,7 @@ static const struct outputDevice outDev = {
 	.writeStr = usbgeckoWriteStr,
 	.name = "USB Gecko",
 	.driver = &usbgeckoDrv,
-	.isGraphical = false,
+	.ansiEscSupport = true,
 	.rows = 80,
 	.columns = 25
 };

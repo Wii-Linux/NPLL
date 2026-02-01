@@ -1,7 +1,7 @@
 /*
  * NPLL - Character output
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _OUTPUT_H
@@ -14,7 +14,7 @@ typedef void (*outputCallback_t)(void);
 
 struct outputDevice {
 	char *name;
-	bool isGraphical;
+	bool ansiEscSupport;
 	int rows;
 	int columns;
 	struct driver *driver;

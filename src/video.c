@@ -387,7 +387,7 @@ static struct outputDevice videoOutDev = {
 	.name = odevName,
 	.writeChar = odevWriteChar,
 	.writeStr = odevWriteStr,
-	.isGraphical = true
+	.ansiEscSupport = true
 };
 
 void V_Flush(void) {

@@ -1,7 +1,7 @@
 /*
  * NPLL - Wii U DRC (GamePad) text over linux-loader IPC
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <string.h>
@@ -67,7 +67,7 @@ static const struct outputDevice outDev = {
 	.writeStr = drcWriteStr,
 	.name = "Wii U GamePad Text Console",
 	.driver = &drcDrv,
-	.isGraphical = true,
+	.ansiEscSupport = false,
 	.rows = 896 / 8, /* screen width / linux-loader font width */
 	.columns = 504 / 8 /* screen height / linux-loader font height */
 };
