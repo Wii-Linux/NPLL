@@ -1,7 +1,7 @@
 /*
  * NPLL - CPU macros
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _CPU_H
@@ -46,6 +46,7 @@
 
 #define HID0   1008
 #define HID4   1011
+#define DABR   1013
 
 
 /* MSR values */
