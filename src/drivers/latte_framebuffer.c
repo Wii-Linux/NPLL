@@ -1,13 +1,14 @@
 /*
  * NPLL - Latte Hardware - Simple framebuffer
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/video.h>
 #include <npll/drivers.h>
+#include <npll/latte/r600.h>
 
 static REGISTER_DRIVER(fbDrv);
 
@@ -32,6 +33,10 @@ static void fbFlush(void) {
 }
 
 static void fbInit(void) {
+	/* clean up the format so it presents itself as XRGB like we expect */
+	DGRPH_SWAP_CNTL = DGRPH_CROSSBAR_RGBA(R, G, B, A) | DGRPH_ENDIAN_SWAP_32;
+	DGRPH_CONTROL = DGRPH_DEPTH_32BPP | DGRPH_FORMAT_32BPP_ARGB8888 | DGRPH_ARRAY_LINEAR_ALIGNED;
+
 	/* clear to black */
 	memset(fbVidInfo.fb, 0, (fbVidInfo.width * fbVidInfo.height * sizeof(u32)));
 
