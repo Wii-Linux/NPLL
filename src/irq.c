@@ -36,7 +36,7 @@ void IRQ_Init(void) {
 	/* ack all Flipper IRQs */
 	PI_INTSR = PI_INTSR;
 
-	if (H_ConsoleType == CONSOLE_TYPE_WII || H_ConsoleType == CONSOLE_TYPE_WII_U) {
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		/* unmask Hollywood IRQs in the Flipper PIC */
 		PI_INTMR |= PI_IRQDEV_HLWD;
 
@@ -48,7 +48,7 @@ void IRQ_Init(void) {
 		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO;
 	}
 
-	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		/* mask and ack all Latte IRQs */
 		LT_PPC0INT1EN = 0;
 		LT_PPC0INT2EN = 0;
@@ -64,6 +64,12 @@ void IRQ_Init(void) {
 		LT_PPC2INT2EN = 0;
 		LT_PPC2INT1STS = LT_PPC2INT1STS;
 		LT_PPC2INT2STS = LT_PPC2INT2STS;
+
+		/* unmask Latte IRQs in the Flipper PIC */
+		PI_INTMR |= PI_IRQDEV_LATTE;
+
+		/* unmask GPIO */
+		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO;
 	}
 
 	/* clear all handlers */
@@ -81,7 +87,7 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 	/* TODO: Handle Flipper PIC IRQs */
 
 	/* TODO: Handle other Hollywood PIC IRQs */
-	if (H_ConsoleType == CONSOLE_TYPE_WII || H_ConsoleType == CONSOLE_TYPE_WII_U) {
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		intsr = HW_PPCIRQFLAG;
 		if (intsr & HW_IRQDEV_GPIOB) {
 			IRQ_DoHandle(IRQDEV_GPIOB);
@@ -93,7 +99,18 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		}
 	}
 
-	/* TODO: Handle Latte PIC IRQs */
+	/* TODO: Handle other Latte PIC IRQs */
+	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		intsr = LT_PPC0INT1STS;
+		if (intsr & HW_IRQDEV_GPIOB) {
+			IRQ_DoHandle(IRQDEV_GPIOB);
+			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
+		}
+		if (intsr & HW_IRQDEV_GPIO) {
+			IRQ_DoHandle(IRQDEV_GPIO);
+			LT_PPC0INT1STS = HW_IRQDEV_GPIO;
+		}
+	}
 
 	IRQ_Return();
 }

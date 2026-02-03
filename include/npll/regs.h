@@ -35,6 +35,7 @@
 #  define PI_IRQDEV_HSP          BIT(13)
 #  define PI_IRQDEV_HLWD         BIT(14)
 #  define PI_IRQDEV_RSWST        BIT(16)
+#  define PI_IRQDEV_LATTE        BIT(24)
 #define PI_RESET             _FLIPPER_PI_REG(0x24)
 
 /*
