@@ -1,7 +1,7 @@
 /*
  * NPLL - Memory allocation
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  *
  * This is a very simple memory allocator.  It is not designed to be very
@@ -121,7 +121,7 @@ static void *_poolAlloc(struct pool *pool, size_t size) {
 }
 
 /* public function to allocate from a specific (or any) pool */
-void *M_PoolAlloc(enum pool_idx pool, size_t size) {
+void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size) {
 	u32 mem1_free, mem2_free;
 
 	/* 32B alignment */
@@ -195,7 +195,7 @@ void free(void *ptr) {
 }
 
 /* C stdlib malloc() implementation */
-void *malloc(size_t size) {
+void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size) {
 	return M_PoolAlloc(POOL_ANY, size);
 }
 
