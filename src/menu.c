@@ -40,7 +40,7 @@ static void rootMenuSelectedCB(struct menuEntry *ent) {
 
 static struct menuEntry rootMenuEntries[] = {
 	{ .name = "foo", .selected = rootMenuSelectedCB, .data = { 69 } },
-	{ .name = "bar", .selected = rootMenuSelectedCB, .data = { 420 } },
+	{ .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } },
 };
 
 static struct menu rootMenu = {
@@ -244,6 +244,12 @@ void UI_Switch(struct menu *m) {
 	}
 
 	m->previous = prev;
+}
+
+void UI_SwitchCB(struct menuEntry *e) {
+	struct menu *m = (struct menu *)e->data[0];
+
+	UI_Switch(m);
 }
 
 void UI_AddEntry(struct menuEntry *e) {
