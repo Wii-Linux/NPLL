@@ -40,20 +40,20 @@ void _log_puts(const char *str) {
 			putchar(*str++);
 		}
 		memlogWriteChar('\r');
-		memlogWriteChar('\n');
 		putchar('\r');
+		memlogWriteChar('\n');
 		putchar('\n');
 		break;
 	}
 	case LOG_METHOD_MENU_WINDOW: {
 		while (*str) {
-			memlogWriteChar(*str);
-			UI_LogPutchar(*str++);
+			memlogWriteChar(*str++);
+			UI_LogPutchar(memlogNext - 1);
 		}
 		memlogWriteChar('\r');
+		UI_LogPutchar(memlogNext - 1);
 		memlogWriteChar('\n');
-		UI_LogPutchar('\r');
-		UI_LogPutchar('\n');
+		UI_LogPutchar(memlogNext - 1);
 		break;
 	}
 	case LOG_METHOD_NONE: {
@@ -81,7 +81,7 @@ static void menuWindowOut(char c, void *dummy) {
 	(void)dummy;
 
 	memlogWriteChar(c);
-	UI_LogPutchar(c);
+	UI_LogPutchar(memlogNext - 1);
 }
 
 static void noneOut(char c, void *dummy) {

@@ -57,7 +57,7 @@ extern void UI_HandleInputs(void);
 extern void UI_Redraw(void);
 extern void UI_Switch(struct menu *m);
 extern void UI_AddEntry(struct menuEntry *e);
-extern void UI_LogPutchar(char c);
+extern void UI_LogPutchar(char *cptr);
 
 /* has dummy param so that it can be used directly as a .selected() */
 extern void UI_UpLevel(struct menuEntry *_dummy);

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <npll/cpu.h>
+#include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/input.h>
 #include <npll/menu.h>
@@ -16,15 +18,19 @@
 #include <npll/utils.h>
 #include <npll/timer.h>
 
+#define LOG_LINES 5
+
 static bool hasChanged = true;
 static int selected = 0;
 struct logLine {
 	const char *start;
 	int len;
+	bool done;
 };
 
-static struct logLine logLines[5];
-
+static struct logLine logLines[LOG_LINES];
+static int logLineIdx = 0;
+static int curFooterLines;
 
 static void rootMenuSelectedCB(struct menuEntry *ent) {
 	printf("Root Menu Selected Callback for entry %s\r\n",  ent->name);
@@ -60,6 +66,7 @@ void UI_HandleInputs(void) {
 
 	assert(curMenu);
 
+	mtspr(DABR, 0);
 	ev = IN_ConsumeEvent();
 	while (ev) {
 		hasChanged = true;
@@ -78,35 +85,138 @@ void UI_HandleInputs(void) {
 
 		ev = IN_ConsumeEvent();
 	}
+	mtspr(DABR, (u32)&selected | BIT(2) | BIT(1));
 }
 
-void UI_Redraw(void) {
+static void outputToDevice(char c, void *arg) {
+	struct outputDevice *odev = arg;
+
+	odev->writeChar(c);
+}
+static void putsDev(const struct outputDevice *odev, const char *str) {
+	odev->writeStr(str);
+	odev->writeStr("\r\n");
+}
+
+static void drawLine(const struct outputDevice *odev) {
 	int i;
+
+	/* some of our output devices can benefit from bulk transfers */
+	for (i = odev->columns; i > 0; i -= 4) {
+		if (i >= 4)
+			odev->writeStr("====");
+		else if (i == 3)
+			odev->writeStr("===");
+		else if (i == 2)
+			odev->writeStr("==");
+		else if (i == 1)
+			odev->writeChar('=');
+	}
+}
+
+static void drawLogs(const struct outputDevice *odev) {
+	int i, j, maxLen;
+	bool cutOff;
+
+	for (i = 0; i < LOG_LINES; i++) {
+		cutOff = false;
+
+		if (!logLines[i].done) {
+			/* some of our output devices can benefit from bulk transfers */
+			for (j = odev->columns; j > 0; j -= 4) {
+				if (j >= 4)
+					odev->writeStr("    ");
+				else if (j == 3)
+					odev->writeStr("   ");
+				else if (j == 2)
+					odev->writeStr("  ");
+				else if (j == 1)
+					odev->writeChar(' ');
+			}
+			odev->writeStr("\r\n");
+			continue;
+		}
+
+		/* is it big enough to fit on 1 line? */
+		if (logLines[i].len > odev->columns) {
+			maxLen = odev->columns - 3;
+			cutOff = true;
+		}
+		else
+			maxLen = logLines[i].len;
+
+		for (j = 0; j < maxLen; j++)
+			odev->writeChar(logLines[i].start[j]);
+
+		if (cutOff)
+			odev->writeStr("...");
+
+		odev->writeStr("\r\n");
+	}
+}
+
+
+void UI_Redraw(void) {
+	int i, j;
+	const struct outputDevice *odev;
+
 	if (__likely(!hasChanged))
 		return;
 
-	printf("\x2b[1;1H\x1b[2J");
-	if (curMenu->header)
-		puts(curMenu->header);
+	for (i = 0; i < O_NumDevices; i++) {
+		odev = O_Devices[i];
 
-	puts("==========");
+		odev->writeStr("\x1b[1;1H\x1b[2J");
+		if (curMenu->header)
+			putsDev(odev, curMenu->header);
 
-	if (curMenu->content) {
-		puts(curMenu->content);
-		puts("");
+		drawLine(odev);
+		odev->writeStr("\r\n");
+
+		if (curMenu->content) {
+			putsDev(odev, curMenu->content);
+			putsDev(odev, "");
+		}
+
+		for (j = 0; j < curMenu->numEntries; j++) {
+			fctprintf(outputToDevice, (void *)odev,
+				"%s %d: %s\r\n",
+				selected == j ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ",
+				j, curMenu->entries[j].name
+			);
+		}
+
+		odev->writeStr("\x1b[0m");
+
+		if (curMenu->footer) {
+			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", odev->rows - curFooterLines - 3 - LOG_LINES);
+			drawLine(odev);
+			odev->writeStr("\r\n");
+			drawLogs(odev);
+			drawLine(odev);
+			odev->writeStr("\r\n");
+			odev->writeStr(curMenu->footer);
+		}
+		else {
+			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", odev->rows - 2 - LOG_LINES);
+			drawLine(odev);
+			odev->writeStr("\r\n");
+			drawLogs(odev);
+		}
+
+
+		hasChanged = false;
 	}
-
-	for (i = 0; i < curMenu->numEntries; i++)
-		printf("%s %d: %s\r\n", selected == i ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ", i, curMenu->entries[i].name);
-
-	hasChanged = false;
 }
 
 void UI_Switch(struct menu *m) {
 	struct menu *prev;
+	char *s;
 
 	selected = 0;
 	hasChanged = true;
+	logLineIdx = 0;
+	memset(logLines, 0, sizeof(logLines));
 
 	if (curMenu && curMenu->cleanup)
 		curMenu->cleanup(curMenu);
@@ -116,6 +226,22 @@ void UI_Switch(struct menu *m) {
 
 	if (m->init)
 		m->init(m);
+
+	if (m->footer) {
+		if (m->footer == FOOTER_CONTROLS) {
+			if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) m->footer = FOOTER_CONTROLS_GCN;
+			else if (H_ConsoleType == CONSOLE_TYPE_WII) m->footer = FOOTER_CONTROLS_WII;
+			else if (H_ConsoleType == CONSOLE_TYPE_WII_U) m->footer = FOOTER_CONTROLS_WIIU;
+		}
+
+		s = m->footer;
+		while (*s) {
+			if (*s == '\r')
+				curFooterLines++;
+
+			s++;
+		}
+	}
 
 	m->previous = prev;
 }
@@ -143,6 +269,34 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 	curMenu = prev;
 }
 
-void UI_LogPutchar(char c) {
+void UI_LogPutchar(char *cptr) {
+	if (*cptr == '\r')
+		return; /* we'll get the \n next */
 
+	if (*cptr == '\n' && !logLines[logLineIdx].done && logLines[logLineIdx].start) {
+		if (!(logLineIdx >= 0 && logLineIdx < LOG_LINES)) {
+			printf("bogus logLineIdx: %d\r\n", logLineIdx);
+			panic("bogus logLineIdx");
+		}
+
+		logLines[logLineIdx++].done = true;
+		hasChanged = true;
+		return;
+	}
+
+	if (logLineIdx >= LOG_LINES) {
+		memmove(&logLines[0], &logLines[1], (LOG_LINES - 1) * sizeof(struct logLine));
+		memset(&logLines[LOG_LINES - 1], 0, sizeof(struct logLine));
+		logLineIdx--;
+		hasChanged = true;
+	}
+	if (!(logLineIdx >= 0 && logLineIdx < LOG_LINES)) {
+		printf("bogus logLineIdx: %d\r\n", logLineIdx);
+		panic("bogus logLineIdx");
+	}
+
+	if (!logLines[logLineIdx].start)
+		logLines[logLineIdx].start = cptr;
+
+	logLines[logLineIdx].len++;
 }
