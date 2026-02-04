@@ -60,6 +60,7 @@ extern enum gcnRev H_GCNRev;
 extern enum wiiRev H_WiiRev;
 extern int H_WiiIsvWii;
 extern int H_WiiBootIOS;
+extern void *H_WiiMEM2Top;
 extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
 

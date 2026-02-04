@@ -42,6 +42,7 @@
 #define BLOCK_HDR_MAGIC_SIZE 4
 
 #include <npll/allocator.h>
+#include <npll/console.h>
 #include <npll/log.h>
 #include <npll/panic.h>
 #include <npll/types.h>
@@ -220,7 +221,10 @@ void M_Init(void) {
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
 
 		/* MEM2 */
-		pools[1].top = (void *)(MEM2_CACHED_BASE + MEM2_SIZE_WII);
+		if (H_WiiMEM2Top)
+			pools[1].top = physToCached(H_WiiMEM2Top);
+		else
+			pools[1].top = (void *)(MEM2_CACHED_BASE + MEM2_SIZE_WII);
 		pools[1].bottom = (void *)MEM2_CACHED_BASE;
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";

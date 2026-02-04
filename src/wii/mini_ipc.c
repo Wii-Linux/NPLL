@@ -14,6 +14,7 @@
 #define MODULE "MINI"
 #include <assert.h>
 #include <string.h>
+#include <npll/console.h>
 #include <npll/log.h>
 #include <npll/panic.h>
 #include <npll/regs.h>
@@ -104,6 +105,8 @@ void MINI_Init(void) {
 	log_printf(" * slow ping: %d\r\n", ret);
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_GETVERS, 3, 1, 0);
 	log_printf(" * getvers: %d (version: 0x%08x)\r\n", ret, req.args[0]);
+
+	H_WiiMEM2Top = infohdr->mem2_boundary;
 
 	return;
 }

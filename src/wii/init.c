@@ -32,6 +32,7 @@
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
 int H_WiiBootIOS = -1;
+void *H_WiiMEM2Top = NULL;
 
 /* IOS9 is present from pre-launch sysmenu Wiis up to fully updated, even vWii */
 #define IOS_VALID_GUESS 9
