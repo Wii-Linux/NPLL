@@ -36,35 +36,36 @@ static void wiiuDebugStr(const char *str) {
 	}
 }
 
+static __attribute__((noreturn)) void wiiuReboot(void) {
+	HW_IPC_PPCMSG = LATTE_IPC_CMD_REBOOT; /* set our data */
+	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
+
+	while (1); /* hang in the hopes that it'll eventually process it */
+}
+
+static __attribute__((noreturn)) void wiiuShutdown(void) {
+	HW_IPC_PPCMSG = LATTE_IPC_CMD_POWEROFF; /* set our data */
+	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
+
+	while (1); /* hang in the hopes that it'll eventually process it */
+}
+
 static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 	(void)str;
 
 	wiiuDebugStr("PANIC: ");
 	wiiuDebugStr(str);
 
-#if 0
-	udelay(1000 * 2500);
-
-	/* try a HW_RESETS reset */
-	HW_RESETS |= ~RESETS_RSTBINB;
-	udelay(1000 * 35);
-	HW_RESETS &= ~RESETS_RSTBINB;
-	udelay(1000 * 35);
-
-	/* try a PI reset */
-	PI_RESET = 0x00;
-#endif
-
-	/* wacky, just hang */
-	while (1) {
-
-	}
+	wiiuReboot();
 }
 
 static struct platOps wiiuPlatOps = {
 	.panic = wiiuPanic,
 	.debugWriteChar = wiiuDebugChar,
-	.debugWriteStr = wiiuDebugStr
+	.debugWriteStr = wiiuDebugStr,
+	.reboot = wiiuReboot,
+	.shutdown = wiiuShutdown,
+	.exit = NULL
 };
 
 void __attribute__((noreturn)) H_InitWiiU(void) {
@@ -115,7 +116,7 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 
 	/* BEPI = 0xd0000000, BL=256MB, Vs=1, Vp=1 */
 	batu = 0xd0001fff;
-	
+
 	setbat(3, SETBAT_TYPE_BOTH, batu, batl);
 
 

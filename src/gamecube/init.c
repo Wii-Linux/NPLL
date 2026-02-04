@@ -15,24 +15,29 @@
 
 enum gcnRev H_GCNRev = 0;
 
+static __attribute__((noreturn)) void gamecubeReboot(void) {
+	/* try a PI reset */
+	PI_RESET = 0x00;
+
+	/* wacky, just hang */
+	while (1);
+}
+
 static __attribute__((noreturn)) void gamecubePanic(const char *str) {
 	(void)str;
 
 	udelay(1000 * 2500);
 
-	/* try a PI reset */
-	PI_RESET = 0x00;
-
-	/* wacky, just hang */
-	while (1) {
-
-	}
+	gamecubeReboot();
 }
 
 static struct platOps gamecubePlatOps = {
 	.panic = gamecubePanic,
 	.debugWriteChar = NULL,
-	.debugWriteStr = NULL
+	.debugWriteStr = NULL,
+	.reboot = gamecubeReboot,
+	.shutdown = NULL,
+	.exit = NULL /* does Swiss or whatever offer any way? */
 };
 
 void __attribute__((noreturn)) H_InitGameCube(void) {

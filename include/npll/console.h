@@ -44,6 +44,15 @@ struct platOps {
 	void __attribute__((noreturn)) (*panic)(const char *str);
 	void (*debugWriteChar)(const char c);
 	void (*debugWriteStr)(const char *str);
+
+	/* perform a hardware reboot */
+	void (*reboot)(void);
+
+	/* perform a hardware shutdown */
+	void (*shutdown)(void);
+
+	/* return to the loader */
+	void (*exit)(void);
 };
 
 extern enum consoleType H_ConsoleType;

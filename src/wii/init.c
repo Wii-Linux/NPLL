@@ -17,6 +17,7 @@
 #include <npll/drivers.h>
 #include <npll/cpu.h>
 #include <npll/output.h>
+#include <npll/irq.h>
 #include <npll/cache.h>
 #include <npll/tiny_usbgecko.h>
 #include <npll/hollywood/gpio.h>
@@ -26,10 +27,14 @@
 #include "../armboot_bin.h"
 #include "ios_ipc.h"
 #include "ios_es.h"
+#include "mini_ipc.h"
 
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
 int H_WiiBootIOS = -1;
+
+/* IOS9 is present from pre-launch sysmenu Wiis up to fully updated, even vWii */
+#define IOS_VALID_GUESS 9
 
 extern int IOS_DevShaExploit(void);
 
@@ -47,11 +52,11 @@ static void fixupMEM2(void) {
 	HW_MEM_PROT_DDR_BASE = 0;
 	HW_MEM_PROT_DDR_END = 0;
 
-	high_orig = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_orig = *(vu32 *)0xd1000000; sync(); barrier();
-	*(vu32 *)0xd3fffffc = 0xdeadbeef; sync(); barrier();
-	high_after = *(vu32 *)0xd3fffffc; sync(); barrier();
-	low_after = *(vu32 *)0xd1000000; sync(); barrier();
+	high_orig = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII); sync(); barrier();
+	low_orig = *(vu32 *)(MEM2_UNCACHED_BASE); sync(); barrier();
+	*(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII) = 0xdeadbeef; sync(); barrier();
+	high_after = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII); sync(); barrier();
+	low_after = *(vu32 *)(MEM2_UNCACHED_BASE); sync(); barrier();
 
 	/*
 	 * ensure no artifacts of memory protection show up:
@@ -86,20 +91,24 @@ static void crashIOSAndFixupMEM2(void) {
 
 	H_WiiBootIOS = iosVer;
 	log_printf("IOS (%d) detected, trying to load MINI\r\n", iosVer);
+	if (iosVer <= 0) {
+		log_printf("IOS version in lowmem is bogus, guessing that IOS%d should exist\r\n", IOS_VALID_GUESS);
+		iosVer = IOS_VALID_GUESS;
+	}
 
 	srnprot = HW_SRNPROT;
 	log_printf("HW_SRNPROT: 0x%08x", srnprot);
 
-	if (!(srnprot & 0x8)) {
+	if (!(srnprot & SRNPROT_AHPEN)) {
 		_log_puts("; no PPC SRAM access, enabling it");
-		srnprot |= 0x8;
+		srnprot |= SRNPROT_AHPEN;
 		HW_SRNPROT = srnprot;
 	}
 	else
 		_log_puts("");
 
-	sram = (vu32 *)0xcd410000;
-	armbuf = (vu32 *)0x91000000;
+	sram = (vu32 *)(UNCACHED_BASE + 0x0d410000);
+	armbuf = (vu32 *)(MEM2_CACHED_BASE + 0x01000000);
 	IOS_Reset();
 	ES_Init();
 
@@ -161,6 +170,28 @@ static void crashIOSAndFixupMEM2(void) {
 	udelay(250 * 1000);
 }
 
+static __attribute__((noreturn)) void wiiShutdown(void) {
+	HW_GPIO_OWNER |= GPIO_SHUTDOWN;
+	HW_GPIO_DIR |= GPIO_SHUTDOWN;
+	HW_GPIOB_OUT |= GPIO_SHUTDOWN;
+
+	while (1); /* weird... */
+}
+
+static __attribute__((noreturn)) void wiiReboot(void) {
+	/* try a HW_RESETS reset */
+	HW_RESETS |= RESETS_RSTBINB;
+	udelay(1000 * 35);
+	HW_RESETS &= ~RESETS_RSTBINB;
+	udelay(1000 * 35);
+
+	/* try a PI reset */
+	PI_RESET = 0x00;
+
+	/* wacky, just hang */
+	while (1);
+}
+
 static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	int i;
 	(void)str;
@@ -192,25 +223,52 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 		udelay(1000 * 500);
 	}
 
-	/* try a HW_RESETS reset */
-	HW_RESETS |= ~RESETS_RSTBINB;
-	udelay(1000 * 35);
-	HW_RESETS &= ~RESETS_RSTBINB;
-	udelay(1000 * 35);
+	wiiReboot();
+}
 
-	/* try a PI reset */
-	PI_RESET = 0x00;
+static void __attribute__((noreturn)) wiiExit(void) {
+	u32 iosVer = H_WiiBootIOS;
+	int i = 0;
+	void (*stub)(void);
 
-	/* wacky, just hang */
-	while (1) {
+	IRQ_Disable();
+	if (iosVer <= 0)
+		iosVer = IOS_VALID_GUESS;
 
+	log_printf("Trying to reload into IOS%d\r\n", iosVer);
+	*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) = 0;
+	MINI_IPCPost(IPC_MINI_CODE_BOOT2_RUN, 0, 2, TITLE_ID_IOS, iosVer);
+	log_puts("Waiting for IOS...");
+
+	while ((u32)IOS_GetVersion() != iosVer) {
+		udelay(1000);
+		i++;
+		if (i >= 1000)
+			panic("IOS reload stuck");
 	}
+
+	/* wait for PPCCTRL to match expected value */
+	i = 0;
+	while (!(HW_IPC_PPCCTRL & (HW_IPC_PPCCTRL_Y2 | HW_IPC_PPCCTRL_Y1))) {
+		udelay(1000);
+		i++;
+		if (i >= 1000)
+			panic("IOS reload succeeded but stuck waiting for IPC");
+	}
+
+	/* IOS is reloaded and ready, hand off to the stub! */
+	stub = (void (*)(void))(MEM1_CACHED_BASE + 0x1800);
+	stub();
+	__builtin_unreachable();
 }
 
 static struct platOps wiiPlatOps = {
 	.panic = wiiPanic,
 	.debugWriteChar = NULL,
-	.debugWriteStr = NULL
+	.debugWriteStr = NULL,
+	.reboot = wiiReboot,
+	.shutdown = wiiShutdown,
+	.exit = NULL
 };
 
 void __attribute__((noreturn)) H_InitWii(void) {
@@ -307,8 +365,8 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* now that we've mapped MEM2, check for MINI infohdr */
 	/* MINI stores a pointer to the infohdr at the tail end of MEM2 */
-	infohdr = *(vu32 *)0xd3fffffc;
-	if (infohdr > 0x13fffffc || infohdr < 0x13f00000) {
+	infohdr = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII);
+	if (infohdr > MEM2_PHYS_BASE || infohdr < MEM2_PHYS_BASE + MEM2_SIZE_WII) {
 		/* no valid infohdr pointer, must be IOS */
 		log_printf("No valid MINI infohdr pointer (got 0x%08x), must be IOS\r\n", infohdr);
 		crashIOSAndFixupMEM2();
@@ -320,6 +378,12 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			log_printf("supposed MINI infohdr pointer (0x%08x) has invalid magic, must be IOS\r\n", infohdr);
 			crashIOSAndFixupMEM2();
 		}
+	}
+
+	/* ASCII 'STUBHAXX' */
+	if ((*(vu64 *)(MEM1_UNCACHED_BASE + 0x1804)) == 0x5354554248415858ULL) {
+		log_puts("Detected HBC-complatible reload stub");
+		H_PlatOps->exit = wiiExit;
 	}
 
 	/* got here with Starlet not getting in our way (MINI or crashed IOS), and MEM2 unrestricted (MINI or us) */
