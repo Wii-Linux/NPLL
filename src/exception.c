@@ -89,7 +89,7 @@ void E_Init(void) {
 	u32 len_2200;
 	TRACE();
 
-	for (vector = 0x100; vector < 0x2000; vector += 0x10) {
+	for (vector = 0x100; vector < 0x1800; vector += 0x10) {
 		u32 *insn = physToCached(vector);
 
 		insn[0] = 0xbc002000;			// stmw 0,0x2000(0)
