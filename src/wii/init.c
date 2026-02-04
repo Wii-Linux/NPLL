@@ -241,7 +241,7 @@ static void __attribute__((noreturn)) wiiExit(void) {
 
 	log_printf("Trying to reload into IOS%d\r\n", iosVer);
 	*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) = 0;
-	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, TITLE_ID_IOS, iosVer);
+	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, 1, iosVer);
 	log_puts("Waiting for IOS...");
 
 	while ((u32)IOS_GetVersion() != iosVer) {
