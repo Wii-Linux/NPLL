@@ -52,10 +52,10 @@ static void fixupMEM2(void) {
 	HW_MEM_PROT_DDR_BASE = 0;
 	HW_MEM_PROT_DDR_END = 0;
 
-	high_orig = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII); sync(); barrier();
+	high_orig = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4); sync(); barrier();
 	low_orig = *(vu32 *)(MEM2_UNCACHED_BASE); sync(); barrier();
-	*(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII) = 0xdeadbeef; sync(); barrier();
-	high_after = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII); sync(); barrier();
+	*(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0xdeadbeef; sync(); barrier();
+	high_after = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4); sync(); barrier();
 	low_after = *(vu32 *)(MEM2_UNCACHED_BASE); sync(); barrier();
 
 	/*
@@ -76,6 +76,9 @@ static void fixupMEM2(void) {
 	}
 	else
 		_log_puts("success");
+
+	/* restore the original high value, that may be a MINI infohdr ptr */
+	*(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = high_orig;
 }
 
 static void crashIOSAndFixupMEM2(void) {
@@ -230,6 +233,7 @@ static void __attribute__((noreturn)) wiiExit(void) {
 	u32 iosVer = H_WiiBootIOS;
 	int i = 0;
 	void (*stub)(void);
+	struct ipc_request_mini req;
 
 	IRQ_Disable();
 	if (iosVer <= 0)
@@ -237,7 +241,7 @@ static void __attribute__((noreturn)) wiiExit(void) {
 
 	log_printf("Trying to reload into IOS%d\r\n", iosVer);
 	*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) = 0;
-	MINI_IPCPost(IPC_MINI_CODE_BOOT2_RUN, 0, 2, TITLE_ID_IOS, iosVer);
+	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, TITLE_ID_IOS, iosVer);
 	log_puts("Waiting for IOS...");
 
 	while ((u32)IOS_GetVersion() != iosVer) {
@@ -365,8 +369,8 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 	/* now that we've mapped MEM2, check for MINI infohdr */
 	/* MINI stores a pointer to the infohdr at the tail end of MEM2 */
-	infohdr = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII);
-	if (infohdr > MEM2_PHYS_BASE || infohdr < MEM2_PHYS_BASE + MEM2_SIZE_WII) {
+	infohdr = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
+	if (infohdr > MEM2_PHYS_BASE || infohdr <= MEM2_PHYS_BASE + MEM2_SIZE_WII) {
 		/* no valid infohdr pointer, must be IOS */
 		log_printf("No valid MINI infohdr pointer (got 0x%08x), must be IOS\r\n", infohdr);
 		crashIOSAndFixupMEM2();
@@ -386,7 +390,8 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		H_PlatOps->exit = wiiExit;
 	}
 
-	/* got here with Starlet not getting in our way (MINI or crashed IOS), and MEM2 unrestricted (MINI or us) */
+	/* got here with Starlet not getting in our way (MINI ootb or loaded it), and MEM2 unrestricted (MINI or us) */
+	MINI_Init();
 
 	/* we want to load Wii drivers */
 	D_DriverMask = DRIVER_ALLOW_WII;

@@ -53,9 +53,9 @@ void MINI_Init(void) {
 	int ret;
 
 	/* read the infohdr pointer from the region we just mapped */
-	infohdr_ptr = *(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII);
+	infohdr_ptr = *(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
 
-	if (infohdr_ptr < MEM2_PHYS_BASE || infohdr_ptr > (MEM2_PHYS_BASE + MEM2_SIZE_WII)) {
+	if (infohdr_ptr < MEM2_PHYS_BASE || infohdr_ptr >= (MEM2_PHYS_BASE + MEM2_SIZE_WII)) {
 		log_printf("bogus infohdr ptr 0x%08x\r\n", infohdr_ptr);
 		panic("bogus infohdr ptr");
 	}
@@ -97,6 +97,7 @@ void MINI_Init(void) {
 	log_printf("initial in tail: %d, out head: %d\r\n", state.in_tail, state.out_head);
 
 	log_puts("running trivial tests:");
+	initialized = true;
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_PING, 3, 1, 0);
 	log_printf(" * fast ping: %d\r\n", ret);
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 3, 1, 0);
@@ -104,7 +105,6 @@ void MINI_Init(void) {
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_GETVERS, 3, 1, 0);
 	log_printf(" * getvers: %d (version: 0x%08x)\r\n", ret, req.args[0]);
 
-	initialized = true;
 	return;
 }
 

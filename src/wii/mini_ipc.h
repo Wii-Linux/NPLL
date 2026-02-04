@@ -81,7 +81,7 @@ int MINI_IPCPost(u32 code, u32 tag, int num_args, ...);
  * Returns -EINVAL if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MIPC_IPCRecv(struct ipc_request_mini *req, int max_attempts);
+int MINI_IPCRecv(struct ipc_request_mini *req, int max_attempts);
 
 /*
  * Receive a message from Starlet, whose code and tag match
