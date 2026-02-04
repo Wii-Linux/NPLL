@@ -75,7 +75,7 @@ CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-j
 CFLAGS  += -O3 -Wall -Wextra -Wformat=2
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 
-SOURCE  := entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wiiu/init.c
+SOURCE  := entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c
 SOURCE  += allocator.c timer.c panic.c init.c drivers.c output.c main.c menu.c sysinfo.c video.c input.c elf.c elf_asm.S log.c platOps_debug.c tiny_usbgecko.c exception.c exception_2200.S irq.c irq_asm.S
 SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c
 SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdhc.c drivers/hollywood_sdmmc.c
