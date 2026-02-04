@@ -19,6 +19,8 @@
 #include <npll/timer.h>
 
 #define LOG_LINES 5
+/* will need to be increased when OSes to boot start being detected */
+#define ROOT_MENU_ENTRIES_MAX 4
 
 static bool hasChanged = true;
 static int selected = 0;
@@ -31,30 +33,72 @@ struct logLine {
 static struct logLine logLines[LOG_LINES];
 static int logLineIdx = 0;
 static int curFooterLines;
+static struct menu *curMenu = NULL;
 
-static void rootMenuSelectedCB(struct menuEntry *ent) {
-	printf("Root Menu Selected Callback for entry %s\r\n",  ent->name);
-	V_Flush();
-	udelay(1000 * 1000);
+static void rootMenuRebootCB(struct menuEntry *dummy) {
+	(void)dummy;
+	assert(H_PlatOps->reboot);
+
+	/* TODO: clean up */
+	H_PlatOps->reboot();
 }
 
-static struct menuEntry rootMenuEntries[] = {
-	{ .name = "foo", .selected = rootMenuSelectedCB, .data = { 69 } },
+static void rootMenuShutdownCB(struct menuEntry *dummy) {
+	(void)dummy;
+	assert(H_PlatOps->shutdown);
+
+	/* TODO: clean up */
+	H_PlatOps->shutdown();
+}
+
+static void rootMenuRetToLdrCB(struct menuEntry *dummy) {
+	(void)dummy;
+	assert(H_PlatOps->exit);
+
+	/* TODO: clean up */
+	H_PlatOps->exit();
+}
+
+
+static struct menuEntry rebootEntry = { .name = "Reboot", .selected = rootMenuRebootCB };
+static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMenuShutdownCB };
+static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
+
+static struct menuEntry rootMenuEntries[ROOT_MENU_ENTRIES_MAX] = {
 	{ .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } },
 };
+
+static void rootMenuInit(struct menu *m) {
+	int idx = 1;
+
+	if (H_PlatOps->reboot) {
+		memcpy(&rootMenuEntries[idx], &rebootEntry, sizeof(struct menuEntry));
+		idx++;
+	}
+
+	if (H_PlatOps->shutdown) {
+		memcpy(&rootMenuEntries[idx], &shutdownEntry, sizeof(struct menuEntry));
+		idx++;
+	}
+
+	if (H_PlatOps->exit) {
+		memcpy(&rootMenuEntries[idx], &retToLdrEntry, sizeof(struct menuEntry));
+		idx++;
+	}
+
+	m->numEntries = idx;
+}
 
 static struct menu rootMenu = {
 	.entries = rootMenuEntries,
 	.numEntries = 2,
 	.header = "NPLL - Main Menu",
 	.footer = FOOTER_CONTROLS,
-	.init = NULL,
+	.init = rootMenuInit,
 	.cleanup = NULL,
 	.destroy = NULL,
 	.previous = NULL
 };
-
-static struct menu *curMenu = NULL;
 
 void UI_Init(void) {
 	memset(logLines, 0, sizeof(logLines));
