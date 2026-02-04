@@ -25,7 +25,6 @@ typedef struct {
 } __attribute__((packed)) tikview_t;
 
 static inline i32 IOS_GetVersion(void) {
-	dcache_invalidate((void *)(MEM1_UNCACHED_BASE + 0x3140), 4);
 	return *(u32 *)(MEM1_UNCACHED_BASE + 0x3140) >> 16;
 }
 extern int ES_Init(void);
