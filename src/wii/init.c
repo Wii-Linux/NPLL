@@ -371,18 +371,18 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	/* now that we've mapped MEM2, check for MINI infohdr */
 	/* MINI stores a pointer to the infohdr at the tail end of MEM2 */
 	infohdr = *(vu32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
-	if (infohdr > MEM2_PHYS_BASE || infohdr <= MEM2_PHYS_BASE + MEM2_SIZE_WII) {
-		/* no valid infohdr pointer, must be IOS */
-		log_printf("No valid MINI infohdr pointer (got 0x%08x), must be IOS\r\n", infohdr);
-		crashIOSAndFixupMEM2();
-	}
-	else {
-		/* keep digging... check if what it points to is a valid infohdr */
+	if (infohdr >= MEM2_PHYS_BASE && infohdr < MEM2_PHYS_BASE + MEM2_SIZE_WII) {
+		/* within MEM2, keep digging... check if what it points to is a valid infohdr */
 		if (memcmp(physToUncached(infohdr), "IPC", 3)) {
 			/* it isn't, we must be running under IOS and got fooled by garbage data for the pointer */
 			log_printf("supposed MINI infohdr pointer (0x%08x) has invalid magic, must be IOS\r\n", infohdr);
 			crashIOSAndFixupMEM2();
 		}
+	}
+	else {
+		/* no valid infohdr pointer, must be IOS */
+		log_printf("No valid MINI infohdr pointer (got 0x%08x, not in MEM2), must be IOS\r\n", infohdr);
+		crashIOSAndFixupMEM2();
 	}
 
 	/* ASCII 'STUBHAXX' */
