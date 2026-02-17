@@ -27,7 +27,7 @@ endif
 # /path/to/whatever/armeb-eabi-gcc/bin/armeb-eabi-gcc
 # Then MINI needs WIIDEV=/path/to/whatever/armeb-eabi-gcc
 # List of toolchain prefixes to try (in order of preference)
-ARM_TOOLCHAIN_PREFIXES := armeb-eabi- arm-none-eabi-
+ARM_TOOLCHAIN_PREFIXES := armeb-eabi- armeb-unknown-eabi-
 
 define find_arm_toolchain
 $(foreach prefix,$(ARM_TOOLCHAIN_PREFIXES), \
