@@ -436,7 +436,7 @@ static void sdmmcDrvInit(void) {
 	sdmmc_ack_card();
 
 
-	tmp = M_PoolAlloc(POOL_MEM2, SDMMC_DEFAULT_BLOCKLEN);
+	tmp = M_PoolAlloc(POOL_MEM2, SDMMC_DEFAULT_BLOCKLEN, 32 /* FIXME: is this actually right?  need to double check SD Spec Part A2 */);
 	memset(tmp, 0, SDMMC_DEFAULT_BLOCKLEN);
 	dcache_flush(tmp, SDMMC_DEFAULT_BLOCKLEN);
 	sdmmc_read(0, 1, tmp);

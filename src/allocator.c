@@ -51,8 +51,15 @@
 
 extern u32 __reloc_dest_start;
 
-/* align `x` up to the next multiple of `a` */
+/* align `x` up to the next multiple of `a` (power of 2) */
 #define ALIGN_UP(x, a) (((x) + (a) - 1) & ~((a) - 1))
+
+/* align `x` down to the previous multiple of `a` (power of 2) */
+#define ALIGN_DOWN(x, a) ((x) & ~((a) - 1))
+
+#define IS_POWER_OF_2(x) ((x) && ((x) & (x - 1)) == 0)
+
+#define MIN_ALIGN 32
 
 /*
  * internal data structure describing a pool
@@ -90,51 +97,54 @@ static struct pool pools[MAX_POOLS];
 
 
 /* actually allocate from a pool */
-static void *_poolAlloc(struct pool *pool, size_t size) {
+static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolAlloc(struct pool *pool, size_t size, size_t align) {
 	struct block *block;
 	void *mem;
-	u32 bottom;
 
 	if (__unlikely(!pool))
-		return NULL;
+		panic("_poolAlloc: trying to allocate from NULL pool");
 
 	if (__unlikely(memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
 		panic("_poolAlloc: corrupted pool metadata");
 
 	/* trying to allocate from nonexistant pool */
 	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
-		return NULL;
-
-	bottom = (u32)pool->cur_bottom;
+		panic("_poolAlloc: trying to allocate from nonexistent pool");
 
 	/* write out a 'struct block' at it's start */
-	mem = (void *)((bottom - size) & ~31);
+	mem = (void *)ALIGN_DOWN(((u32)pool->cur_bottom - size), align);
 	block = (struct block *)(((u32)mem) - sizeof(struct block));
+	if (__unlikely((void *)block < pool->bottom))
+		panic("_poolAlloc: out of memory");
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
-	block->size = size;
+	block->size = pool->cur_bottom - mem; /* to the next block */
 
 	pool->cur_bottom = (void *)block;
 
-	log_printf("alloc sz %u from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, pool->name, (u32)bottom, (u32)mem);
+	log_printf("alloc sz %u(%u) from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, block->size, pool->name, (u32)pool->cur_bottom, (u32)mem);
 
 	return mem;
 }
 
 /* public function to allocate from a specific (or any) pool */
-void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size) {
+void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size, size_t align) {
 	u32 mem1_free, mem2_free;
 
-	/* 32B alignment */
-	size = ALIGN_UP(size, 32 - sizeof(struct block));
+	if (align == 0)
+		align = MIN_ALIGN; /* any alignment */
+	else if (!IS_POWER_OF_2(align))
+		panic("M_PoolAlloc: align not a power of 2");
+	else if (align < MIN_ALIGN)
+		align = MIN_ALIGN; /* also aligns to lower powers of 2 */
 
 	switch (pool) {
 	case POOL_MEM1:
 	case POOL_MEM2:
-		return _poolAlloc(&pools[pool], size); /* will be NULL if POOL_MEM2 on GCN */
+		return _poolAlloc(&pools[pool], size, align); /* will be NULL if POOL_MEM2 on GCN */
 	case POOL_ANY: {
 		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-			return _poolAlloc(&pools[POOL_MEM1], size); /* nowhere else for it to go... */
+			return _poolAlloc(&pools[POOL_MEM1], size, align); /* nowhere else for it to go... */
 
 		/* pick whichever pool has more free */
 
@@ -155,9 +165,9 @@ void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(e
 		 * ability to make large allocations.
 		 */
 		if (__unlikely(mem1_free > mem2_free))
-			return _poolAlloc(&pools[POOL_MEM1], size);
+			return _poolAlloc(&pools[POOL_MEM1], size, align);
 		else
-			return _poolAlloc(&pools[POOL_MEM2], size);
+			return _poolAlloc(&pools[POOL_MEM2], size, align);
 	}
 	default:
 		panic("M_PoolAlloc with invalid pool");
@@ -197,7 +207,7 @@ void free(void *ptr) {
 
 /* C stdlib malloc() implementation */
 void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size) {
-	return M_PoolAlloc(POOL_ANY, size);
+	return M_PoolAlloc(POOL_ANY, size, MIN_ALIGN);
 }
 
 void M_Init(void) {

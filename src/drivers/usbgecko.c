@@ -153,9 +153,9 @@ again:
 
 		/* allocate our scratch buffer in MEM2 if possible */
 		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-			buf = M_PoolAlloc(POOL_MEM2, binSz);
+			buf = M_PoolAlloc(POOL_MEM1, binSz, 4);
 		else
-			buf = M_PoolAlloc(POOL_MEM1, binSz);
+			buf = M_PoolAlloc(POOL_MEM2, binSz, 4);
 
 		if (!buf) {
 			log_printf("Memory allocation for binary of size %u failed\r\n", binSz);

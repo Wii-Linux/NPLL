@@ -511,8 +511,8 @@ static void viDrvInit(void) {
 	//rgb gray = {.as_u32 = 0xffaaaaaa};
 	//rgb yellow = {.as_u32 = 0xffffff00};
 
-	/* XFB must be in MEM1 */
-	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * XFB_WIDTH * XFB_HEIGHT);
+	/* XFB must be in MEM1, 32B aligned */
+	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * XFB_WIDTH * XFB_HEIGHT, 32);
 
 	/* rgbFB can go wherever */
 	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
