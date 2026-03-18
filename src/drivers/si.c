@@ -158,7 +158,7 @@ static volatile struct si_regs *regs;
 static REGISTER_DRIVER(siDrv);
 static u64 lastConnectedCheck;
 static u16 padIDs[4] = { 0, 0, 0, 0 };
-static u16 padButtons[4] = { 0, 0, 0, 0 };
+static u32 padButtons[4] = { 0, 0, 0, 0 };
 static enum si_device_type deviceTypes[4] = { SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE };
 
 
