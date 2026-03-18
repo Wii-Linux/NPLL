@@ -6,6 +6,7 @@
 
 #define MODULE "SI"
 
+#include <assert.h>
 #include <stdio.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
@@ -170,7 +171,7 @@ static const char *siTypeToStr(enum si_device_type type) {
 	case SI_DEVICE_TYPE_N64_MIC: return "N64 Microphone";
 	case SI_DEVICE_TYPE_N64_KBD: return "N64 Keyboard";
 	case SI_DEVICE_TYPE_N64_MOUSE: return "N64 Mouse";
-	default: return NULL;
+	default: assert_unreachable(); /* should never be hit, since we control the type directly (it's not the ID) */
 	}
 }
 
@@ -196,6 +197,8 @@ static void checkConnected(void) {
 	drainInBuf(1);
 	drainInBuf(2);
 	drainInBuf(3);
+	/* ack everything that's W1C */
+	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 
 	for (i = 0; i < 4; i++) {
 		if (deviceTypes[i] == SI_DEVICE_TYPE_NONE)
@@ -232,6 +235,12 @@ static void checkConnected(void) {
 			while (!(regs->comcsr & SI_COMCSR_TCINT)) {
 				if (T_HasElapsed(startTB, 100 * 1000)) {
 					log_puts("SI transfer is taking way too long, giving up");
+					/*
+					 * SI input will die until the next connection check, since we
+					 * killed SIPOLL, but we can't really do much better since we
+					 * don't actually have a coherent picture of what's on the bus
+					 * anymore...
+					 */
 					return;
 				}
 			}
@@ -310,8 +319,8 @@ static void checkConnected(void) {
 
 		out:
 			deviceTypes[i] = type;
-			/* ack everything */
-			regs->comcsr = regs->comcsr & ~SI_COMCSR_TSTART;
+			/* ack everything that's W1C */
+			regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 			break;
 		}
 	}
@@ -322,6 +331,11 @@ static void checkConnected(void) {
 	 */
 	poll = SI_MKPOLL(0, 0, 1, 7);
 	if (deviceTypes[0] == SI_DEVICE_TYPE_GCN_CONTROLLER) {
+		/*
+		 * FIXME: where does the 0x03 come from here and what does it mean?
+		 * YAGCD, Linux, and ppcskel/Gumboot all use it, so it must be
+		 * important, but I can't find what it actually _means_.
+		 */
 		regs->chan[0].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
 		poll |= SI_POLL_EN0;
 	}
@@ -345,32 +359,17 @@ static void checkConnected(void) {
 
 static void probePad(int chan) {
 	u32 inbufh, inbufl, buttons, held, pressed, released, idle;
-	int i;
 
 	inbufh = regs->chan[chan].inbufh; /* buttons, main stick */
 	inbufl = regs->chan[chan].inbufl; /* c stick, L trigger, R trigger */
 	(void)inbufl;
 	buttons = inbufh & 0xffff0000; /* ignore lstick */
 
-	/* probably a more efficient way using some fancy bitwise trickery but it's 3:30AM, so this'll do */
-	held = pressed = released = idle = 0;
-	for (i = 16; i < 32; i++) {
-		/* was previously not pressed, still is not pressed */
-		if (!(padButtons[chan] & (1 << i)) && !(buttons & (1 << i)))
-			idle |= (1 << i);
-
-		/* was previously not pressed, is now pressed */
-		if (!(padButtons[chan] & (1 << i)) && (buttons & (1 << i)))
-			pressed |= (1 << i);
-
-		/* was previously pressed, is still pressed */
-		if ((padButtons[chan] & (1 << i)) && (buttons & (1 << i)))
-			held |= (1 << i);
-
-		/* was previously pressed, is now not pressed */
-		if ((padButtons[chan] & (1 << i)) && !(buttons & (1 << i)))
-			released |= (1 << i);
-	}
+	/* determine state transitions of buttons */
+	held = buttons & padButtons[chan];
+	pressed = buttons & ~padButtons[chan];
+	released = padButtons[chan] & ~buttons;
+	idle = ~(buttons | padButtons[chan]);
 
 	/* TODO: do something with idle/released/held */
 	(void)idle;
@@ -430,16 +429,21 @@ static void siInit(void) {
 	/* register our callback */
 	D_AddCallback(siCallback);
 
-	/* reset everything */
+	/*
+	 * Reset and sanitize everything
+	 */
 	regs->chan[0].outbuf = 0;
 	regs->chan[1].outbuf = 0;
 	regs->chan[2].outbuf = 0;
 	regs->chan[3].outbuf = 0;
 	regs->poll = 0;
-	regs->comcsr = 0;
 	regs->sr = 0;
+	/* ack everything that's W1C and clear the rest */
+	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
+	/* clear the I/O buffer */
 	for (i = 0; i < 0x20; i++)
 		regs->buf[i] = 0;
+	/* drain input buffers */
 	drainInBuf(0);
 	drainInBuf(1);
 	drainInBuf(2);
