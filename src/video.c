@@ -174,7 +174,6 @@ static void handleEscape(char c) {
 
 		if (mode == 2) {
 			memset(V_FbPtr, 0, V_FbStride * V_FbHeight);
-			V_Flush();
 			posX = 0;
 			posY = 0;
 		} else {
