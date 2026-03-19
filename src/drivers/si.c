@@ -111,7 +111,7 @@ enum si_device_id {
 };
 
 enum si_device_type {
-	SI_DEVICE_TYPE_NONE = -1,
+	SI_DEVICE_TYPE_NONE,
 	SI_DEVICE_TYPE_GCN_CONTROLLER,
 	SI_DEVICE_TYPE_N64_CONTROLLER,
 	SI_DEVICE_TYPE_GCN_KBD,
@@ -320,6 +320,10 @@ static void checkConnected(void) {
 			/* read response and extract out useful info */
 			resp = regs->buf[0];
 			id = resp >> 16;
+			/*
+			 * YAGCD calls this out for having the current rumble motor state, but I'm sure it has more...
+			 * TODO: investigate what's in here, and see if there's any reason to care
+			 */
 			status = resp >> 8;
 			(void)status;
 			devices[i].id = id;
@@ -543,8 +547,6 @@ static void siInit(void) {
 
 	/* cleanup device state */
 	memset(devices, 0, sizeof(devices));
-	for (i = 0; i < 4; i++)
-		devices[i].type = SI_DEVICE_TYPE_NONE;
 
 	/* initial check which controllers are connected */
 	checkConnected();
