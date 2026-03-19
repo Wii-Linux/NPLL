@@ -114,7 +114,7 @@ build/%.o: src/%.S
 
 # to make it bail if the user doesn't have MINI pulled
 external/mini/armboot.bin: external/mini/Makefile
-	$(HIDE)$(MAKE) -C external/mini
+	$(HIDE)$(MAKE) -C external/mini FOR_NPLL=1
 
 src/armboot_bin.c: util/bin2c external/mini/armboot.bin
 	$(info $s  BIN2C $@)
