@@ -39,8 +39,11 @@
 #define TIMEOUT_CTRL          0x2E //Timeout Control
 #define SW_RESET              0x2F //Software Reset
 #define INT_STATUS            0x30 //Interrupt Status
+#define ERR_INT_STATUS        0x32 //Error Interrupt Status
 #define INT_STATUS_EN         0x34 //Interrupt Status Enable
+#define ERR_INT_STATUS_EN     0x36 //Error Interrupt Status Enable
 #define INT_SIGNAL_EN         0x38 //Interrupt Signal Enable
+#define ERR_INT_SIGNAL_EN     0x3a //Error Interrupt Signal Enable
 #define AUTOCMD12_ERR_STATUS  0x3C //Auto CMD12 Error Status
 #define HOST_CTRL_CAP         0x40 //Host Controller Capabilities
 #define WTMK_LVL              0x44 //Watermark Level
@@ -95,18 +98,6 @@
 #define SW_RESET_RSTA           (1 << 0) //Software Reset for ALL
 
 /* Interrupt Status Register */
-#define INT_STATUS_DMAE         (1 << 28) //DMA Error            (only IMX6)
-#define INT_STATUS_TNE          (1 << 26) //Tuning Error
-#define INT_STATUS_ADMAE        (1 << 25) //ADMA error           (exl. IMX6)
-#define INT_STATUS_AC12E        (1 << 24) //Auto CMD12 Error
-#define INT_STATUS_OVRCURE      (1 << 23) //Bus over current     (exl. IMX6)
-#define INT_STATUS_DEBE         (1 << 22) //Data End Bit Error
-#define INT_STATUS_DCE          (1 << 21) //Data CRC Error
-#define INT_STATUS_DTOE         (1 << 20) //Data Timeout Error
-#define INT_STATUS_CIE          (1 << 19) //Command Index Error
-#define INT_STATUS_CEBE         (1 << 18) //Command End Bit Error
-#define INT_STATUS_CCE          (1 << 17) //Command CRC Error
-#define INT_STATUS_CTOE         (1 << 16) //Command Timeout Error
 #define INT_STATUS_ERR          (1 << 15) //Error interrupt      (exl. IMX6)
 #define INT_STATUS_TP           (1 << 14) //Tuning Pass
 #define INT_STATUS_RTE          (1 << 12) //Re-Tuning Event
@@ -119,6 +110,20 @@
 #define INT_STATUS_BGE          (1 << 2)  //Block Gap Event
 #define INT_STATUS_TC           (1 << 1)  //Transfer Complete
 #define INT_STATUS_CC           (1 << 0)  //Command Complete
+
+/* Error Interrupt Status Register */
+#define ERR_INT_STATUS_DMAE         (1 << 12) //DMA Error            (only IMX6)
+#define ERR_INT_STATUS_TNE          (1 << 10) //Tuning Error
+#define ERR_INT_STATUS_ADMAE        (1 << 9)  //ADMA error           (exl. IMX6)
+#define ERR_INT_STATUS_AC12E        (1 << 8)  //Auto CMD12 Error
+#define ERR_INT_STATUS_OVRCURE      (1 << 7)  //Bus over current     (exl. IMX6)
+#define ERR_INT_STATUS_DEBE         (1 << 6)  //Data End Bit Error
+#define ERR_INT_STATUS_DCE          (1 << 5)  //Data CRC Error
+#define ERR_INT_STATUS_DTOE         (1 << 4)  //Data Timeout Error
+#define ERR_INT_STATUS_CIE          (1 << 3)  //Command Index Error
+#define ERR_INT_STATUS_CEBE         (1 << 2)  //Command End Bit Error
+#define ERR_INT_STATUS_CCE          (1 << 1)  //Command CRC Error
+#define ERR_INT_STATUS_CTOE         (1 << 0)  //Command Timeout Error
 
 /* Host Controller Capabilities Register */
 #define HOST_CTRL_CAP_VS18      (1 << 26) //Voltage Support 1.8V
@@ -202,31 +207,33 @@ static inline u32 readl(volatile void *a) {
 }
 
 static inline u16 readw(volatile void *a) {
-	u32 addr;
-	u16 ret;
+	u32 addr, tmp;
+	int shift;
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	addr ^= 0x2;
+	shift = (addr & 0x2) * 8;
+	addr &= ~0x3;
 	a = (volatile void *)addr;
 	sync(); barrier();
-	ret = *(vu16*)(a);
+	tmp = *(vu32*)(a);
 	sync(); barrier();
 
-	return ret;
+	return (u16)(tmp >> shift);
 }
 
 static inline u8 readb(volatile void *a) {
-	u32 addr;
-	u8 ret;
+	u32 addr, tmp;
+	int shift;
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	addr ^= 0x3;
+	shift = (addr & 0x3) * 8;
+	addr &= ~0x3;
 	a = (volatile void *)addr;
 	sync(); barrier();
-	ret = *(vu8*)(a);
+	tmp = *(vu32*)(a);
 	sync(); barrier();
 
-	return ret;
+	return (u8)(tmp >> shift);
 }
 
 enum dma_mode {
@@ -275,8 +282,7 @@ typedef enum {
 } clock_mode;
 
 typedef enum {
-	SDCLK_TIMES_2_POW_29 = 0xf,
-	SDCLK_TIMES_2_POW_28 = 0xe,
+	SDCLK_TIMES_2_POW_27 = 0xe, /* Maximum valid for SDHCI v1.00 (0xF is reserved) */
 	SDCLK_TIMES_2_POW_14 = 0x0,
 } data_timeout_counter_val;
 
@@ -325,23 +331,42 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 {
 	struct mmc_cmd *cmd = host->cmd_list_head;
 	u32 val32;
+	u16 val16;
 	u8 val8;
 	u32 mix_ctrl;
 
-	/* Enable IRQs */
-	val32 = (INT_STATUS_ADMAE | INT_STATUS_OVRCURE | INT_STATUS_DEBE
-		   | INT_STATUS_DCE   | INT_STATUS_DTOE    | INT_STATUS_CRM
-		   | INT_STATUS_CINS  | INT_STATUS_CIE     | INT_STATUS_CEBE
-		   | INT_STATUS_CCE   | INT_STATUS_CTOE    | INT_STATUS_TC
-		   | INT_STATUS_CC);
+	/* Clear error flags before issuing a new command.
+	 * INT_STATUS (0x30) and ERR_INT_STATUS (0x32) share a 32-bit word
+	 * and are both W1C.  We must use writel with 0 in the INT_STATUS
+	 * half to avoid accidentally clearing normal status bits. */
+	val16 = (ERR_INT_STATUS_ADMAE | ERR_INT_STATUS_OVRCURE | ERR_INT_STATUS_DEBE
+		   | ERR_INT_STATUS_DCE   | ERR_INT_STATUS_DTOE
+		   | ERR_INT_STATUS_CIE   | ERR_INT_STATUS_CEBE
+		   | ERR_INT_STATUS_CCE   | ERR_INT_STATUS_CTOE);
+	writel((u32)val16 << 16, host->base + INT_STATUS);
+
+	val16 = INT_STATUS_CINS  | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
 	if (get_dma_mode(host, cmd) == DMA_MODE_NONE) {
-		val32 |= INT_STATUS_BRR | INT_STATUS_BWR;
+		val16 |= INT_STATUS_BRR | INT_STATUS_BWR;
 	}
-	writel(val32, host->base + INT_STATUS_EN);
+	writew(val16, host->base + INT_STATUS_EN);
 
 	/* Check if the Host is ready for transit. */
-	while (readl(host->base + PRES_STATE) & (SDHC_PRES_STATE_CIHB | SDHC_PRES_STATE_CDIHB));
-	while (readl(host->base + PRES_STATE) & SDHC_PRES_STATE_DLA);
+	{
+		u64 tb = mftb();
+		while (readl(host->base + PRES_STATE) & (SDHC_PRES_STATE_CIHB | SDHC_PRES_STATE_CDIHB)) {
+			if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+				ZF_LOGE("timeout waiting for command inhibit to clear");
+				return -1;
+			}
+		}
+		while (readl(host->base + PRES_STATE) & SDHC_PRES_STATE_DLA) {
+			if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+				ZF_LOGE("timeout waiting for data line active to clear");
+				return -1;
+			}
+		}
+	}
 
 	/* Two commands need to have at least 8 clock cycles in between.
 	 * Lets assume that the hcd will NOT enforce this. */
@@ -352,8 +377,9 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	writel(cmd->arg, host->base + CMD_ARG);
 
 	if (cmd->data) {
-		/* Use the default timeout. */
+		/* Set data timeout to maximum valid value for SDHCI v1.00 */
 		val8 = readb(host->base + TIMEOUT_CTRL);
+		val8 &= ~TIMEOUT_CTRL_DTOCV_MASK;
 		val8 |= 0xE;
 		writeb(val8, host->base + TIMEOUT_CTRL);
 
@@ -362,17 +388,10 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		val32 |= (cmd->data->blocks << BLK_ATT_BLKCNT_SHF);
 		writel(val32, host->base + BLK_ATT);
 
-		/* Set watermark level */
-		val32 = cmd->data->block_size / 4;
-		if (val32 > 0x80) {
-			val32 = 0x80;
-		}
-		if (cmd->index == MMC_READ_SINGLE_BLOCK) {
-			val32 = (val32 << WTMK_LVL_RD_WML_SHF);
-		} else {
-			val32 = (val32 << WTMK_LVL_WR_WML_SHF);
-		}
-		writel(val32, host->base + WTMK_LVL);
+		/* NOTE: WTMK_LVL (0x44) is an NXP i.MX-specific register that
+		 * does not exist on standard SDHCI v1.00 (Hollywood/Latte).
+		 * Offset 0x44 maps to Max Current Capabilities (read-only)
+		 * in standard SDHCI, so skip this write entirely. */
 
 		/* Set Mixer Control */
 		mix_ctrl = MIX_CTRL_BCEN;
@@ -398,12 +417,19 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	val32 = (cmd->index & CMD_XFR_TYP_CMDINX_MASK) << CMD_XFR_TYP_CMDINX_SHF;
 	val32 &= ~(CMD_XFR_TYP_CMDTYP_MASK << CMD_XFR_TYP_CMDTYP_SHF);
 	if (cmd->data) {
-		if (host->version == 2) {
-			/* Some controllers implement MIX_CTRL as part of the XFR_TYP */
-			val32 |= mix_ctrl;
-		} else {
-			writel(mix_ctrl, host->base + MIX_CTRL);
-		}
+		/*
+		 * In the standard SDHCI spec, the Transfer Mode Register occupies
+		 * the lower 16 bits of offset 0x0C, sharing a 32-bit word with
+		 * the Command Register in the upper 16 bits.  The mix_ctrl bits
+		 * (DMA enable, direction, block count enable, etc.) must be ORed
+		 * into the same 32-bit write as the command.
+		 *
+		 * NOTE: The original seL4 code wrote mix_ctrl to a separate
+		 * MIX_CTRL register at 0x48 for non-v2 controllers.  That was
+		 * an NXP i.MX-specific layout that does NOT apply to standard
+		 * SDHCI v1.00 controllers like Hollywood/Latte.
+		 */
+		val32 |= mix_ctrl;
 	}
 
 	/* Set response type */
@@ -455,65 +481,70 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	struct mmc_cmd *cmd = host->cmd_list_head;
-	u32 int_status;
+	u32 status32;
+	u16 int_status, err_status;
 
-	int_status = readl(host->base + INT_STATUS);
+	/* Read INT_STATUS and ERR_INT_STATUS atomically from one 32-bit word.
+	 * They share offset 0x30: INT_STATUS in [15:0], ERR_INT_STATUS in [31:16]. */
+	status32 = readl(host->base + INT_STATUS);
+	int_status = (u16)(status32);
+	err_status = (u16)(status32 >> 16);
 	if (!cmd) {
 		/* Clear flags */
-		writel(int_status, host->base + INT_STATUS);
+		writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
 		return 0;
 	}
 	/** Handle errors **/
-	if (int_status & INT_STATUS_TNE) {
+	if (err_status & ERR_INT_STATUS_TNE) {
 		ZF_LOGE("Tuning error");
 	}
-	if (int_status & INT_STATUS_OVRCURE) {
+	if (err_status & ERR_INT_STATUS_OVRCURE) {
 		ZF_LOGE("Bus overcurrent"); /* (exl. IMX6) */
 	}
 	if (int_status & INT_STATUS_ERR) {
-		ZF_LOGE("CMD/DATA transfer error"); /* (exl. IMX6) */
+		ZF_LOGE("CMD/DATA transfer error; INT_STATUS=0x%04x ERR_INT_STATUS=0x%04x", int_status, err_status);
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_AC12E) {
+	if (err_status & ERR_INT_STATUS_AC12E) {
 		ZF_LOGE("Auto CMD12 Error");
 		cmd->complete = -1;
 	}
 	/** DMA errors **/
-	if (int_status & INT_STATUS_DMAE) {
+	if (err_status & ERR_INT_STATUS_DMAE) {
 		ZF_LOGE("DMA Error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_ADMAE) {
+	if (err_status & ERR_INT_STATUS_ADMAE) {
 		ZF_LOGE("ADMA error");       /*  (exl. IMX6) */
 		cmd->complete = -1;
 	}
 	/** DATA errors **/
-	if (int_status & INT_STATUS_DEBE) {
+	if (err_status & ERR_INT_STATUS_DEBE) {
 		ZF_LOGE("Data end bit error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_DCE) {
+	if (err_status & ERR_INT_STATUS_DCE) {
 		ZF_LOGE("Data CRC error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_DTOE) {
+	if (err_status & ERR_INT_STATUS_DTOE) {
 		ZF_LOGE("Data transfer error");
 		cmd->complete = -1;
 	}
 	/** CMD errors **/
-	if (int_status & INT_STATUS_CIE) {
+	if (err_status & ERR_INT_STATUS_CIE) {
 		ZF_LOGE("Command index error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_CEBE) {
+	if (err_status & ERR_INT_STATUS_CEBE) {
 		ZF_LOGE("Command end bit error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_CCE) {
+	if (err_status & ERR_INT_STATUS_CCE) {
 		ZF_LOGE("Command CRC error");
 		cmd->complete = -1;
 	}
-	if (int_status & INT_STATUS_CTOE) {
+	if (err_status & ERR_INT_STATUS_CTOE) {
 		ZF_LOGE("CMD Timeout...");
 		cmd->complete = -1;
 	}
@@ -572,25 +603,25 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 	}
 	/* DATA: Programmed IO handling */
 	if (int_status & (INT_STATUS_BRR | INT_STATUS_BWR)) {
-		vu32 *io_buf;
-		u32 *usr_buf;
 		assert(cmd->data);
 		assert(cmd->data->vbuf);
 		assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA path");
 		if (host->blocks_remaining) {
-			io_buf = (vu32 *)((void *)host->base + DATA_BUFF_ACC_PORT);
-			usr_buf = (u32 *)cmd->data->vbuf;
+			volatile void *io_port = (void *)host->base + DATA_BUFF_ACC_PORT;
+			u32 *usr_buf = (u32 *)cmd->data->vbuf;
 			if (int_status & INT_STATUS_BRR) {
-				/* Buffer Read Ready */
+				/* Buffer Read Ready.
+				 * The hardware 32-bit byteswapper reverses each word,
+				 * so we must swap back to get correct byte order for data. */
 				unsigned int i;
-				for (i = 0; i < cmd->data->block_size; i += sizeof(*usr_buf)) {
-					*usr_buf++ = *io_buf;
+				for (i = 0; i < cmd->data->block_size; i += sizeof(u32)) {
+					*usr_buf++ = __builtin_bswap32(readl(io_port));
 				}
 			} else {
 				/* Buffer Write Ready */
 				unsigned int i;
-				for (i = 0; i < cmd->data->block_size; i += sizeof(*usr_buf)) {
-					*io_buf = *usr_buf++;
+				for (i = 0; i < cmd->data->block_size; i += sizeof(u32)) {
+					writel(__builtin_bswap32(*usr_buf++), io_port);
 				}
 			}
 			host->blocks_remaining--;
@@ -602,8 +633,10 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 		/* assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA COMPLETE path"); */
 		cmd->complete = 1;
 	}
-	/* Clear flags */
-	writel(int_status, host->base + INT_STATUS);
+	/* Clear flags (W1C: write-1-to-clear).
+	 * INT_STATUS and ERR_INT_STATUS share a 32-bit word; must use a single
+	 * writel to avoid the RMW in writew accidentally clearing the other half. */
+	writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
 
 	/* If the transaction has finished */
 	if (cmd != NULL && cmd->complete != 0) {
@@ -761,17 +794,12 @@ static int sdhc_set_clock_div(
 	if (readl(base_addr + PRES_STATE) & SDHC_PRES_STATE_SDSTB) {
 #endif
 		u8 val8;
-		u16 val16 = readl(base_addr + CLOCK_CTRL);
+		u16 val16 = readw(base_addr + CLOCK_CTRL);
 
-		/* The SDCLK bit varies with Data Rate Mode. */
-		if (readl(base_addr + MIX_CTRL) & MIX_CTRL_DDR_EN) {
-			val16 &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-			val16 |= ((sdclks_div >> 1) << CLK_CTRL_SDCLKS_SHF);
-
-		} else {
-			val16 &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-			val16 |= (sdclks_div << CLK_CTRL_SDCLKS_SHF);
-		}
+		/* DDR mode is not supported on SDHCI v1.00 (Hollywood/Latte),
+		 * so always use the SDR clock divisor path. */
+		val16 &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
+		val16 |= (sdclks_div << CLK_CTRL_SDCLKS_SHF);
 		val16 &= ~(CLK_CTRL_DVS_MASK << CLK_CTRL_DVS_SHF);
 		val16 |= (dvs_div << CLK_CTRL_DVS_SHF);
 
@@ -780,6 +808,7 @@ static int sdhc_set_clock_div(
 
 		/* Set data timeout value */
 		val8 = readb(base_addr + TIMEOUT_CTRL);
+		val8 &= ~TIMEOUT_CTRL_DTOCV_MASK;
 		val8 |= (dtocv << TIMEOUT_CTRL_DTOCV_SHF);
 		writeb(val8, base_addr + TIMEOUT_CTRL);
 #if 0
@@ -817,7 +846,7 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		break;
 	case CLOCK_OPERATIONAL:
 		/* Divide the base clock by 8 */
-		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_29);
+		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_27);
 		break;
 	default:
 		ZF_LOGE("Unsupported clock mode setting");
@@ -838,6 +867,7 @@ static int sdhc_reset(sdio_host_dev_t *sdio)
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	u32 val;
 	u8 val8;
+	u16 val16;
 	u64 tb;
 	int ret;
 
@@ -859,13 +889,16 @@ static int sdhc_reset(sdio_host_dev_t *sdio)
 	ZF_LOGD("controller is ready, enabling irqs...");
 
 	/* Enable IRQs */
-	val = (INT_STATUS_ADMAE | INT_STATUS_OVRCURE | INT_STATUS_DEBE
-		   | INT_STATUS_DCE   | INT_STATUS_DTOE    | INT_STATUS_CRM
-		   | INT_STATUS_CINS  | INT_STATUS_BRR     | INT_STATUS_BWR
-		   | INT_STATUS_CIE   | INT_STATUS_CEBE    | INT_STATUS_CCE
-		   | INT_STATUS_CTOE  | INT_STATUS_TC      | INT_STATUS_CC);
-	writel(val, host->base + INT_STATUS_EN);
-	writel(val, host->base + INT_SIGNAL_EN);
+	val16 = (ERR_INT_STATUS_ADMAE | ERR_INT_STATUS_OVRCURE | ERR_INT_STATUS_DEBE
+		   | ERR_INT_STATUS_DCE   | ERR_INT_STATUS_DTOE
+		   | ERR_INT_STATUS_CIE   | ERR_INT_STATUS_CEBE
+		   | ERR_INT_STATUS_CCE   | ERR_INT_STATUS_CTOE);
+	writew(val16, host->base + ERR_INT_STATUS_EN);
+	writew(val16, host->base + ERR_INT_SIGNAL_EN);
+
+	val16 = INT_STATUS_CINS  | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
+	writew(val16, host->base + INT_STATUS_EN);
+	writew(val16, host->base + INT_SIGNAL_EN);
 
 	/* Configure clock for initialization */
 	ZF_LOGD("configuring clock...");
@@ -896,8 +929,8 @@ static int sdhc_reset(sdio_host_dev_t *sdio)
 	/* Send 80 clock ticks to card to power up. */
 	ZF_LOGD("powering up card...");
 	val8 = readb(host->base + SW_RESET);
-	val |= SW_RESET_INITA;
-	writeb(val, host->base + SW_RESET_INITA);
+	val8 |= SW_RESET_INITA;
+	writeb(val8, host->base + SW_RESET);
 	tb = mftb();
 	while (readb(host->base + SW_RESET) & SW_RESET_INITA) {
 		if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
