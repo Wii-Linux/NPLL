@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/input.h>
@@ -68,12 +69,12 @@ struct si_regs {
 
 /* SR bits */
 #define SI_SR_WR                 (1 << 31)
-#define SI_RDST(n)               (1 << (5 + ((3-n) * 8)))
-#define SI_WRST(n)               (1 << (4 + ((3-n) * 8)))
-#define SI_NOREP(n)              (1 << (3 + ((3-n) * 8)))
-#define SI_COLL(n)               (1 << (2 + ((3-n) * 8)))
-#define SI_OVRUN(n)              (1 << (1 + ((3-n) * 8)))
-#define SI_UNRUN(n)              (1 << ((3-n) * 8))
+#define SI_SR_RDST(n)            (1 << (5 + ((3-n) * 8)))
+#define SI_SR_WRST(n)            (1 << (4 + ((3-n) * 8)))
+#define SI_SR_NOREP(n)           (1 << (3 + ((3-n) * 8)))
+#define SI_SR_COLL(n)            (1 << (2 + ((3-n) * 8)))
+#define SI_SR_OVRUN(n)           (1 << (1 + ((3-n) * 8)))
+#define SI_SR_UNRUN(n)           (1 << ((3-n) * 8))
 
 
 /* https://github.com/dolphin-emu/dolphin/blob/de44626d23a85aa3cc07260f6f97e64f36600652/Source/Core/Core/HW/SI/SI_Device.h#L51 */
@@ -153,14 +154,45 @@ enum si_device_type {
 #define GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT  24
 #define GCN_CONTROLLER_DIRECT_CSTICK_X        (0xff << GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT)
 
+/*
+ * GCN Controller analog treshholds
+ */
+#define GCN_STICK_CENTER 128
+#define GCN_STICK_DEADZONE 64
+#define GCN_STICK_MIN_THRESH 32
+#define GCN_STICK_MAX_THRES 224
+#define GCN_TRIGGER_MIN_THRESH 32
+#define GCN_TRIGGER_MAX_THRESH 224
+
+struct gcn_pad_state {
+	u16 buttons;
+	u8 lstickX;
+	u8 lstickY;
+	u8 cstickX;
+	u8 cstickY;
+	u8 ltrig;
+	u8 rtrig;
+};
+
+struct si_device_state {
+	u16 id;
+	enum si_device_type type;
+	union {
+		struct gcn_pad_state gcn_pad;
+		#if 0 /* for whenever I actually implement these */
+		struct gcn_kbd_state gcn_kbd;
+		struct n64_pad_state n64_pad;
+		struct n64_kbd_state n64_kbd;
+		struct n64_mouse_state n64_mouse;
+		struct gba_state gba;
+		#endif
+	};
+};
 
 static volatile struct si_regs *regs;
 static REGISTER_DRIVER(siDrv);
 static u64 lastConnectedCheck;
-static u16 padIDs[4] = { 0, 0, 0, 0 };
-static u32 padButtons[4] = { 0, 0, 0, 0 };
-static enum si_device_type deviceTypes[4] = { SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE, SI_DEVICE_TYPE_NONE };
-
+static struct si_device_state devices[4];
 
 static const char *siTypeToStr(enum si_device_type type) {
 	switch (type) {
@@ -177,14 +209,23 @@ static const char *siTypeToStr(enum si_device_type type) {
 
 static void drainInBuf(int chan) {
 	vu32 resp;
+	/*
+	 * need to drain the input buffer; see YAGCD Sect. 5.8:
+	 * > SIC0INBUFH and SIC0INBUFL are double buffered to prevent inconsistent data reads due to main processor conflicting with incoming serial interface data. To insure data read from SIC0INBUFH and SIC0INFUBL are consistent, a locking mechanism prevents the double buffer from copying new data to these registers. Once SIC0INBUFH is read, both SIC0INBUFH and SIC0INBUFL are `locked` until SIC0INBUFL is read. While the buffers are `locked`, new data is not copied into the buffers. When SIC0INBUFL is read, the buffers become unlocked again.
+	 */
 	resp = regs->chan[chan].inbufh;
 	resp = regs->chan[chan].inbufl;
 	(void)resp;
 }
+static void drainAllInBuf(void) {
+	int i;
+	for (i = 0; i < 4; i++)
+		drainInBuf(i);
+}
 
 static void checkConnected(void) {
 	u64 startTB;
-	u32 resp, poll;
+	u32 resp, poll, sr;
 	u16 id;
 	u8 status;
 	int i, j, tries;
@@ -193,18 +234,13 @@ static void checkConnected(void) {
 	regs->poll = 0;
 	regs->sr = SI_SR_WR; /* flush all buffers */
 	while (regs->sr & SI_SR_WR);
-	drainInBuf(0);
-	drainInBuf(1);
-	drainInBuf(2);
-	drainInBuf(3);
-	/* ack everything that's W1C */
-	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
+	drainAllInBuf();
 
 	for (i = 0; i < 4; i++) {
-		if (deviceTypes[i] == SI_DEVICE_TYPE_NONE)
-			tries = 10; /* SI is _really_ finnicky, sometimes it takes a few tries to get an ID successfully */
+		if (devices[i].type == SI_DEVICE_TYPE_NONE)
+			tries = 10; /* SI is _really_ finnicky, especially when a controller has just be connected - sometimes it takes a few tries to get an ID successfully */
 		else
-			tries = 1; /* don't try so hard to detect disconnect */
+			tries = 1; /* only briefly try to detect disconnect - if a device is connected, it's far more likely that it is still connected than not */
 		while (tries > 0) {
 			/*
 			 * Sanitize hardware state.  If we don't do this, probing devices on
@@ -212,11 +248,11 @@ static void checkConnected(void) {
 			 * device.
 			 */
 
+			/* ack everything that's W1C */
+			regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
+
 			/* drain input buffers */
-			drainInBuf(0);
-			drainInBuf(1);
-			drainInBuf(2);
-			drainInBuf(3);
+			drainAllInBuf();
 
 			/* clear I/O buffer */
 			for (j = 0; j < 0x20; j++)
@@ -228,7 +264,7 @@ static void checkConnected(void) {
 			while (regs->sr & SI_SR_WR);
 
 			/* actually do the transfer */
-			regs->comcsr = SI_COMCSR_TCINT | (1 << SI_COMCSR_OUTLEN_SHIFT) | (i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+			regs->comcsr = (1 << SI_COMCSR_OUTLEN_SHIFT) | (3 << SI_COMCSR_INLEN_SHIFT) | (i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 			/* wait for transfer complete */
 			startTB = mftb();
@@ -240,17 +276,53 @@ static void checkConnected(void) {
 					 * killed SIPOLL, but we can't really do much better since we
 					 * don't actually have a coherent picture of what's on the bus
 					 * anymore...
+					 *
+					 * Not worth retrying immediately, it'll certainly just fail again.
+					 * Need to at least give it until the next check to try again.
+					 * TODO: Maybe even give up trying alltogether if it just keeps failing
 					 */
 					return;
 				}
 			}
+
+			if (regs->comcsr & SI_COMCSR_COMERR) {
+				sr = regs->sr;
+				/*
+				 * NOREP ocurrs every time to try to talk to an empty port,
+				 * so don't log the condition unless we have some other error.
+				 */
+				if ((sr & SI_SR_COLL(i)) || (sr & SI_SR_OVRUN(i)) || (sr & SI_SR_UNRUN(i))) {
+					log_printf("error probing: [%c] No Response; [%c] Collision; [%c] OverRun; [%c] UnderRun\r\n",
+						(sr & SI_SR_NOREP(i)) ? 'x' : ' ',
+						(sr & SI_SR_COLL(i)) ? 'x' : ' ',
+						(sr & SI_SR_OVRUN(i)) ? 'x' : ' ',
+						(sr & SI_SR_UNRUN(i)) ? 'x' : ' ');
+
+					/* ack all errors and carry on */
+					regs->sr = SI_SR_NOREP(i) | SI_SR_COLL(i) | SI_SR_OVRUN(i) | SI_SR_UNRUN(i);
+					goto fail;
+				}
+				else {
+					/* ack all errors and carry on */
+					regs->sr = SI_SR_NOREP(i) | SI_SR_COLL(i) | SI_SR_OVRUN(i) | SI_SR_UNRUN(i);
+
+					/*
+					 * Either getting an empty ID or NOREP means the device disconnected,
+					 * so try to handle them in the same path
+					 */
+					type = SI_DEVICE_TYPE_NONE;
+					id = 0xffff;
+					goto gotType;
+				}
+			}
+
 
 			/* read response and extract out useful info */
 			resp = regs->buf[0];
 			id = resp >> 16;
 			status = resp >> 8;
 			(void)status;
-			padIDs[i] = id;
+			devices[i].id = id;
 
 			/*
 			 * determine what device this is based on it's ID
@@ -303,82 +375,81 @@ static void checkConnected(void) {
 			}
 			}
 
+		gotType:
 			/* did we get a device connection / disconnection?  if so, we're done with this port */
-			if (deviceTypes[i] != SI_DEVICE_TYPE_NONE && type == SI_DEVICE_TYPE_NONE) {
+			if (devices[i].type != SI_DEVICE_TYPE_NONE && type == SI_DEVICE_TYPE_NONE) {
 				log_printf("Device disconnected from Port %d\r\n", i + 1);
 				goto out;
 			}
-			else if (deviceTypes[i] == SI_DEVICE_TYPE_NONE && type != SI_DEVICE_TYPE_NONE) {
+			else if (devices[i].type == SI_DEVICE_TYPE_NONE && type != SI_DEVICE_TYPE_NONE) {
 				log_printf("Device connected to Port %d: %s\r\n", i + 1, siTypeToStr(type));
 				goto out;
 			}
 
+		fail:
 			/* nothing, continue trying */
 			tries--;
 			continue;
 
 		out:
-			deviceTypes[i] = type;
-			/* ack everything that's W1C */
-			regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
+			devices[i].type = type;
 			break;
 		}
 	}
 
 	/*
-	 * Set up polling for all GCN controllers
-	 * TODO: something for the other devices?
+	 * Set up polling for all GCN controllers, don't send anything to other devices (yet)
+	 * TODO: figure out how to get input from the other devices?
 	 */
 	poll = SI_MKPOLL(0, 0, 1, 7);
-	if (deviceTypes[0] == SI_DEVICE_TYPE_GCN_CONTROLLER) {
-		/*
-		 * FIXME: where does the 0x03 come from here and what does it mean?
-		 * YAGCD, Linux, and ppcskel/Gumboot all use it, so it must be
-		 * important, but I can't find what it actually _means_.
-		 */
-		regs->chan[0].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-		poll |= SI_POLL_EN0;
-	}
-	if (deviceTypes[1] == SI_DEVICE_TYPE_GCN_CONTROLLER) {
-		regs->chan[1].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-		poll |= SI_POLL_EN1;
-	}
-	if (deviceTypes[2] == SI_DEVICE_TYPE_GCN_CONTROLLER) {
-		regs->chan[2].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-		poll |= SI_POLL_EN2;
-	}
-	if (deviceTypes[3] == SI_DEVICE_TYPE_GCN_CONTROLLER) {
-		regs->chan[3].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-		poll |= SI_POLL_EN3;
+	for (i = 0; i < 4; i++) {
+		if (devices[i].type == SI_DEVICE_TYPE_GCN_CONTROLLER) {
+			/*
+			 * FIXME: where does the 0x03 come from here and what does it mean?
+			 * YAGCD, Linux, and ppcskel/Gumboot all use it, so it must be
+			 * important, but I can't find what it actually _means_.
+			 */
+			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
+			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
+		}
 	}
 
 	regs->poll = poll;
 	regs->sr = SI_SR_WR; /* write all buffers */
 	while (regs->sr & SI_SR_WR);
+
+	/* ack everything that's W1C */
+	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 }
 
-static void probePad(int chan) {
-	u32 inbufh, inbufl, buttons, held, pressed, released, idle;
+static void probeGCNPad(int chan) {
+	u32 inbufh, inbufl, prevButtons, buttons, pressed;
+	u8 lstickX, lstickY, prevLstickX, prevLstickY, cstickX, cstickY, ltrig, rtrig;
 
 	inbufh = regs->chan[chan].inbufh; /* buttons, main stick */
 	inbufl = regs->chan[chan].inbufl; /* c stick, L trigger, R trigger */
-	(void)inbufl;
+	prevButtons = devices[chan].gcn_pad.buttons << 16;
+	prevLstickX = devices[chan].gcn_pad.lstickX;
+	prevLstickY = devices[chan].gcn_pad.lstickY;
+
+	/* unpack report */
 	buttons = inbufh & 0xffff0000; /* ignore lstick */
+	lstickX = (inbufh & GCN_CONTROLLER_DIRECT_LSTICK_X) >> GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT;
+	lstickY = (inbufh & GCN_CONTROLLER_DIRECT_LSTICK_Y) >> GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT;
+	cstickX = (inbufl & GCN_CONTROLLER_DIRECT_CSTICK_X) >> GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT;
+	cstickY = (inbufl & GCN_CONTROLLER_DIRECT_CSTICK_Y) >> GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT;
+	ltrig = (inbufl & GCN_CONTROLLER_DIRECT_L_TRIG_AN) >> GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT;
+	rtrig = (inbufl & GCN_CONTROLLER_DIRECT_R_TRIG_AN) >> GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT;
 
 	/* determine state transitions of buttons */
-	held = buttons & padButtons[chan];
-	pressed = buttons & ~padButtons[chan];
-	released = padButtons[chan] & ~buttons;
-	idle = ~(buttons | padButtons[chan]);
+	pressed = buttons & ~prevButtons;
+	#if 0 /* if we ever have a need for these */
+	held = buttons & prevButtons;
+	released = prevButtons & ~buttons;
+	idle = ~(buttons | prevButtons);
+	#endif
 
-	/* TODO: do something with idle/released/held */
-	(void)idle;
-	(void)released;
-	(void)held;
-
-	/* save state for next time */
-	padButtons[chan] = buttons;
-
+	/* TODO: repeat if held for a certain amount of time */
 	if (pressed & GCN_CONTROLLER_DIRECT_A)
 		IN_NewEvent(INPUT_EV_SELECT);
 	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_UP)
@@ -390,6 +461,23 @@ static void probePad(int chan) {
 	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_RIGHT)
 		IN_NewEvent(INPUT_EV_RIGHT);
 
+	if (lstickY > GCN_STICK_CENTER + GCN_STICK_DEADZONE && prevLstickY < GCN_STICK_CENTER + GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_UP);
+	else if (lstickY < GCN_STICK_CENTER - GCN_STICK_DEADZONE && prevLstickY > GCN_STICK_CENTER - GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_DOWN);
+	if (lstickX > GCN_STICK_CENTER + GCN_STICK_DEADZONE && prevLstickX < GCN_STICK_CENTER + GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_RIGHT);
+	else if (lstickX < GCN_STICK_CENTER - GCN_STICK_DEADZONE && prevLstickX > GCN_STICK_CENTER - GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_LEFT);
+
+	/* save state for next time */
+	devices[chan].gcn_pad.buttons = (u16)(buttons >> 16);
+	devices[chan].gcn_pad.lstickX = lstickX;
+	devices[chan].gcn_pad.lstickY = lstickY;
+	devices[chan].gcn_pad.cstickX = cstickX;
+	devices[chan].gcn_pad.cstickY = cstickY;
+	devices[chan].gcn_pad.ltrig = ltrig;
+	devices[chan].gcn_pad.rtrig = rtrig;
 }
 
 static void siCallback(void) {
@@ -403,8 +491,14 @@ static void siCallback(void) {
 
 	/* Probe inputs */
 	for (i = 0; i < 4; i++) {
-		if (deviceTypes[i] == SI_DEVICE_TYPE_GCN_CONTROLLER)
-			probePad(i);
+		switch (devices[i].type) {
+		case SI_DEVICE_TYPE_GCN_CONTROLLER: {
+			probeGCNPad(i);
+			break;
+		}
+		default:
+			break;
+		}
 	}
 }
 
@@ -423,7 +517,7 @@ static void siInit(void) {
 		break;
 	}
 	default:
-		break;
+		assert_unreachable();
 	}
 
 	/* register our callback */
@@ -432,22 +526,25 @@ static void siInit(void) {
 	/*
 	 * Reset and sanitize everything
 	 */
-	regs->chan[0].outbuf = 0;
-	regs->chan[1].outbuf = 0;
-	regs->chan[2].outbuf = 0;
-	regs->chan[3].outbuf = 0;
+	for (i = 0; i < 4; i++)
+		regs->chan[i].outbuf = 0;
 	regs->poll = 0;
-	regs->sr = 0;
 	/* ack everything that's W1C and clear the rest */
+	regs->sr = SI_SR_NOREP(0) | SI_SR_COLL(0) | SI_SR_OVRUN(0) | SI_SR_UNRUN(0) |
+		   SI_SR_NOREP(1) | SI_SR_COLL(1) | SI_SR_OVRUN(1) | SI_SR_UNRUN(1) |
+		   SI_SR_NOREP(2) | SI_SR_COLL(2) | SI_SR_OVRUN(2) | SI_SR_UNRUN(2) |
+		   SI_SR_NOREP(3) | SI_SR_COLL(3) | SI_SR_OVRUN(3) | SI_SR_UNRUN(3);
 	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 	/* clear the I/O buffer */
 	for (i = 0; i < 0x20; i++)
 		regs->buf[i] = 0;
 	/* drain input buffers */
-	drainInBuf(0);
-	drainInBuf(1);
-	drainInBuf(2);
-	drainInBuf(3);
+	drainAllInBuf();
+
+	/* cleanup device state */
+	memset(devices, 0, sizeof(devices));
+	for (i = 0; i < 4; i++)
+		devices[i].type = SI_DEVICE_TYPE_NONE;
 
 	/* initial check which controllers are connected */
 	checkConnected();
