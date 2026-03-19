@@ -260,6 +260,7 @@ void UI_Switch(struct menu *m) {
 	selected = 0;
 	hasChanged = true;
 	logLineIdx = 0;
+	curFooterLines = 0;
 	memset(logLines, 0, sizeof(logLines));
 
 	if (curMenu && curMenu->cleanup)
