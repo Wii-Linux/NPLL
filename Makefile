@@ -80,6 +80,7 @@ SOURCE  += allocator.c timer.c panic.c init.c drivers.c output.c main.c menu.c s
 SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c
 SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdmmc.c drivers/si.c
 SOURCE  += drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c
+SOURCE  += block.c partition.c fs.c
 SOURCE  += armboot_bin.c
 
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))

@@ -4,6 +4,7 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#include <npll/block.h>
 #include <npll/irq.h>
 #include <npll/types.h>
 #include <npll/regs.h>
@@ -107,6 +108,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	IRQ_Init();
 	IRQ_Enable();
 	M_Init();
+	B_Init();
 	D_Init();
 	UI_Init();
 	_log_puts("Driver initialization done, entering mainLoop");

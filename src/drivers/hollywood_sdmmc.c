@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <npll/allocator.h>
+#include <npll/block.h>
 #include <npll/cache.h>
 #include <npll/drivers/mmc.h>
 #include <npll/drivers/sdio.h>
@@ -21,6 +22,89 @@
 static REGISTER_DRIVER(sdmmcDrv);
 static sdio_host_dev_t sdioDev;
 static mmc_card_t mmcDev = NULL;
+static struct blockDevice sdmmcBdev;
+static bool sdmmcRegistered = false;
+
+static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
+	unsigned long startBlock;
+	int nblocks;
+	long ret;
+	u32 blkSize = bdev->blockSize;
+
+	/* must be block-aligned */
+	if (off % blkSize || len % blkSize)
+		return -1;
+
+	/* dma addr must (?) be 32B aligned */
+	if ((u32)dest & 0x1f)
+		return -2;
+
+	startBlock = (unsigned long)(off / blkSize);
+	nblocks = (int)(len / blkSize);
+
+	dcache_flush(dest, len);
+	ret = mmc_block_read(mmcDev, startBlock, nblocks, dest,
+			     (uintptr_t)virtToPhys(dest), NULL, NULL);
+	dcache_invalidate(dest, len);
+
+	return ret;
+}
+
+static ssize_t sdmmcWrite(struct blockDevice *bdev, const void *src, size_t len, u64 off) {
+	unsigned long startBlock;
+	int nblocks;
+	long ret;
+	u32 blkSize = bdev->blockSize;
+
+	/* must be block-aligned */
+	if (off % blkSize || len % blkSize)
+		return -1;
+
+	/* dma addr must (?) be 32B aligned */
+	if ((u32)src & 0x1f)
+		return -2;
+
+	startBlock = (unsigned long)(off / blkSize);
+	nblocks = (int)(len / blkSize);
+
+	dcache_flush((void *)src, len);
+	ret = mmc_block_write(mmcDev, startBlock, nblocks, src,
+			      (uintptr_t)virtToPhys(src), NULL, NULL);
+
+	return ret;
+}
+
+static void sdmmcRegisterBlock(void) {
+	long long capacity;
+
+	if (sdmmcRegistered)
+		return;
+
+	capacity = mmc_card_capacity(mmcDev);
+	if (capacity <= 0) {
+		log_puts("failed to get card capacity");
+		return;
+	}
+
+	memset(&sdmmcBdev, 0, sizeof(sdmmcBdev));
+	sdmmcBdev.name = "sdhci0"; /* FIXME: also work for Wii U eMMC, which is on (iirc) sdhci3 */
+	sdmmcBdev.size = (u64)capacity;
+	sdmmcBdev.blockSize = (u32)mmc_block_size(mmcDev);
+	sdmmcBdev.drvData = mmcDev;
+	sdmmcBdev.read = sdmmcRead;
+	sdmmcBdev.write = sdmmcWrite;
+
+	B_Register(&sdmmcBdev);
+	sdmmcRegistered = true;
+}
+
+static void sdmmcUnregisterBlock(void) {
+	if (!sdmmcRegistered)
+		return;
+
+	B_Unregister(&sdmmcBdev);
+	sdmmcRegistered = false;
+}
 
 static void sdmmcCB(void) {
 	u32 pstate;
@@ -41,6 +125,7 @@ static void sdmmcCB(void) {
 
 		log_puts("card init success in CB");
 		sdmmcDrv.state = DRIVER_STATE_READY;
+		sdmmcRegisterBlock();
 	}
 	else {
 		/* check for card removed */
@@ -49,18 +134,16 @@ static void sdmmcCB(void) {
 			return; /* nothing */
 
 		log_puts("card removed!");
+		sdmmcUnregisterBlock();
 		sdmmcDrv.state = DRIVER_STATE_NO_HARDWARE;
-		/* FIXME: notify the MMC driver somehow? */
 		free(mmcDev);
 	}
 }
 
 static void sdmmcInit(void) {
 	u32 pstate;
-	u8 *tmp;
 	int ret;
 
-	//IRQ_RegisterHandler(IRQDEV_SDHCI0, sdmmcIRQ);
 	D_AddCallback(sdmmcCB);
 
 	/* initialize the controller */
@@ -95,18 +178,11 @@ static void sdmmcInit(void) {
 	}
 
 	sdmmcDrv.state = DRIVER_STATE_READY;
-
-	tmp = M_PoolAlloc(POOL_MEM2, 512, 32 /* FIXME: is this actually right?  need to double check SD Spec Part A2 */);
-	memset(tmp, 0, 512);
-	dcache_flush(tmp, 512);
-	ret = mmc_block_read(mmcDev, 0, 1, tmp, (uintptr_t)virtToPhys(tmp), NULL, NULL);
-	dcache_invalidate(tmp, 512);
-	log_printf("mmc_block_read ret: %d, last bytes: %2x %2x\r\n", ret, tmp[510], tmp[511]);
-	free(tmp);
-
+	sdmmcRegisterBlock();
 }
 
 static void sdmmcCleanup(void) {
+	sdmmcUnregisterBlock();
 	sdio_reset(&sdioDev);
 }
 

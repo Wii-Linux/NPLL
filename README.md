@@ -60,6 +60,7 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 - `E`   - PowerPC Exception handling
 - `ELF` - ELF binary handling
 - `UI`  - Menu UI
+- `P`   - Block device partition management
 
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
@@ -69,5 +70,3 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 "Linux®" is the registered trademark of Linus Torvalds in the U.S. and other countries.  
 
 All code unless otherwise stated is Copyright (C) 2025 Techflash and NPLL contributors.  See the relevant file for additional copyright information.
-
-
