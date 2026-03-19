@@ -150,7 +150,7 @@
 #define WTMK_LVL_WR_WML_SHF     16        //Write Watermark Level
 #define WTMK_LVL_RD_WML_SHF     0         //Read  Watermark Level
 
-#define SDHC_DELAY 10000
+#define SDHC_DELAY 100
 static inline void writel(u32 v, volatile void *a) {
 	udelay(SDHC_DELAY);
 	sync(); barrier();
