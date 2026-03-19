@@ -287,6 +287,10 @@ static void checkConnected(void) {
 
 			if (regs->comcsr & SI_COMCSR_COMERR) {
 				sr = regs->sr;
+				/* Latte always reports collision, even when there was none; ignore it */
+				if (H_ConsoleType == CONSOLE_TYPE_WII_U)
+					sr &= ~SI_SR_COLL(i);
+
 				/*
 				 * NOREP ocurrs every time to try to talk to an empty port,
 				 * so don't log the condition unless we have some other error.
