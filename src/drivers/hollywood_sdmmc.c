@@ -4,9 +4,13 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#include "npll/utils.h"
 #define MODULE "hollywood_sdmmc"
 
 #include <stdlib.h>
+#include <string.h>
+#include <npll/allocator.h>
+#include <npll/cache.h>
 #include <npll/drivers/mmc.h>
 #include <npll/drivers/sdio.h>
 #include <npll/drivers.h>
@@ -53,6 +57,7 @@ static void sdmmcCB(void) {
 
 static void sdmmcInit(void) {
 	u32 pstate;
+	u8 *tmp;
 	int ret;
 
 	//IRQ_RegisterHandler(IRQDEV_SDHCI0, sdmmcIRQ);
@@ -90,6 +95,15 @@ static void sdmmcInit(void) {
 	}
 
 	sdmmcDrv.state = DRIVER_STATE_READY;
+
+	tmp = M_PoolAlloc(POOL_MEM2, 512, 32 /* FIXME: is this actually right?  need to double check SD Spec Part A2 */);
+	memset(tmp, 0, 512);
+	dcache_flush(tmp, 512);
+	ret = mmc_block_read(mmcDev, 0, 1, tmp, (uintptr_t)virtToPhys(tmp), NULL, NULL);
+	dcache_invalidate(tmp, 512);
+	log_printf("mmc_block_read ret: %d, last bytes: %2x %2x\r\n", ret, tmp[510], tmp[511]);
+	free(tmp);
+
 }
 
 static void sdmmcCleanup(void) {
