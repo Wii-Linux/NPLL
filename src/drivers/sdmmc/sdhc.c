@@ -675,6 +675,7 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	int ret;
+	u64 tb = mftb();
 
 	/* Initialise callbacks */
 	cmd->complete = 0;
@@ -698,6 +699,10 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		/* Wait for completion */
 		while (!cmd->complete) {
 			sdhc_handle_irq(sdio, 0);
+			if (T_HasElapsed(tb, 500 * 1000)) {
+				ZF_LOGE("timeout waiting for command completion");
+				return -1;
+			}
 		}
 		/* Return result */
 		if (cmd->complete < 0) {
