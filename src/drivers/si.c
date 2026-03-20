@@ -79,12 +79,13 @@ struct si_regs {
 
 /* https://github.com/dolphin-emu/dolphin/blob/de44626d23a85aa3cc07260f6f97e64f36600652/Source/Core/Core/HW/SI/SI_Device.h#L51 */
 /* only including the ones that might actually be used */
-#define JOYBUS_CMD_STATUS 0x00u
-#define JOYBUS_CMD_READ_GBA 0x14u
-#define JOYBUS_CMD_WRITE_GBA 0x15u
-#define JOYBUS_CMD_DIRECT 0x40u
-#define JOYBUS_CMD_DIRECT_KB 0x54u
-#define JOYBUS_CMD_RESET 0xffu
+#define JOYBUS_CMD_STATUS 0x00
+#define JOYBUS_CMD_DIRECT_N64 0x01
+#define JOYBUS_CMD_READ_GBA 0x14
+#define JOYBUS_CMD_WRITE_GBA 0x15
+#define JOYBUS_CMD_DIRECT_GCN 0x40
+#define JOYBUS_CMD_DIRECT_GCN_KB 0x54
+#define JOYBUS_CMD_RESET 0xff
 
 /* https://www.gc-forever.com/yagcd/chap5.html#sec5.8 */
 #define SI_MKOUTBUF(cmd, output0, output1) (((u8)((cmd) & 0xffu) << 16) | ((u8)((output0) & 0xff) << 8) | (u8)((output1) & 0xff))
@@ -164,6 +165,38 @@ enum si_device_type {
 #define GCN_TRIGGER_MIN_THRESH 32
 #define GCN_TRIGGER_MAX_THRESH 224
 
+/* N64 controller direct report */
+#define N64_CONTROLLER_DIRECT_STICK_Y_SHIFT   0
+#define N64_CONTROLLER_DIRECT_STICK_Y         (0xffu << N64_CONTROLLER_DIRECT_STICK_Y_SHIFT)
+#define N64_CONTROLLER_DIRECT_STICK_X_SHIFT   8
+#define N64_CONTROLLER_DIRECT_STICK_X         (0xffu << N64_CONTROLLER_DIRECT_STICK_X_SHIFT)
+#define N64_CONTROLLER_DIRECT_C_RIGHT         BIT(16)
+#define N64_CONTROLLER_DIRECT_C_LEFT          BIT(17)
+#define N64_CONTROLLER_DIRECT_C_DOWN          BIT(18)
+#define N64_CONTROLLER_DIRECT_C_UP            BIT(19)
+#define N64_CONTROLLER_DIRECT_R_TRIG_DIG      BIT(20)
+#define N64_CONTROLLER_DIRECT_L_TRIG_DIG      BIT(21)
+#define N64_CONTROLLER_DIRECT_UNUSED          BIT(22)
+#define N64_CONTROLLER_DIRECT_RESET           BIT(23)
+#define N64_CONTROLLER_DIRECT_DPAD_RIGHT      BIT(24)
+#define N64_CONTROLLER_DIRECT_DPAD_LEFT       BIT(25)
+#define N64_CONTROLLER_DIRECT_DPAD_DOWN       BIT(26)
+#define N64_CONTROLLER_DIRECT_DPAD_UP         BIT(27)
+#define N64_CONTROLLER_DIRECT_START           BIT(28)
+#define N64_CONTROLLER_DIRECT_Z               BIT(29)
+#define N64_CONTROLLER_DIRECT_B               BIT(30)
+#define N64_CONTROLLER_DIRECT_A               BIT(31)
+
+/*
+ * N64 Controller analog treshholds
+ */
+#define N64_STICK_CENTER 128
+#define N64_STICK_DEADZONE 64
+#define N64_STICK_MIN_THRESH 32
+#define N64_STICK_MAX_THRES 224
+#define N64_TRIGGER_MIN_THRESH 32
+#define N64_TRIGGER_MAX_THRESH 224
+
 struct gcn_pad_state {
 	u16 buttons;
 	u8 lstickX;
@@ -174,16 +207,21 @@ struct gcn_pad_state {
 	u8 rtrig;
 };
 
+struct n64_pad_state {
+	u16 buttons;
+	u8 stickX;
+	u8 stickY;
+};
+
 struct si_device_state {
 	u16 id;
 	enum si_device_type type;
 	union {
 		struct gcn_pad_state gcn_pad;
+		struct n64_pad_state n64_pad;
 		#if 0 /* for whenever I actually implement these */
 		struct gcn_kbd_state gcn_kbd;
-		struct n64_pad_state n64_pad;
 		struct n64_kbd_state n64_kbd;
-		struct n64_mouse_state n64_mouse;
 		struct gba_state gba;
 		#endif
 	};
@@ -193,6 +231,45 @@ static volatile struct si_regs *regs;
 static REGISTER_DRIVER(siDrv);
 static u64 lastConnectedCheck;
 static struct si_device_state devices[4];
+
+enum si_comerr_res {
+	COMERR_NONE,
+	COMERR_NOREP,
+	COMERR_ERR
+};
+static enum si_comerr_res siHandleCOMERR(uint ch) {
+	u32 sr;
+	if (regs->comcsr & SI_COMCSR_COMERR) {
+		sr = regs->sr;
+		/* Latte always reports collision, even when there was none; ignore it */
+		if (H_ConsoleType == CONSOLE_TYPE_WII_U)
+			sr &= ~SI_SR_COLL(ch);
+
+		/*
+		 * NOREP ocurrs every time to try to talk to an empty port,
+		 * so don't log the condition unless we have some other error.
+		 */
+		if ((sr & SI_SR_COLL(ch)) || (sr & SI_SR_OVRUN(ch)) || (sr & SI_SR_UNRUN(ch))) {
+			log_printf("transfer error: [%c] No Response; [%c] Collision; [%c] OverRun; [%c] UnderRun\r\n",
+				(sr & SI_SR_NOREP(ch)) ? 'x' : ' ',
+				(sr & SI_SR_COLL(ch)) ? 'x' : ' ',
+				(sr & SI_SR_OVRUN(ch)) ? 'x' : ' ',
+				(sr & SI_SR_UNRUN(ch)) ? 'x' : ' ');
+
+			/* ack all errors and carry on */
+			regs->sr = SI_SR_NOREP(ch) | SI_SR_COLL(ch) | SI_SR_OVRUN(ch) | SI_SR_UNRUN(ch);
+			return COMERR_ERR;
+		}
+		else {
+			/* ack all errors and carry on */
+			regs->sr = SI_SR_NOREP(ch) | SI_SR_COLL(ch) | SI_SR_OVRUN(ch) | SI_SR_UNRUN(ch);
+
+			return COMERR_NOREP;
+		}
+
+	}
+	return COMERR_NONE;
+}
 
 static const char *siTypeToStr(enum si_device_type type) {
 	switch (type) {
@@ -225,11 +302,12 @@ static void drainAllInBuf(void) {
 
 static void checkConnected(void) {
 	u64 startTB;
-	u32 resp, poll, sr;
+	u32 resp, poll;
 	u16 id;
 	u8 status;
 	int i, j, tries;
 	enum si_device_type type;
+	enum si_comerr_res comerr;
 
 	regs->poll = 0;
 	regs->sr = SI_SR_WR; /* flush all buffers */
@@ -259,9 +337,7 @@ static void checkConnected(void) {
 				regs->buf[j] = 0;
 
 			/* prepare to ask for status */
-			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_STATUS, 0x00, 0x00);
-			regs->sr = SI_SR_WR; /* write all buffers */
-			while (regs->sr & SI_SR_WR);
+			regs->buf[0] = SI_MKOUTBUF(JOYBUS_CMD_STATUS, 0x00, 0x00);;
 
 			/* actually do the transfer */
 			regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((u8)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
@@ -278,48 +354,25 @@ static void checkConnected(void) {
 					 * anymore...
 					 *
 					 * Not worth retrying immediately, it'll certainly just fail again.
-					 * Need to at least give it until the next check to try again.
-					 * TODO: Maybe even give up trying alltogether if it just keeps failing
+					 *  Need to at least give it until the next check to try again.
+					 * TODO: Maybe even give up trying altogether if it just keeps failing
 					 */
 					return;
 				}
 			}
 
-			if (regs->comcsr & SI_COMCSR_COMERR) {
-				sr = regs->sr;
-				/* Latte always reports collision, even when there was none; ignore it */
-				if (H_ConsoleType == CONSOLE_TYPE_WII_U)
-					sr &= ~SI_SR_COLL(i);
-
+			comerr = siHandleCOMERR(i);
+			if (comerr == COMERR_NOREP) {
 				/*
-				 * NOREP ocurrs every time to try to talk to an empty port,
-				 * so don't log the condition unless we have some other error.
+				 * Either getting an empty ID or NOREP means the device disconnected,
+				 * so try to handle them in the same path
 				 */
-				if ((sr & SI_SR_COLL(i)) || (sr & SI_SR_OVRUN(i)) || (sr & SI_SR_UNRUN(i))) {
-					log_printf("error probing: [%c] No Response; [%c] Collision; [%c] OverRun; [%c] UnderRun\r\n",
-						(sr & SI_SR_NOREP(i)) ? 'x' : ' ',
-						(sr & SI_SR_COLL(i)) ? 'x' : ' ',
-						(sr & SI_SR_OVRUN(i)) ? 'x' : ' ',
-						(sr & SI_SR_UNRUN(i)) ? 'x' : ' ');
-
-					/* ack all errors and carry on */
-					regs->sr = SI_SR_NOREP(i) | SI_SR_COLL(i) | SI_SR_OVRUN(i) | SI_SR_UNRUN(i);
-					goto fail;
-				}
-				else {
-					/* ack all errors and carry on */
-					regs->sr = SI_SR_NOREP(i) | SI_SR_COLL(i) | SI_SR_OVRUN(i) | SI_SR_UNRUN(i);
-
-					/*
-					 * Either getting an empty ID or NOREP means the device disconnected,
-					 * so try to handle them in the same path
-					 */
-					type = SI_DEVICE_TYPE_NONE;
-					id = 0xffff;
-					goto gotType;
-				}
+				type = SI_DEVICE_TYPE_NONE;
+				id = 0xffff;
+				goto gotType;
 			}
-
+			else if (comerr == COMERR_ERR)
+				goto fail;
 
 			/* read response and extract out useful info */
 			resp = regs->buf[0];
@@ -328,8 +381,8 @@ static void checkConnected(void) {
 			 * YAGCD calls this out for having the current rumble motor state, but I'm sure it has more...
 			 * TODO: investigate what's in here, and see if there's any reason to care
 			 */
-			status = (u8)(resp >> 8);
-			(void)status;
+			status = resp >> 8;
+			/*(void)status;*/
 			devices[i].id = id;
 
 			/*
@@ -391,6 +444,7 @@ static void checkConnected(void) {
 			}
 			else if (devices[i].type == SI_DEVICE_TYPE_NONE && type != SI_DEVICE_TYPE_NONE) {
 				log_printf("Device connected to Port %d: %s\r\n", i + 1, siTypeToStr(type));
+				log_printf("Controller Status: 0x%02x\r\n", status);
 				goto out;
 			}
 
@@ -407,6 +461,8 @@ static void checkConnected(void) {
 
 	/*
 	 * Set up polling for all GCN controllers, don't send anything to other devices (yet)
+	 * For N64 controllers, we can't possibly use hardware polling, since it has a fixed
+	 * transfer size which is incompatible with N64 controllers.  So, those are handled separately.
 	 * TODO: figure out how to get input from the other devices?
 	 */
 	poll = SI_MKPOLL(0, 0, 1, 7);
@@ -417,8 +473,8 @@ static void checkConnected(void) {
 			 * YAGCD, Linux, and ppcskel/Gumboot all use it, so it must be
 			 * important, but I can't find what it actually _means_.
 			 */
-			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-			poll |= BIT(SI_POLL_EN_SHIFT + (3 - i));
+			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT_GCN, 0x03, 0x00);
+			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
 		}
 	}
 
@@ -488,6 +544,91 @@ static void probeGCNPad(int chan) {
 	devices[chan].gcn_pad.rtrig = rtrig;
 }
 
+static void probeN64Pad(int chan) {
+	u64 startTB;
+	u32 inbuf, prevButtons, buttons, pressed;
+	u8 stickX, stickY, prevStickX, prevStickY;
+	int i;
+
+	/*
+	 * Sanitize hardware state.  If we don't do this, probing devices on
+	 * sequential ports (e.g. 1 and 2, 2 and 3, 3 and 4) fails for the second
+	 * device.
+	 */
+
+	/* ack everything that's W1C */
+	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
+
+	/* drain input buffer */
+	drainInBuf(chan);
+
+	/* clear I/O buffer */
+	for (i = 0; i < 0x20; i++)
+		regs->buf[i] = 0;
+
+	/* prepare to ask for data */
+	regs->buf[0] = (((u32)JOYBUS_CMD_DIRECT_N64) << 24); /* N64 controllers only take 1 byte */
+
+	/* actually do the transfer */
+	regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (4u << SI_COMCSR_INLEN_SHIFT) | ((u8)chan << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+
+	/* wait for transfer complete */
+	startTB = mftb();
+	while (!(regs->comcsr & SI_COMCSR_TCINT)) {
+		if (T_HasElapsed(startTB, 100 * 1000)) {
+			log_puts("SI transfer is taking way too long, giving up");
+			/* probably also breaks input until next check */
+			return;
+		}
+	}
+
+	siHandleCOMERR(chan);
+
+	inbuf = regs->buf[0];
+	prevButtons = devices[chan].n64_pad.buttons << 16;
+	prevStickX = devices[chan].n64_pad.stickX;
+	prevStickY = devices[chan].n64_pad.stickY;
+
+	/* unpack report */
+	buttons = inbuf & 0xffff0000; /* ingore stick */
+	stickX = (inbuf & N64_CONTROLLER_DIRECT_STICK_X) >> N64_CONTROLLER_DIRECT_STICK_X_SHIFT;
+	stickY = (inbuf & N64_CONTROLLER_DIRECT_STICK_Y) >> N64_CONTROLLER_DIRECT_STICK_Y_SHIFT;
+
+	/* determine state transitions of buttons */
+	pressed = buttons & ~prevButtons;
+	#if 0 /*same as above, if/when needed */
+	held = buttons & prevButtons;
+	released = prevButtons & ~buttons;
+	idle = ~(buttons | prevButtons);
+	#endif
+
+	/* TODO: repeat if held for a certain amount of time */
+	if (pressed & N64_CONTROLLER_DIRECT_A)
+		IN_NewEvent(INPUT_EV_SELECT);
+	if (pressed & N64_CONTROLLER_DIRECT_DPAD_UP)
+		IN_NewEvent(INPUT_EV_UP);
+	if (pressed & N64_CONTROLLER_DIRECT_DPAD_DOWN)
+		IN_NewEvent(INPUT_EV_DOWN);
+	if (pressed & N64_CONTROLLER_DIRECT_DPAD_LEFT)
+		IN_NewEvent(INPUT_EV_LEFT);
+	if (pressed & N64_CONTROLLER_DIRECT_DPAD_RIGHT)
+		IN_NewEvent(INPUT_EV_RIGHT);
+
+	if (stickY > N64_STICK_CENTER + GCN_STICK_DEADZONE && prevStickY < N64_STICK_CENTER + GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_UP);
+	else if (stickY < N64_STICK_CENTER - GCN_STICK_DEADZONE && prevStickY > N64_STICK_CENTER - GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_DOWN);
+	if (stickX > N64_STICK_CENTER + GCN_STICK_DEADZONE && prevStickX < N64_STICK_CENTER + GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_RIGHT);
+	else if (stickX < N64_STICK_CENTER - GCN_STICK_DEADZONE && prevStickX > N64_STICK_CENTER - GCN_STICK_DEADZONE)
+		IN_NewEvent(INPUT_EV_LEFT);
+
+	/* save state for next time */
+	devices[chan].n64_pad.buttons = (u16)(buttons >> 16);
+	devices[chan].n64_pad.stickX = stickX;
+	devices[chan].n64_pad.stickY = stickY;
+}
+
 static void siCallback(void) {
 	int i;
 
@@ -500,8 +641,13 @@ static void siCallback(void) {
 	/* Probe inputs */
 	for (i = 0; i < 4; i++) {
 		switch (devices[i].type) {
+		case SI_DEVICE_TYPE_N64_MOUSE:
 		case SI_DEVICE_TYPE_GCN_CONTROLLER: {
 			probeGCNPad(i);
+			break;
+		}
+		case SI_DEVICE_TYPE_N64_CONTROLLER: {
+			probeN64Pad(i);
 			break;
 		}
 		default:
