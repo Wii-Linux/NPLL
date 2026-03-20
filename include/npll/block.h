@@ -11,7 +11,7 @@
 #include <npll/types.h>
 
 #define MAX_BDEV 16
-#define MAX_PARTITIONS 4
+#define MAX_PARTITIONS 32
 
 struct blockDevice {
 	/* name of the block device */
@@ -32,7 +32,7 @@ struct blockDevice {
 
 	/* partitions on this device */
 	int numPartitions;
-	struct partition partitions[MAX_PARTITIONS];
+	struct partition *partitions[MAX_PARTITIONS];
 };
 
 /* registered block devices */
