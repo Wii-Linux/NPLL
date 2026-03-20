@@ -136,5 +136,7 @@ static inline bool addrIsValidPhys(void *_addr) {
 
 #define ALIGN(x) __attribute__((aligned(x)))
 #define BIT(nr) (1 << (nr))
+#define VISIBLE __attribute__((visibility("default")))
+#define HIDDEN __attribute__((visibility("hidden")))
 
 #endif /* _UTILS_H */
