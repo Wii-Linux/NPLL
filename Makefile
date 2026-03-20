@@ -18,6 +18,7 @@ $(warning WARNING: Unable to autodetect PowerPC cross-toolchain, Using host CC=$
 else
 CC := $(CROSS_PREFIX)gcc
 AR := $(CROSS_PREFIX)ar
+OBJCOPY := $(CROSS_PREFIX)objcopy
 endif
 endif
 
@@ -55,6 +56,7 @@ endif
 export WIIDEV
 export ARM_TOOLCHAIN_PREFIX
 
+OBJCOPY ?= objcopy
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
 $(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools, will skip building DOL)
@@ -81,10 +83,12 @@ SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c 
 SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdmmc.c drivers/si.c
 SOURCE  += drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c
 SOURCE  += block.c partition.c fs.c
-SOURCE  += fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c
+FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c
 SOURCE  += armboot_bin.c
 
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
+FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
+FAT_LIB := build/libfat.a
 OUT_ELF := bin/npll.elf
 OUT_DOL := bin/npll.dol
 
@@ -100,10 +104,20 @@ $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
 	$(HIDE)$(ELF2DOL) $< $@
 
-$(OUT_ELF): $(OBJ)
+$(OUT_ELF): $(OBJ) $(FAT_LIB)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(FAT_LIB): $(FAT_OBJ)
+	$(info $s  AR $@)
+	$(HIDE)$(AR) rcs $@ $^
+
+build/fs/fat/%.o: src/fs/fat/%.c
+	$(info $s  CC $<)
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -fvisibility=hidden -o $@ -c $<
+	$(HIDE)$(OBJCOPY) --localize-hidden $@
 
 build/%.o: src/%.c
 	$(info $s  CC $<)
