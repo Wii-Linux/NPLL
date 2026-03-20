@@ -80,12 +80,12 @@ ssize_t FS_Read(int fd, void *dest, size_t len) {
 	return FS_Mounted->read(FS_Mounted, fd, dest, len);
 }
 
-size_t FS_Seek(int fd, ssize_t off, int whence) {
+ssize_t FS_Seek(int fd, ssize_t off) {
 	assert_msg(initialized, "fs: FS_Seek w/o FS_Init");
 	assert_msg(FS_Mounted, "fs: FS_Seek with no mounted filesystem");
 	assert_msg(FS_Mounted->seek, "fs: filesystem has no seek op");
 
-	return FS_Mounted->seek(FS_Mounted, fd, off, whence);
+	return FS_Mounted->seek(FS_Mounted, fd, off);
 }
 
 void FS_Close(int fd) {

@@ -49,11 +49,10 @@ struct filesystem {
 	ssize_t (*read)(struct filesystem *fs, int fd, void *dest, size_t len);
 
 	/*
-	 * Seek within an open file.
-	 * whence: 0 = SEEK_SET, 1 = SEEK_CUR, 2 = SEEK_END
+	 * Seek to an exact position within an open file.
 	 * Returns the new position, or (size_t)-1 on error.
 	 */
-	size_t (*seek)(struct filesystem *fs, int fd, ssize_t off, int whence);
+	ssize_t (*seek)(struct filesystem *fs, int fd, ssize_t off);
 
 	/* Close an open file descriptor. */
 	void (*close)(struct filesystem *fs, int fd);
@@ -81,7 +80,7 @@ extern int FS_Open(const char *path);
 extern ssize_t FS_Read(int fd, void *dest, size_t len);
 
 /* seek within an open file */
-extern size_t FS_Seek(int fd, ssize_t off, int whence);
+extern ssize_t FS_Seek(int fd, ssize_t off);
 
 /* close an open file */
 extern void FS_Close(int fd);
