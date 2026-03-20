@@ -11,8 +11,10 @@
 
 extern int ELF_CheckValid(const void *data);
 extern int ELF_LoadMem(const void *data);
+extern int ELF_LoadFile(int fd);
 
 #define ELF_ERR_WRONG_MAGIC -1
 #define ELF_ERR_INVALID_EXEC -2
+#define ELF_ERR_FS_ERROR -3
 
 #endif /* _ELF_H */
