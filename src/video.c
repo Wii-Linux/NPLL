@@ -44,9 +44,9 @@ extern u8 font[];
 static struct outputDevice videoOutDev;
 
 static char odevName[MAX_NAME];
-static int posX = 0, posY = 0;
+static uint posX = 0, posY = 0;
 static bool isInEscape = false;
-static int escapeLen = 0;
+static uint escapeLen = 0;
 static char escapeBuf[8];
 
 /* stolen from the VGA color palette */
@@ -65,14 +65,14 @@ static int colorIdx[2];
 static u32 color[2];
 static void odevWriteChar(char c);
 
-static char *parsenum(const char *s, int *num) {
+static char *parsenum(const char *s, uint *num) {
 	char *end;
 	*num = strtol(s, &end, 10);
 	return end;
 }
 
 static void handleEscape(char c) {
-	int num, mode, i, tmp, val;
+	uint num, mode, i, tmp, val;
 	char *s, *end;
 
 	/* Sanity checking for bogus ESC sequences: */
@@ -290,7 +290,7 @@ static void maybeScroll(void) {
 		return;
 
 	posY = videoOutDev.rows - 1;
-	int fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
+	uint fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
 	u8 *srcAddr = (((u8 *)V_FbPtr) + fontSz);
 	int size = ((V_FbWidth * 4) * V_FbHeight) - fontSz;
 	memmove(V_FbPtr, srcAddr, size);
@@ -301,7 +301,8 @@ static void maybeScroll(void) {
 
 static void odevWriteChar(char c) {
 	u8 *row, dat;
-	int x, y;
+	u32 pix;
+	uint x, y, spc, off;
 
 	/* handle ANSI escape code */
 	if (isInEscape) {
@@ -326,7 +327,6 @@ static void odevWriteChar(char c) {
 		return;
 	}
 	case '\t': {
-		int spc;
 		/* round up to nearest 8th char */
 		spc = 8 - ((posX + 8) % 8);
 		while (spc) {
@@ -355,8 +355,7 @@ static void odevWriteChar(char c) {
 	for (y = 0; y < FONT_HEIGHT; y++) {
 		dat = *row;
 		for (x = 0; x < FONT_WIDTH; x++) {
-			u32 pix;
-			int off = (V_FbWidth * FONT_HEIGHT * posY) + /* v offset in buf */
+			off = (V_FbWidth * FONT_HEIGHT * posY) + /* v offset in buf */
 				  (V_FbWidth * y) + /* v offset within char */
 				  (FONT_WIDTH * posX) + /* h offset in buf */
 				  x; /* h offset within char */
