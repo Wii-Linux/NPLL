@@ -37,8 +37,8 @@ struct mini_state {
 	struct infohdr *infohdr;                      /* MINI infohdr */
 	u16 out_head;                                 /* Out head */
 	u16 in_tail;                                  /* In tail */
-	int in_size;                                  /* In queue size */
-	int out_size;                                 /* Out queue size */
+	u32 in_size;                                  /* In queue size */
+	u32 out_size;                                 /* Out queue size */
 	volatile struct ipc_request_mini *in_queue;   /* In queue pointer */
 	volatile struct ipc_request_mini *out_queue;  /* Out queue pointer */
 	u32 cur_tag;                                  /* Current request number ("tag") */
@@ -90,8 +90,8 @@ void MINI_Init(void) {
 
 	/* read in_tail and out_head from IPC hardware registers */
 	ppcmsg = HW_IPC_PPCMSG;
-	state.in_tail = ppcmsg & 0xffff;
-	state.out_head = ppcmsg >> 16;
+	state.in_tail = (u16)(ppcmsg & 0xffff);
+	state.out_head = (u16)(ppcmsg >> 16);
 
 	state.cur_tag = 1;
 
@@ -147,7 +147,7 @@ static int inqueue_full(void) {
 	return peek_inhead() == ((state.in_tail + 1) & (state.in_size - 1));
 }
 
-int MINI_IPCVpost(u32 code, u32 tag, int num_args, va_list args) {
+int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	int i = 0, arg = 0;
 	assert(initialized);
 
@@ -184,15 +184,17 @@ int MINI_IPCVpost(u32 code, u32 tag, int num_args, va_list args) {
 	return 0;
 }
 
-int MINI_IPCPost(u32 code, u32 tag, int num_args, ...) {
+int MINI_IPCPost(u32 code, u32 tag, uint num_args, ...) {
 	va_list args;
 	int ret;
 	assert(initialized);
 
-	if (num_args > 0)
+	if (num_args > 0) {
 		va_start(args, num_args);
-
-	ret = MINI_IPCVpost(code, tag, num_args, args);
+		ret = MINI_IPCVpost(code, tag, num_args, args);
+	}
+	else
+		ret = MINI_IPCVpost(code, tag, num_args, NULL);
 
 	if (num_args > 0)
 		va_end(args);
@@ -201,8 +203,8 @@ int MINI_IPCPost(u32 code, u32 tag, int num_args, ...) {
 }
 
 /* TODO: IRQs? */
-int MINI_IPCRecv(struct ipc_request_mini *req, int max_attempts) {
-	int i = 0;
+int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
+	uint i = 0;
 	assert(initialized);
 
 	while (peek_outtail() == state.out_head) {
@@ -235,7 +237,7 @@ int MINI_IPCRecv(struct ipc_request_mini *req, int max_attempts) {
 	return 0;
 }
 
-int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, int max_recv_attempts, int max_attempts) {
+int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts) {
 	int error = 0;
 	assert(initialized);
 
@@ -258,7 +260,7 @@ int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, int max_
 }
 
 
-int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, int max_recv_attempts, int max_attempts, int num_args, ...) {
+int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...) {
 	va_list args;
 	int error = 0;
 
