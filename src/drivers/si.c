@@ -418,7 +418,7 @@ static void checkConnected(void) {
 			 * important, but I can't find what it actually _means_.
 			 */
 			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
+			poll |= BIT(SI_POLL_EN_SHIFT + (3 - i));
 		}
 	}
 
