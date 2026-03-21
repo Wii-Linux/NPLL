@@ -308,9 +308,9 @@ static int mmc_voltage_validation(mmc_card_t card)
     voltage = MMC_VDD_29_30 | MMC_VDD_30_31;
     if (host_is_voltage_compatible(card, 3300) && (card->ocr & voltage)) {
         /* Voltage compatible */
-        voltage |= (1 << 30);
-        voltage |= (1 << 25);
-        voltage |= (1 << 24);
+        voltage |= BIT(30);
+        voltage |= BIT(25);
+        voltage |= BIT(24);
     }
 
     /* Wait until the voltage level is set. */
@@ -331,7 +331,7 @@ static int mmc_voltage_validation(mmc_card_t card)
     card->ocr = cmd.response[0];
 
     /* Check CCS bit */
-    if (card->ocr & (1 << 30)) {
+    if (card->ocr & BIT(30)) {
         card->high_capacity = 1;
     } else {
         card->high_capacity = 0;
