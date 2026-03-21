@@ -1,7 +1,7 @@
 /*
  * NPLL - Flipper/Hollywood/Latte Hardware - EXI
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Derived in part from the Linux spi-exi driver:
  * Copyright (C) 2025 Techflash
@@ -50,27 +50,27 @@ static volatile struct exi_regs *regs;
  * Hardware register values, masks, and shifts
  */
 #define EXI_CSR_CLK_SHIFT    4
-#define EXI_CSR_CLK          (7 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_64MHZ    (6 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_32MHZ    (5 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_16MHZ    (4 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_8MHZ     (3 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_4MHZ     (2 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_2MHZ     (1 << EXI_CSR_CLK_SHIFT)
-#define   EXI_CSR_CLK_1MHZ     (0 << EXI_CSR_CLK_SHIFT)
+#define EXI_CSR_CLK          (7u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_64MHZ    (6u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_32MHZ    (5u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_16MHZ    (4u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_8MHZ     (3u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_4MHZ     (2u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_2MHZ     (1u << EXI_CSR_CLK_SHIFT)
+#define   EXI_CSR_CLK_1MHZ     (0u << EXI_CSR_CLK_SHIFT)
 #define EXI_CSR_CS_SHIFT     7
-#define EXI_CSR_CS           (7 << EXI_CSR_CS_SHIFT)
-#define EXI_CSR_EXT          (1 << 12)
+#define EXI_CSR_CS           (7u << EXI_CSR_CS_SHIFT)
+#define EXI_CSR_EXT          BIT(12)
 
-#define EXI_CR_TSTART        (1 << 0)
-#define EXI_CR_DMA           (1 << 1)
+#define EXI_CR_TSTART        BIT(0)
+#define EXI_CR_DMA           BIT(1)
 #define EXI_CR_RW_SHIFT      2
-#define EXI_CR_RW            (3 << EXI_CR_RW_SHIFT)
-#define   EXI_CR_RW_RD         (0 << EXI_CR_RW_SHIFT)
-#define   EXI_CR_RW_WR         (1 << EXI_CR_RW_SHIFT)
-#define   EXI_CR_RW_RDWR       (2 << EXI_CR_RW_SHIFT)
+#define EXI_CR_RW            (3u << EXI_CR_RW_SHIFT)
+#define   EXI_CR_RW_RD         (0u << EXI_CR_RW_SHIFT)
+#define   EXI_CR_RW_WR         (1u << EXI_CR_RW_SHIFT)
+#define   EXI_CR_RW_RDWR       (2u << EXI_CR_RW_SHIFT)
 #define EXI_CR_TLEN_SHIFT    4
-#define EXI_CR_TLEN          (3 << EXI_CR_TLEN_SHIFT)
+#define EXI_CR_TLEN          (3u << EXI_CR_TLEN_SHIFT)
 
 /*
  * Convert MHz speed to EXI speed index
@@ -251,7 +251,7 @@ static void exiInit(void) {
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
 		regs = (struct exi_regs *)0xcd806800;
-		HW_AIPROT |= (1 << 0);
+		HW_AIPROT |= BIT(0);
 		break;
 	}
 	default:
