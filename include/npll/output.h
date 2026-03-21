@@ -15,8 +15,8 @@ typedef void (*outputCallback_t)(void);
 struct outputDevice {
 	char *name;
 	bool ansiEscSupport;
-	int rows;
-	int columns;
+	uint rows;
+	uint columns;
 	struct driver *driver;
 
 	void (*writeChar)(const char c);
