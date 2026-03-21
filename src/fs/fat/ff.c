@@ -55,9 +55,9 @@
 
 
 /* Additional file access control and file status flags for internal use */
-#define FA_SEEKEND	0x20	/* Seek to end of the file on file open */
-#define FA_MODIFIED	0x40	/* File has been modified */
-#define FA_DIRTY	0x80	/* FIL.buf[] needs to be written-back */
+#define FA_SEEKEND	0x20u	/* Seek to end of the file on file open */
+#define FA_MODIFIED	0x40u	/* File has been modified */
+#define FA_DIRTY	0x80u	/* FIL.buf[] needs to be written-back */
 
 
 /* Additional file attribute bits for internal use */
@@ -69,23 +69,23 @@
 
 /* Name status flags in fn[11] */
 #define NSFLAG		11		/* Index of the name status byte */
-#define NS_LOSS		0x01	/* Out of 8.3 format */
-#define NS_LFN		0x02	/* Force to create LFN entry */
-#define NS_LAST		0x04	/* Last segment */
-#define NS_BODY		0x08	/* Lower case flag (body) */
-#define NS_EXT		0x10	/* Lower case flag (ext) */
-#define NS_DOT		0x20	/* Dot entry */
-#define NS_NOLFN	0x40	/* Do not find LFN */
-#define NS_NONAME	0x80	/* Not followed */
+#define NS_LOSS		0x01u	/* Out of 8.3 format */
+#define NS_LFN		0x02u	/* Force to create LFN entry */
+#define NS_LAST		0x04u	/* Last segment */
+#define NS_BODY		0x08u	/* Lower case flag (body) */
+#define NS_EXT		0x10u	/* Lower case flag (ext) */
+#define NS_DOT		0x20u	/* Dot entry */
+#define NS_NOLFN	0x40u	/* Do not find LFN */
+#define NS_NONAME	0x80u	/* Not followed */
 
 
 /* exFAT directory entry types */
-#define	ET_BITMAP	0x81	/* Allocation bitmap */
-#define	ET_UPCASE	0x82	/* Up-case table */
-#define	ET_VLABEL	0x83	/* Volume label */
-#define	ET_FILEDIR	0x85	/* File and directory */
-#define	ET_STREAM	0xC0	/* Stream extension */
-#define	ET_FILENAME	0xC1	/* Name extension */
+#define	ET_BITMAP	0x81u	/* Allocation bitmap */
+#define	ET_UPCASE	0x82u	/* Up-case table */
+#define	ET_VLABEL	0x83u	/* Volume label */
+#define	ET_FILEDIR	0x85u	/* File and directory */
+#define	ET_STREAM	0xC0u	/* Stream extension */
+#define	ET_FILENAME	0xC1u	/* Name extension */
 
 
 /* FatFs refers the FAT structures as simple byte array instead of structure member
@@ -7246,4 +7246,3 @@ FRESULT f_setcp (
 	return FR_OK;
 }
 #endif	/* FF_CODE_PAGE == 0 */
-
