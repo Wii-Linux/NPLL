@@ -118,11 +118,6 @@ $(FAT_COMBINED): $(FAT_OBJ)
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
 
-build/fs/fat/%.o: src/fs/fat/%.c
-	$(info $s  CC $<)
-	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -o $@ -c $<
-
 build/%.o: src/%.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
