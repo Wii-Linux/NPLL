@@ -33,62 +33,62 @@ struct si_regs {
 
 /* https://www.gc-forever.com/yagcd/chap5.html#sec5.8 */
 /* COMCSR bits */
-#define SI_COMCSR_TSTART         (1 << 0)
+#define SI_COMCSR_TSTART         BIT(0)
 #define SI_COMCSR_CHAN_SHIFT     1
-#define SI_COMCSR_CHAN           (3 << SI_COMCSR_CHAN_SHIFT)
-#define SI_COMCSR_CALLBACK_EN    (1 << 6)
-#define SI_COMCSR_CMD_EN         (1 << 7)
+#define SI_COMCSR_CHAN           (3u << SI_COMCSR_CHAN_SHIFT)
+#define SI_COMCSR_CALLBACK_EN    BIT(6)
+#define SI_COMCSR_CMD_EN         BIT(7)
 #define SI_COMCSR_INLEN_SHIFT    8
-#define SI_COMCSR_INLEN          (127 << SI_COMCSR_INLEN_SHIFT)
+#define SI_COMCSR_INLEN          (127u << SI_COMCSR_INLEN_SHIFT)
 #define SI_COMCSR_OUTLEN_SHIFT   16
-#define SI_COMCSR_OUTLEN         (127 << SI_COMCSR_OUTLEN_SHIFT)
-#define SI_COMCSR_CHAN_EN        (1 << 24)
+#define SI_COMCSR_OUTLEN         (127u << SI_COMCSR_OUTLEN_SHIFT)
+#define SI_COMCSR_CHAN_EN        BIT(24)
 #define SI_COMCSR_CHAN_NUM_SHIFT 25
-#define SI_COMCSR_CHAN_NUM       (3 << SI_COMCSR_CHAN_NUM_SHIFT)
-#define SI_COMCSR_RDSTINTMSK     (1 << 27)
-#define SI_COMCSR_RDSTINT        (1 << 28)
-#define SI_COMCSR_COMERR         (1 << 29)
-#define SI_COMCSR_TCINTMSK       (1 << 30)
-#define SI_COMCSR_TCINT          (1 << 31)
+#define SI_COMCSR_CHAN_NUM       (3u << SI_COMCSR_CHAN_NUM_SHIFT)
+#define SI_COMCSR_RDSTINTMSK     BIT(27)
+#define SI_COMCSR_RDSTINT        BIT(28)
+#define SI_COMCSR_COMERR         BIT(29)
+#define SI_COMCSR_TCINTMSK       BIT(30)
+#define SI_COMCSR_TCINT          BIT(31)
 
 /* POLL bits */
 #define SI_POLL_VBCPY_SHIFT      0
-#define SI_POLL_VBCPY3           (1 << 0)
-#define SI_POLL_VBCPY2           (1 << 1)
-#define SI_POLL_VBCPY1           (1 << 2)
-#define SI_POLL_VBCPY0           (1 << 3)
+#define SI_POLL_VBCPY3           BIT(0)
+#define SI_POLL_VBCPY2           BIT(1)
+#define SI_POLL_VBCPY1           BIT(2)
+#define SI_POLL_VBCPY0           BIT(3)
 #define SI_POLL_EN_SHIFT         4
-#define SI_POLL_EN3              (1 << 4)
-#define SI_POLL_EN2              (1 << 5)
-#define SI_POLL_EN1              (1 << 6)
-#define SI_POLL_EN0              (1 << 7)
+#define SI_POLL_EN3              BIT(4)
+#define SI_POLL_EN2              BIT(5)
+#define SI_POLL_EN1              BIT(6)
+#define SI_POLL_EN0              BIT(7)
 #define SI_POLL_Y_SHIFT          8
-#define SI_POLL_Y                (0xff << SI_POLL_Y_SHIFT)
+#define SI_POLL_Y                (0xffu << SI_POLL_Y_SHIFT)
 #define SI_POLL_X_SHIFT          16
-#define SI_POLL_X                (0x3ff << SI_POLL_X_SHIFT)
+#define SI_POLL_X                (0x3ffu << SI_POLL_X_SHIFT)
 
 /* SR bits */
-#define SI_SR_WR                 (1 << 31)
-#define SI_SR_RDST(n)            (1 << (5 + ((3-n) * 8)))
-#define SI_SR_WRST(n)            (1 << (4 + ((3-n) * 8)))
-#define SI_SR_NOREP(n)           (1 << (3 + ((3-n) * 8)))
-#define SI_SR_COLL(n)            (1 << (2 + ((3-n) * 8)))
-#define SI_SR_OVRUN(n)           (1 << (1 + ((3-n) * 8)))
-#define SI_SR_UNRUN(n)           (1 << ((3-n) * 8))
+#define SI_SR_WR                 BIT(31)
+#define SI_SR_RDST(n)            BIT((5 + ((3-n) * 8)))
+#define SI_SR_WRST(n)            BIT((4 + ((3-n) * 8)))
+#define SI_SR_NOREP(n)           BIT((3 + ((3-n) * 8)))
+#define SI_SR_COLL(n)            BIT((2 + ((3-n) * 8)))
+#define SI_SR_OVRUN(n)           BIT((1 + ((3-n) * 8)))
+#define SI_SR_UNRUN(n)           BIT(((3-n) * 8))
 
 
 /* https://github.com/dolphin-emu/dolphin/blob/de44626d23a85aa3cc07260f6f97e64f36600652/Source/Core/Core/HW/SI/SI_Device.h#L51 */
 /* only including the ones that might actually be used */
-#define JOYBUS_CMD_STATUS 0x00
-#define JOYBUS_CMD_READ_GBA 0x14
-#define JOYBUS_CMD_WRITE_GBA 0x15
-#define JOYBUS_CMD_DIRECT 0x40
-#define JOYBUS_CMD_DIRECT_KB 0x54
-#define JOYBUS_CMD_RESET 0xff
+#define JOYBUS_CMD_STATUS 0x00u
+#define JOYBUS_CMD_READ_GBA 0x14u
+#define JOYBUS_CMD_WRITE_GBA 0x15u
+#define JOYBUS_CMD_DIRECT 0x40u
+#define JOYBUS_CMD_DIRECT_KB 0x54u
+#define JOYBUS_CMD_RESET 0xffu
 
 /* https://www.gc-forever.com/yagcd/chap5.html#sec5.8 */
-#define SI_MKOUTBUF(cmd, output0, output1) ((((cmd) & 0xff) << 16) | (((output0) & 0xff) << 8) | ((output1) & 0xff))
-#define SI_MKPOLL(vbcpy, en, y, x) ((((vbcpy) & 0b1111) << SI_POLL_VBCPY_SHIFT) | (((en) & 0b1111) << SI_POLL_EN_SHIFT) | (((y) & 0xff) << SI_POLL_Y_SHIFT) | (((x) & 0x3ff) << SI_POLL_X_SHIFT))
+#define SI_MKOUTBUF(cmd, output0, output1) (((u8)((cmd) & 0xffu) << 16) | ((u8)((output0) & 0xff) << 8) | (u8)((output1) & 0xff))
+#define SI_MKPOLL(vbcpy, en, y, x) ((((u8)(vbcpy) & 0b1111u) << SI_POLL_VBCPY_SHIFT) | (((u8)(en) & 0b1111) << SI_POLL_EN_SHIFT) | (((u8)(y) & 0xff) << SI_POLL_Y_SHIFT) | (((u16)(x) & 0x3ff) << SI_POLL_X_SHIFT))
 
 
 /*
@@ -96,18 +96,18 @@ struct si_regs {
  * https://github.com/dolphin-emu/dolphin/blob/de44626d23a85aa3cc07260f6f97e64f36600652/Source/Core/Core/HW/SI/SI_Device.h#L35
  */
 enum si_device_id {
-	SI_DEVICE_ID_N64_MIC = 0x0001,
-	SI_DEVICE_ID_N64_KBD = 0x0002,
-	SI_DEVICE_ID_GBA = 0x0004,
-	SI_DEVICE_ID_N64_MOUSE = 0x0200,
-	SI_DEVICE_ID_N64_CONTROLLER = 0x0500,
-	SI_DEVICE_ID_GBA_2 = 0x0800,
-	SI_DEVICE_ID_GCN_KBD = 0x0820,
-	SI_DEVICE_ID_STANDARD = 0x0900,
-	SI_DEVICE_ID_WAVEBIRD_1 = 0xa800,
-	SI_DEVICE_ID_WAVEBIRD_2 = 0xe960,
-	SI_DEVICE_ID_WAVEBIRD_3 = 0xe9a0,
-	SI_DEVICE_ID_WAVEBIRD_4 = 0xebb0
+	SI_DEVICE_ID_N64_MIC = 0x0001u,
+	SI_DEVICE_ID_N64_KBD = 0x0002u,
+	SI_DEVICE_ID_GBA = 0x0004u,
+	SI_DEVICE_ID_N64_MOUSE = 0x0200u,
+	SI_DEVICE_ID_N64_CONTROLLER = 0x0500u,
+	SI_DEVICE_ID_GBA_2 = 0x0800u,
+	SI_DEVICE_ID_GCN_KBD = 0x0820u,
+	SI_DEVICE_ID_STANDARD = 0x0900u,
+	SI_DEVICE_ID_WAVEBIRD_1 = 0xa800u,
+	SI_DEVICE_ID_WAVEBIRD_2 = 0xe960u,
+	SI_DEVICE_ID_WAVEBIRD_3 = 0xe9a0u,
+	SI_DEVICE_ID_WAVEBIRD_4 = 0xebb0u
 };
 
 enum si_device_type {
@@ -126,33 +126,33 @@ enum si_device_type {
 /* https://www.gc-forever.com/yagcd/chap9.html#sec9.2.2 */
 /* 1st word */
 #define GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT  0
-#define GCN_CONTROLLER_DIRECT_LSTICK_Y        (0xff << GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT)
+#define GCN_CONTROLLER_DIRECT_LSTICK_Y        (0xffu << GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT)
 #define GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT  8
-#define GCN_CONTROLLER_DIRECT_LSTICK_X        (0xff << GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT)
-#define GCN_CONTROLLER_DIRECT_DPAD_LEFT       (1 << 16)
-#define GCN_CONTROLLER_DIRECT_DPAD_RIGHT      (1 << 17)
-#define GCN_CONTROLLER_DIRECT_DPAD_DOWN       (1 << 18)
-#define GCN_CONTROLLER_DIRECT_DPAD_UP         (1 << 19)
-#define GCN_CONTROLLER_DIRECT_Z               (1 << 20)
-#define GCN_CONTROLLER_DIRECT_R_TRIG_DIG      (1 << 21)
-#define GCN_CONTROLLER_DIRECT_L_TRIG_DIG      (1 << 22)
-#define GCN_CONTROLLER_DIRECT_A               (1 << 24)
-#define GCN_CONTROLLER_DIRECT_B               (1 << 25)
-#define GCN_CONTROLLER_DIRECT_X               (1 << 26)
-#define GCN_CONTROLLER_DIRECT_Y               (1 << 27)
-#define GCN_CONTROLLER_DIRECT_START           (1 << 28)
-#define GCN_CONTROLLER_DIRECT_ERRLATCH        (1 << 30)
-#define GCN_CONTROLLER_DIRECT_ERRSTAT         (1 << 31)
+#define GCN_CONTROLLER_DIRECT_LSTICK_X        (0xffu << GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT)
+#define GCN_CONTROLLER_DIRECT_DPAD_LEFT       BIT(16)
+#define GCN_CONTROLLER_DIRECT_DPAD_RIGHT      BIT(17)
+#define GCN_CONTROLLER_DIRECT_DPAD_DOWN       BIT(18)
+#define GCN_CONTROLLER_DIRECT_DPAD_UP         BIT(19)
+#define GCN_CONTROLLER_DIRECT_Z               BIT(20)
+#define GCN_CONTROLLER_DIRECT_R_TRIG_DIG      BIT(21)
+#define GCN_CONTROLLER_DIRECT_L_TRIG_DIG      BIT(22)
+#define GCN_CONTROLLER_DIRECT_A               BIT(24)
+#define GCN_CONTROLLER_DIRECT_B               BIT(25)
+#define GCN_CONTROLLER_DIRECT_X               BIT(26)
+#define GCN_CONTROLLER_DIRECT_Y               BIT(27)
+#define GCN_CONTROLLER_DIRECT_START           BIT(28)
+#define GCN_CONTROLLER_DIRECT_ERRLATCH        BIT(30)
+#define GCN_CONTROLLER_DIRECT_ERRSTAT         BIT(31)
 
 /* 2nd word */
 #define GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT 0
-#define GCN_CONTROLLER_DIRECT_R_TRIG_AN       (0xff << GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT)
+#define GCN_CONTROLLER_DIRECT_R_TRIG_AN       (0xffu << GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT)
 #define GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT 8
-#define GCN_CONTROLLER_DIRECT_L_TRIG_AN       (0xff << GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT)
+#define GCN_CONTROLLER_DIRECT_L_TRIG_AN       (0xffu << GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT)
 #define GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT  16
-#define GCN_CONTROLLER_DIRECT_CSTICK_Y        (0xff << GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT)
+#define GCN_CONTROLLER_DIRECT_CSTICK_Y        (0xffu << GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT)
 #define GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT  24
-#define GCN_CONTROLLER_DIRECT_CSTICK_X        (0xff << GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT)
+#define GCN_CONTROLLER_DIRECT_CSTICK_X        (0xffu << GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT)
 
 /*
  * GCN Controller analog treshholds
@@ -264,7 +264,7 @@ static void checkConnected(void) {
 			while (regs->sr & SI_SR_WR);
 
 			/* actually do the transfer */
-			regs->comcsr = (1 << SI_COMCSR_OUTLEN_SHIFT) | (3 << SI_COMCSR_INLEN_SHIFT) | (i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+			regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((u8)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 			/* wait for transfer complete */
 			startTB = mftb();
@@ -323,12 +323,12 @@ static void checkConnected(void) {
 
 			/* read response and extract out useful info */
 			resp = regs->buf[0];
-			id = resp >> 16;
+			id = (u16)(resp >> 16);
 			/*
 			 * YAGCD calls this out for having the current rumble motor state, but I'm sure it has more...
 			 * TODO: investigate what's in here, and see if there's any reason to care
 			 */
-			status = resp >> 8;
+			status = (u8)(resp >> 8);
 			(void)status;
 			devices[i].id = id;
 
@@ -418,7 +418,7 @@ static void checkConnected(void) {
 			 * important, but I can't find what it actually _means_.
 			 */
 			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT, 0x03, 0x00);
-			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
+			poll |= BIT(SI_POLL_EN_SHIFT + (3 - i));
 		}
 	}
 
@@ -442,12 +442,12 @@ static void probeGCNPad(int chan) {
 
 	/* unpack report */
 	buttons = inbufh & 0xffff0000; /* ignore lstick */
-	lstickX = (inbufh & GCN_CONTROLLER_DIRECT_LSTICK_X) >> GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT;
-	lstickY = (inbufh & GCN_CONTROLLER_DIRECT_LSTICK_Y) >> GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT;
-	cstickX = (inbufl & GCN_CONTROLLER_DIRECT_CSTICK_X) >> GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT;
-	cstickY = (inbufl & GCN_CONTROLLER_DIRECT_CSTICK_Y) >> GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT;
-	ltrig = (inbufl & GCN_CONTROLLER_DIRECT_L_TRIG_AN) >> GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT;
-	rtrig = (inbufl & GCN_CONTROLLER_DIRECT_R_TRIG_AN) >> GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT;
+	lstickX = (u8)((inbufh & GCN_CONTROLLER_DIRECT_LSTICK_X) >> GCN_CONTROLLER_DIRECT_LSTICK_X_SHIFT);
+	lstickY = (u8)((inbufh & GCN_CONTROLLER_DIRECT_LSTICK_Y) >> GCN_CONTROLLER_DIRECT_LSTICK_Y_SHIFT);
+	cstickX = (u8)((inbufl & GCN_CONTROLLER_DIRECT_CSTICK_X) >> GCN_CONTROLLER_DIRECT_CSTICK_X_SHIFT);
+	cstickY = (u8)((inbufl & GCN_CONTROLLER_DIRECT_CSTICK_Y) >> GCN_CONTROLLER_DIRECT_CSTICK_Y_SHIFT);
+	ltrig = (u8)((inbufl & GCN_CONTROLLER_DIRECT_L_TRIG_AN) >> GCN_CONTROLLER_DIRECT_L_TRIG_AN_SHIFT);
+	rtrig = (u8)((inbufl & GCN_CONTROLLER_DIRECT_R_TRIG_AN) >> GCN_CONTROLLER_DIRECT_R_TRIG_AN_SHIFT);
 
 	/* determine state transitions of buttons */
 	pressed = buttons & ~prevButtons;
