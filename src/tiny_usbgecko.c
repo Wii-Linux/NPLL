@@ -4,7 +4,7 @@
  * A cut down static version of drivers/usbgecko.c, for suitability
  * as an H_PlatOps debug console.
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Derived in part from the Linux USB Gecko udbg driver:
  * Copyright (C) 2008-2009 The GameCube Linux Team
@@ -19,17 +19,17 @@
 #define UG_SLOTB 1
 
 /* EXI defines since we can't use the standard EXI headers */
-#define EXI_CLK_32MHZ           5
+#define EXI_CLK_32MHZ           5u
 
-#define   EXI_CSR_CLKMASK       (0x7<<4)
-#define     EXI_CSR_CLK_32MHZ   (EXI_CLK_32MHZ<<4)
-#define   EXI_CSR_CSMASK        (0x7<<7)
-#define     EXI_CSR_CS_0        (0x1<<7)  /* Chip Select 001 */
+#define   EXI_CSR_CLKMASK       (0x7u << 4)
+#define     EXI_CSR_CLK_32MHZ   (EXI_CLK_32MHZ << 4)
+#define   EXI_CSR_CSMASK        (0x7u << 7)
+#define     EXI_CSR_CS_0        (0x1u << 7)  /* Chip Select 001 */
 
-#define   EXI_CR_TSTART         (1<<0)
-#define   EXI_CR_WRITE		(1<<2)
-#define   EXI_CR_RW             (2<<2)
-#define   EXI_CR_TLEN(len)      (((len)-1)<<4)
+#define   EXI_CR_TSTART         (1u << 0)
+#define   EXI_CR_WRITE		(1u << 2)
+#define   EXI_CR_RW             (2u << 2)
+#define   EXI_CR_TLEN(len)      (((u8)(len) - 1) << 4)
 
 static int slot = -1;
 static vu32 *exi_regs;
@@ -71,7 +71,7 @@ static void tinyUGWriteChar(const char c) {
 		/* spin */
 	}
 
-	tinyUGTransaction(0xb0000000 | (c << 20), slot);
+	tinyUGTransaction(0xb0000000 | ((u8)c << 20), slot);
 }
 
 static void tinyUGWriteStr(const char *str) {
@@ -94,7 +94,7 @@ void H_TinyUGInit(void) {
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
 		exi_regs = (vu32 *)0xcd806800;
-		HW_AIPROT |= (1 << 0);
+		HW_AIPROT |= BIT(0);
 		break;
 	}
 	default:
