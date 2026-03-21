@@ -7,6 +7,7 @@
 #ifndef _FS_H
 #define _FS_H
 
+#include "npll/partition.h"
 #include <npll/block.h>
 #include <npll/types.h>
 
@@ -25,6 +26,12 @@ struct filesystem {
 	void *drvData;
 
 	/*
+	 * Probe for this filesystem on this partition.
+	 * Returns true if this partitions contains the given filesystem.
+	 */
+	bool (*probe)(struct filesystem *fs, struct partition *part);
+
+	/*
 	 * Mount this filesystem on the given partition.
 	 * Should allocate any internal state and store it in drvData.
 	 * Returns 0 on success.
@@ -38,7 +45,7 @@ struct filesystem {
 
 	/*
 	 * Open a file by path.  Returns a file descriptor (>= 0) on success,
-	 * negative on error.
+	 * negative errno on error.
 	 */
 	int (*open)(struct filesystem *fs, const char *path);
 
@@ -84,5 +91,8 @@ extern ssize_t FS_Seek(int fd, ssize_t off);
 
 /* close an open file */
 extern void FS_Close(int fd);
+
+/* probe a partition and return the filesystem that it matches, or NULL if unknown / unsupported */
+extern struct filesystem *FS_Probe(struct partition *part);
 
 #endif /* _FS_H */

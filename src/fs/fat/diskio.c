@@ -18,7 +18,7 @@
 #include <npll/block.h>
 #include <npll/partition.h>
 
-static struct partition *partitions[FF_VOLUMES] = { NULL };
+struct partition *partitions[FF_VOLUMES] = { NULL };
 const char *VolumeStr[FF_VOLUMES] = { NULL };
 
 /*-----------------------------------------------------------------------*/

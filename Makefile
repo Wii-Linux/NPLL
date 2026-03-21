@@ -17,6 +17,7 @@ ifeq ($(CROSS_PREFIX),)
 $(warning WARNING: Unable to autodetect PowerPC cross-toolchain, Using host CC=$(CC) AR=$(AR), you can set the PowerPC cross-toolchain prefix with CROSS_PREFIX)
 else
 CC := $(CROSS_PREFIX)gcc
+LD := $(CROSS_PREFIX)ld
 AR := $(CROSS_PREFIX)ar
 OBJCOPY := $(CROSS_PREFIX)objcopy
 endif
@@ -56,6 +57,7 @@ endif
 export WIIDEV
 export ARM_TOOLCHAIN_PREFIX
 
+LD ?= ld
 OBJCOPY ?= objcopy
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
@@ -83,12 +85,13 @@ SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c 
 SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdmmc.c drivers/si.c
 SOURCE  += drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c
 SOURCE  += block.c partition.c fs.c
-FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c
+FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
+FAT_EXPORTS := FS_FAT FS_exFAT
 SOURCE  += armboot_bin.c
 
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
 FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
-FAT_LIB := build/libfat.a
+FAT_COMBINED := build/fs/fat/fat.o
 OUT_ELF := bin/npll.elf
 OUT_DOL := bin/npll.dol
 
@@ -104,20 +107,21 @@ $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
 	$(HIDE)$(ELF2DOL) $< $@
 
-$(OUT_ELF): $(OBJ) $(FAT_LIB)
+$(OUT_ELF): $(OBJ) $(FAT_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-$(FAT_LIB): $(FAT_OBJ)
-	$(info $s  AR $@)
-	$(HIDE)$(AR) rcs $@ $^
+$(FAT_COMBINED): $(FAT_OBJ)
+	$(info $s  LD(r) $@)
+	$(HIDE)$(LD) -r -o $@ $^
+	$(info $s  OBJCOPY $@)
+	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
 
 build/fs/fat/%.o: src/fs/fat/%.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -fvisibility=hidden -o $@ -c $<
-	$(HIDE)$(OBJCOPY) --localize-hidden $@
+	$(HIDE)$(CC) $(CFLAGS) -o $@ -c $<
 
 build/%.o: src/%.c
 	$(info $s  CC $<)

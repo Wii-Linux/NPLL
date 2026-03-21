@@ -4,17 +4,24 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/partition.h"
 #define MODULE "fs"
 
 #include <assert.h>
 #include <npll/fs.h>
 #include <npll/log.h>
 #include <npll/types.h>
+#include "fs/fat/glue.h"
 
 struct filesystem *FS_Mounted = NULL;
 struct partition *FS_MountedPartition = NULL;
-
 static bool initialized = false;
+
+static struct filesystem *filesystems[] = {
+	&FS_FAT,
+	&FS_exFAT
+};
+
 
 void FS_Init(void) {
 	if (initialized)
@@ -94,4 +101,19 @@ void FS_Close(int fd) {
 	assert_msg(FS_Mounted->close, "fs: filesystem has no close op");
 
 	FS_Mounted->close(FS_Mounted, fd);
+}
+
+struct filesystem *FS_Probe(struct partition *part) {
+	int i;
+	assert_msg(initialized, "fs: FS_Probe w/o FS_Init");
+
+	for (i = 0; i < (int)(sizeof(filesystems) / sizeof(struct filesystem *)); i++) {
+		assert_msg(filesystems[i], "fs: FS_Probe hit null filesystem ptr in `filesystems`");
+		assert_msg(filesystems[i]->probe, "fs: filesystem has no probe op");
+
+		if (filesystems[i]->probe(filesystems[i], part) > 0)
+			return filesystems[i];
+	}
+
+	return NULL;
 }

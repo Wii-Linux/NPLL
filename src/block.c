@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/fs.h"
 #define MODULE "block"
 
 #include <assert.h>
@@ -43,6 +44,8 @@ void B_Init(void) {
 
 void B_Register(struct blockDevice *bdev) {
 	bool irqs;
+	int i, ret;
+	struct filesystem *fs;
 
 	assert_msg(initialized, "block: B_Register w/o B_Init");
 	assert_msg(B_NumDevices < MAX_BDEV, "block: B_Devices overflow");
@@ -58,6 +61,17 @@ void B_Register(struct blockDevice *bdev) {
 
 	log_printf("registered %s (%llu bytes, %d partition(s))\r\n",
 		   bdev->name, bdev->size, bdev->numPartitions);
+
+	/* now probe all of its partitions for filesystems */
+	for (i = 0; i < bdev->numPartitions; i++) {
+		fs = FS_Probe(bdev->partitions[i]);
+		if (!fs)
+			continue;
+
+		ret = FS_Mount(fs, bdev->partitions[i]);
+		if (ret)
+			log_printf("FS_Mount failed on %s part %d: %d\r\n", bdev->name, i, ret);
+	}
 }
 
 void B_Unregister(const struct blockDevice *bdev) {

@@ -4,19 +4,20 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include <npll/block.h>
-#include <npll/irq.h>
-#include <npll/types.h>
-#include <npll/regs.h>
-#include <npll/console.h>
-#include <npll/init.h>
-#include <npll/drivers.h>
-#include <npll/output.h>
-#include <npll/exceptions.h>
-#include <npll/menu.h>
 #include <npll/allocator.h>
-#include <npll/utils.h>
+#include <npll/block.h>
+#include <npll/console.h>
+#include <npll/drivers.h>
+#include <npll/exceptions.h>
+#include <npll/fs.h>
+#include <npll/init.h>
+#include <npll/irq.h>
 #include <npll/log_internal.h>
+#include <npll/menu.h>
+#include <npll/output.h>
+#include <npll/regs.h>
+#include <npll/types.h>
+#include <npll/utils.h>
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
 struct platOps *H_PlatOps = NULL;
@@ -109,6 +110,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	IRQ_Enable();
 	M_Init();
 	B_Init();
+	FS_Init();
 	D_Init();
 	UI_Init();
 	_log_puts("Driver initialization done, entering mainLoop");
