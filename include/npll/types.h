@@ -9,6 +9,8 @@
 
 #include <stdbool.h>
 
+typedef unsigned int        uint;
+
 typedef unsigned char       u8;
 typedef volatile u8         vu8;
 typedef char                i8;
