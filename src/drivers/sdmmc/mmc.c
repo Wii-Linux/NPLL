@@ -99,20 +99,20 @@ static int mmc_decode_csd(mmc_card_t mmc_card, struct csd *csd)
 #define CSD_BITS(start, size) \
     slice_bits(mmc_card->raw_csd, start, size)
 
-    csd->structure = CSD_BITS(126, 2);
+    csd->structure = (u8)CSD_BITS(126, 2);
 
     if (csd->structure == CSD_VERSION_1) {
         ZF_LOGD("CSD Version 1.0");
         csd->c_size      = CSD_BITS(62, 12);
-        csd->c_size_mult = CSD_BITS(47,  3);
-        csd->read_bl_len = CSD_BITS(80,  4);
-        csd->tran_speed  = CSD_BITS(96,  8);
+        csd->c_size_mult = (u8)CSD_BITS(47,  3);
+        csd->read_bl_len = (u8)CSD_BITS(80,  4);
+        csd->tran_speed  = (u8)CSD_BITS(96,  8);
     } else if (csd->structure == CSD_VERSION_2_AND_3) {
         ZF_LOGD("CSD Version 2.0");
         csd->c_size      = CSD_BITS(48, 22);
         csd->c_size_mult = 0;
-        csd->read_bl_len = CSD_BITS(80,  4);
-        csd->tran_speed  = CSD_BITS(96,  8);
+        csd->read_bl_len = (u8)CSD_BITS(80,  4);
+        csd->tran_speed  = (u8)CSD_BITS(96,  8);
     } else {
         ZF_LOGE("Unknown CSD version!");
         return -1;
@@ -308,9 +308,9 @@ static int mmc_voltage_validation(mmc_card_t card)
     voltage = MMC_VDD_29_30 | MMC_VDD_30_31;
     if (host_is_voltage_compatible(card, 3300) && (card->ocr & voltage)) {
         /* Voltage compatible */
-        voltage |= (1 << 30);
-        voltage |= (1 << 25);
-        voltage |= (1 << 24);
+        voltage |= BIT(30);
+        voltage |= BIT(25);
+        voltage |= BIT(24);
     }
 
     /* Wait until the voltage level is set. */
@@ -331,7 +331,7 @@ static int mmc_voltage_validation(mmc_card_t card)
     card->ocr = cmd.response[0];
 
     /* Check CCS bit */
-    if (card->ocr & (1 << 30)) {
+    if (card->ocr & BIT(30)) {
         card->high_capacity = 1;
     } else {
         card->high_capacity = 0;
@@ -430,7 +430,7 @@ static
 long transfer_data(
     mmc_card_t mmc_card,
     unsigned long start,
-    int nblocks,
+    unsigned int nblocks,
     void *vbuf,
     uintptr_t pbuf,
     mmc_cb cb,
@@ -438,7 +438,7 @@ long transfer_data(
     u32 command)
 {
     struct mmc_cmd *cmd;
-    const int block_size = mmc_block_size(mmc_card);
+    const size_t block_size = mmc_block_size(mmc_card);
 
     /* Determine command argument */
     const u32 arg = (mmc_card->high_capacity)

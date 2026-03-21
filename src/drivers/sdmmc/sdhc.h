@@ -20,7 +20,7 @@ struct sdhc {
     /* Transaction queue */
     struct mmc_cmd *cmd_list_head;
     struct mmc_cmd **cmd_list_tail;
-    int blocks_remaining;
+    unsigned int blocks_remaining;
 };
 typedef struct sdhc *sdhc_dev_t;
 

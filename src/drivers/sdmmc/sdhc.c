@@ -62,20 +62,20 @@
 
 /* Block Attributes Register */
 #define BLK_ATT_BLKCNT_SHF      16        //Blocks Count For Current Transfer
-#define BLK_ATT_BLKCNT_MASK     0xFFFF    //Blocks Count For Current Transfer
+#define BLK_ATT_BLKCNT_MASK     0xFFFFu   //Blocks Count For Current Transfer
 #define BLK_ATT_BLKSIZE_SHF     0         //Transfer Block Size
-#define BLK_ATT_BLKSIZE_MASK    0xFFF     //Transfer Block Size
+#define BLK_ATT_BLKSIZE_MASK    0xFFFu    //Transfer Block Size
 
 /* Command Transfer Type Register */
 #define CMD_XFR_TYP_CMDINX_SHF  24        //Command Index
-#define CMD_XFR_TYP_CMDINX_MASK 0x3F      //Command Index
+#define CMD_XFR_TYP_CMDINX_MASK 0x3Fu     //Command Index
 #define CMD_XFR_TYP_CMDTYP_SHF  22        //Command Type
-#define CMD_XFR_TYP_CMDTYP_MASK 0x3       //Command Type
-#define CMD_XFR_TYP_DPSEL       (1 << 21) //Data Present Select
-#define CMD_XFR_TYP_CICEN       (1 << 20) //Command Index Check Enable
-#define CMD_XFR_TYP_CCCEN       (1 << 19) //Command CRC Check Enable
+#define CMD_XFR_TYP_CMDTYP_MASK 0x3u      //Command Type
+#define CMD_XFR_TYP_DPSEL       BIT(21)   //Data Present Select
+#define CMD_XFR_TYP_CICEN       BIT(20)   //Command Index Check Enable
+#define CMD_XFR_TYP_CCCEN       BIT(19)   //Command CRC Check Enable
 #define CMD_XFR_TYP_RSPTYP_SHF  16        //Response Type Select
-#define CMD_XFR_TYP_RSPTYP_MASK 0x3       //Response Type Select
+#define CMD_XFR_TYP_RSPTYP_MASK 0x3u      //Response Type Select
 
 
 /* Clock Control Register */
@@ -89,62 +89,62 @@
 
 /* Timeout Control Register */
 #define TIMEOUT_CTRL_DTOCV_SHF      0     //Data Timeout Counter Value
-#define TIMEOUT_CTRL_DTOCV_MASK     0xF   //Data Timeout Counter Value
+#define TIMEOUT_CTRL_DTOCV_MASK     0xFu  //Data Timeout Counter Value
 
 /* Software Reset Register */
-#define SW_RESET_INITA          (1 << 3) //Initialization Active
-#define SW_RESET_RSTD           (1 << 2) //Software Reset for DAT Line
-#define SW_RESET_RSTC           (1 << 1) //Software Reset for CMD Line
-#define SW_RESET_RSTA           (1 << 0) //Software Reset for ALL
+#define SW_RESET_INITA          BIT(3)   //Initialization Active
+#define SW_RESET_RSTD           BIT(2)   //Software Reset for DAT Line
+#define SW_RESET_RSTC           BIT(1)   //Software Reset for CMD Line
+#define SW_RESET_RSTA           BIT(0)   //Software Reset for ALL
 
 /* Interrupt Status Register */
-#define INT_STATUS_ERR          (1 << 15) //Error interrupt      (exl. IMX6)
-#define INT_STATUS_TP           (1 << 14) //Tuning Pass
-#define INT_STATUS_RTE          (1 << 12) //Re-Tuning Event
-#define INT_STATUS_CINT         (1 << 8)  //Card Interrupt
-#define INT_STATUS_CRM          (1 << 7)  //Card Removal
-#define INT_STATUS_CINS         (1 << 6)  //Card Insertion
-#define INT_STATUS_BRR          (1 << 5)  //Buffer Read Ready
-#define INT_STATUS_BWR          (1 << 4)  //Buffer Write Ready
-#define INT_STATUS_DINT         (1 << 3)  //DMA Interrupt
-#define INT_STATUS_BGE          (1 << 2)  //Block Gap Event
-#define INT_STATUS_TC           (1 << 1)  //Transfer Complete
-#define INT_STATUS_CC           (1 << 0)  //Command Complete
+#define INT_STATUS_ERR          BIT(15)   //Error interrupt      (exl. IMX6)
+#define INT_STATUS_TP           BIT(14)   //Tuning Pass
+#define INT_STATUS_RTE          BIT(12)   //Re-Tuning Event
+#define INT_STATUS_CINT         BIT(8)    //Card Interrupt
+#define INT_STATUS_CRM          BIT(7)    //Card Removal
+#define INT_STATUS_CINS         BIT(6)    //Card Insertion
+#define INT_STATUS_BRR          BIT(5)    //Buffer Read Ready
+#define INT_STATUS_BWR          BIT(4)    //Buffer Write Ready
+#define INT_STATUS_DINT         BIT(3)    //DMA Interrupt
+#define INT_STATUS_BGE          BIT(2)    //Block Gap Event
+#define INT_STATUS_TC           BIT(1)    //Transfer Complete
+#define INT_STATUS_CC           BIT(0)    //Command Complete
 
 /* Error Interrupt Status Register */
-#define ERR_INT_STATUS_DMAE         (1 << 12) //DMA Error            (only IMX6)
-#define ERR_INT_STATUS_TNE          (1 << 10) //Tuning Error
-#define ERR_INT_STATUS_ADMAE        (1 << 9)  //ADMA error           (exl. IMX6)
-#define ERR_INT_STATUS_AC12E        (1 << 8)  //Auto CMD12 Error
-#define ERR_INT_STATUS_OVRCURE      (1 << 7)  //Bus over current     (exl. IMX6)
-#define ERR_INT_STATUS_DEBE         (1 << 6)  //Data End Bit Error
-#define ERR_INT_STATUS_DCE          (1 << 5)  //Data CRC Error
-#define ERR_INT_STATUS_DTOE         (1 << 4)  //Data Timeout Error
-#define ERR_INT_STATUS_CIE          (1 << 3)  //Command Index Error
-#define ERR_INT_STATUS_CEBE         (1 << 2)  //Command End Bit Error
-#define ERR_INT_STATUS_CCE          (1 << 1)  //Command CRC Error
-#define ERR_INT_STATUS_CTOE         (1 << 0)  //Command Timeout Error
+#define ERR_INT_STATUS_DMAE         BIT(12)   //DMA Error            (only IMX6)
+#define ERR_INT_STATUS_TNE          BIT(10)   //Tuning Error
+#define ERR_INT_STATUS_ADMAE        BIT(9)    //ADMA error           (exl. IMX6)
+#define ERR_INT_STATUS_AC12E        BIT(8)    //Auto CMD12 Error
+#define ERR_INT_STATUS_OVRCURE      BIT(7)    //Bus over current     (exl. IMX6)
+#define ERR_INT_STATUS_DEBE         BIT(6)    //Data End Bit Error
+#define ERR_INT_STATUS_DCE          BIT(5)    //Data CRC Error
+#define ERR_INT_STATUS_DTOE         BIT(4)    //Data Timeout Error
+#define ERR_INT_STATUS_CIE          BIT(3)    //Command Index Error
+#define ERR_INT_STATUS_CEBE         BIT(2)    //Command End Bit Error
+#define ERR_INT_STATUS_CCE          BIT(1)    //Command CRC Error
+#define ERR_INT_STATUS_CTOE         BIT(0)    //Command Timeout Error
 
 /* Host Controller Capabilities Register */
-#define HOST_CTRL_CAP_VS18      (1 << 26) //Voltage Support 1.8V
-#define HOST_CTRL_CAP_VS30      (1 << 25) //Voltage Support 3.0V
-#define HOST_CTRL_CAP_VS33      (1 << 24) //Voltage Support 3.3V
-#define HOST_CTRL_CAP_SRS       (1 << 23) //Suspend/Resume Support
-#define HOST_CTRL_CAP_DMAS      (1 << 22) //DMA Support
-#define HOST_CTRL_CAP_HSS       (1 << 21) //High Speed Support
-#define HOST_CTRL_CAP_ADMAS     (1 << 20) //ADMA Support
+#define HOST_CTRL_CAP_VS18      BIT(26)   //Voltage Support 1.8V
+#define HOST_CTRL_CAP_VS30      BIT(25)   //Voltage Support 3.0V
+#define HOST_CTRL_CAP_VS33      BIT(24)   //Voltage Support 3.3V
+#define HOST_CTRL_CAP_SRS       BIT(23)   //Suspend/Resume Support
+#define HOST_CTRL_CAP_DMAS      BIT(22)   //DMA Support
+#define HOST_CTRL_CAP_HSS       BIT(21)   //High Speed Support
+#define HOST_CTRL_CAP_ADMAS     BIT(20)   //ADMA Support
 #define HOST_CTRL_CAP_MBL_SHF   16        //Max Block Length
-#define HOST_CTRL_CAP_MBL_MASK  0x3       //Max Block Length
+#define HOST_CTRL_CAP_MBL_MASK  0x3u      //Max Block Length
 #define HOST_CTRL_CAP_BCLK_SHF  8         //Base Clock Frequency For SD Clock
-#define HOST_CTRL_CAP_BCLK_MASK 0x3F      //Base Clock Frequency For SD Clock
+#define HOST_CTRL_CAP_BCLK_MASK 0x3Fu     //Base Clock Frequency For SD Clock
 
 /* Mixer Control Register */
-#define MIX_CTRL_MSBSEL         (1 << 5)  //Multi/Single Block Select.
-#define MIX_CTRL_DTDSEL         (1 << 4)  //Data Transfer Direction Select.
-#define MIX_CTRL_DDR_EN         (1 << 3)  //Dual Data Rate mode selection
-#define MIX_CTRL_AC12EN         (1 << 2)  //Auto CMD12 Enable
-#define MIX_CTRL_BCEN           (1 << 1)  //Block Count Enable
-#define MIX_CTRL_DMAEN          (1 << 0)  //DMA Enable
+#define MIX_CTRL_MSBSEL         BIT(5)    //Multi/Single Block Select.
+#define MIX_CTRL_DTDSEL         BIT(4)    //Data Transfer Direction Select.
+#define MIX_CTRL_DDR_EN         BIT(3)    //Dual Data Rate mode selection
+#define MIX_CTRL_AC12EN         BIT(2)    //Auto CMD12 Enable
+#define MIX_CTRL_BCEN           BIT(1)    //Block Count Enable
+#define MIX_CTRL_DMAEN          BIT(0)    //DMA Enable
 
 /* Watermark Level register */
 #define WTMK_LVL_WR_WML_SHF     16        //Write Watermark Level
