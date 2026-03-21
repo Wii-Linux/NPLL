@@ -27,8 +27,8 @@
 static inline void dcache_flush(const void *p, u32 len) {
 	u32 a, b;
 
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
+	a = (u32)p & ~0x1fu;
+	b = ((u32)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
 		asm("dcbst 0,%0" : : "b"(a));
@@ -39,8 +39,8 @@ static inline void dcache_flush(const void *p, u32 len) {
 static inline void dcache_invalidate(void *p, u32 len) {
 	u32 a, b;
 
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
+	a = (u32)p & ~0x1fu;
+	b = ((u32)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
 		asm("dcbi 0,%0" : : "b"(a));
@@ -51,8 +51,8 @@ static inline void dcache_invalidate(void *p, u32 len) {
 static inline void dcache_flush_invalidate(void *p, u32 len) {
 	u32 a, b;
 
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
+	a = (u32)p & ~0x1fu;
+	b = ((u32)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
 		asm("dcbst 0,%0; dcbi 0,%0" : : "b"(a));
@@ -64,8 +64,8 @@ static inline void dcache_flush_invalidate(void *p, u32 len) {
 static inline void dcache_flush_icache_invalidate(const void *p, u32 len) {
 	u32 a, b;
 
-	a = (u32)p & ~0x1f;
-	b = ((u32)p + len + 0x1f) & ~0x1f;
+	a = (u32)p & ~0x1fu;
+	b = ((u32)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
 		asm("dcbst 0,%0 ; sync ; icbi 0,%0" : : "b"(a));
