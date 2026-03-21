@@ -62,7 +62,7 @@ void MINI_Init(void);
 /*
  * Post a message w/ va_args.  See MINI_IPCPost.
  */
-int MINI_IPCVpost(u32 code, u32 tag, int num_args, va_list args);
+int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args);
 
 /*
  * Post a message to Starlet.
@@ -71,7 +71,7 @@ int MINI_IPCVpost(u32 code, u32 tag, int num_args, va_list args);
  * Returns -EINVAL if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCPost(u32 code, u32 tag, int num_args, ...);
+int MINI_IPCPost(u32 code, u32 tag, uint num_args, ...);
 
 /*
  * Receive a message from Starlet, filling in 'req' with
@@ -81,7 +81,7 @@ int MINI_IPCPost(u32 code, u32 tag, int num_args, ...);
  * Returns -EINVAL if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCRecv(struct ipc_request_mini *req, int max_attempts);
+int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts);
 
 /*
  * Receive a message from Starlet, whose code and tag match
@@ -96,7 +96,7 @@ int MINI_IPCRecv(struct ipc_request_mini *req, int max_attempts);
  * Returns -EINVAL if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, int max_recv_attempts, int max_attempts);
+int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts);
 
 /*
  * Exchange a message with Starlet, filling in 'req' with
@@ -107,7 +107,7 @@ int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, int max_
  * Returns -EINVAL if not using MINI, or IPC not initialized.
  * Returns 0 on success for both send and receive.
  */
-int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, int max_recv_attempts, int max_attempts, int num_args, ...);
+int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...);
 
 
 #endif
