@@ -21,8 +21,8 @@
 #define __stringifyResult(str) __stringify(str)
 
 /* memory helpers */
-#define CACHED_BASE        0x80000000
-#define UNCACHED_BASE      0xc0000000
+#define CACHED_BASE        0x80000000u
+#define UNCACHED_BASE      0xc0000000u
 
 static inline void *_physToCached(void *_addr) {
 	u32 addr = (u32)_addr;
@@ -50,23 +50,23 @@ static inline void *_virtToPhys(void *_addr) {
 #define cachedToPhys(x) virtToPhys(x)
 #define uncachedToPhys(x) virtToPhys(x)
 
-#define MEM1_PHYS_BASE     0x00000000
+#define MEM1_PHYS_BASE     0x00000000u
 #define MEM1_CACHED_BASE   ((u32)physToCached(MEM1_PHYS_BASE))
 #define MEM1_UNCACHED_BASE ((u32)physToUncached(MEM1_PHYS_BASE))
 
-#define MEM2_PHYS_BASE     0x10000000
+#define MEM2_PHYS_BASE     0x10000000u
 #define MEM2_CACHED_BASE   ((u32)physToCached(MEM2_PHYS_BASE))
 #define MEM2_UNCACHED_BASE ((u32)physToUncached(MEM2_PHYS_BASE))
 
-#define MEM1_SIZE_GCN      0x01800000
+#define MEM1_SIZE_GCN      0x01800000u
 #define MEM1_SIZE_WII      MEM1_SIZE_GCN
-#define MEM1_SIZE_NDEV     0x04000000
-#define MEM1_SIZE_WIIU     0x02000000
+#define MEM1_SIZE_NDEV     0x04000000u
+#define MEM1_SIZE_WIIU     0x02000000u
 
-#define MEM2_SIZE_WII      0x04000000
-#define MEM2_SIZE_NDEV     0x08000000
+#define MEM2_SIZE_WII      0x04000000u
+#define MEM2_SIZE_NDEV     0x08000000u
 /* lie, but this is all that we map */
-#define MEM2_SIZE_WIIU     0x10000000
+#define MEM2_SIZE_WIIU     0x10000000u
 
 
 static inline bool addrIsValidCached(void *_addr) {
@@ -135,7 +135,7 @@ static inline bool addrIsValidPhys(void *_addr) {
 #endif
 
 #define ALIGN(x) __attribute__((aligned(x)))
-#define BIT(nr) (1 << (nr))
+#define BIT(nr) (1u << (nr))
 #define VISIBLE __attribute__((visibility("default")))
 #define HIDDEN __attribute__((visibility("hidden")))
 
