@@ -80,12 +80,12 @@
 
 /* Clock Control Register */
 #define CLK_CTRL_SDCLKS_SHF     8         //SDCLK Frequency Select
-#define CLK_CTRL_SDCLKS_MASK    0xFF      //SDCLK Frequency Select
+#define CLK_CTRL_SDCLKS_MASK    0xFFu     //SDCLK Frequency Select
 #define CLK_CTRL_DVS_SHF        4         //Divisor
-#define CLK_CTRL_DVS_MASK       0xF       //Divisor
-#define CLK_CTRL_CLK_INT_EN     (1 << 0)  //Internal clock enable (exl. IMX6)
-#define CLK_CTRL_CLK_INT_STABLE (1 << 1)  //Internal clock stable (exl. IMX6)
-#define CLK_CTRL_CLK_CARD_EN    (1 << 2)  //SD clock enable       (exl. IMX6)
+#define CLK_CTRL_DVS_MASK       0xFu      //Divisor
+#define CLK_CTRL_CLK_INT_EN     BIT(0)    //Internal clock enable (exl. IMX6)
+#define CLK_CTRL_CLK_INT_STABLE BIT(1)    //Internal clock stable (exl. IMX6)
+#define CLK_CTRL_CLK_CARD_EN    BIT(2)    //SD clock enable       (exl. IMX6)
 
 /* Timeout Control Register */
 #define TIMEOUT_CTRL_DTOCV_SHF      0     //Data Timeout Counter Value
@@ -159,17 +159,16 @@ static inline void writel(u32 v, volatile void *a) {
 }
 
 static inline void writew(u16 v, volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
 
 	addr = (u32)a;
-	shift = (addr & 0x2) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x2u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
 	sync(); barrier();
 	tmp = *(vu32*)(a);
-	tmp &= ~(0xffff << shift);
+	tmp &= ~(0xffffu << shift);
 	tmp |= (v << shift);
 	writel(tmp, a);
 	sync(); barrier();
@@ -178,17 +177,16 @@ static inline void writew(u16 v, volatile void *a) {
 }
 
 static inline void writeb(u8 v, volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
 
 	addr = (u32)a;
-	shift = (addr & 0x3) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x3u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
 	sync(); barrier();
 	tmp = *(vu32*)(a);
-	tmp &= ~(0xff << shift);
+	tmp &= ~(0xffu << shift);
 	tmp |= (v << shift);
 	writel(tmp, a);
 	sync(); barrier();
@@ -198,6 +196,7 @@ static inline void writeb(u8 v, volatile void *a) {
 
 static inline u32 readl(volatile void *a) {
 	u32 ret;
+
 	udelay(SDHC_DELAY);
 	sync(); barrier();
 	ret = *(vu32*)(a);
@@ -207,12 +206,12 @@ static inline u32 readl(volatile void *a) {
 }
 
 static inline u16 readw(volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
+
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	shift = (addr & 0x2) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x2u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 	sync(); barrier();
 	tmp = *(vu32*)(a);
@@ -222,12 +221,12 @@ static inline u16 readw(volatile void *a) {
 }
 
 static inline u8 readb(volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
+
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	shift = (addr & 0x3) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x3u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 	sync(); barrier();
 	tmp = *(vu32*)(a);
@@ -324,7 +323,7 @@ static inline int UNUSED cap_max_buffer_size(struct sdhc *host)
 	u32 v;
 	v = readl(host->base + HOST_CTRL_CAP);
 	v = ((v >> HOST_CTRL_CAP_MBL_SHF) & HOST_CTRL_CAP_MBL_MASK);
-	return 512 << v;
+	return 512u << v;
 }
 
 static int sdhc_next_cmd(sdhc_dev_t host)
@@ -438,23 +437,23 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	val32 &= ~(CMD_XFR_TYP_RSPTYP_MASK << CMD_XFR_TYP_RSPTYP_SHF);
 	switch (cmd->rsp_type) {
 	case MMC_RSP_TYPE_R2:
-		val32 |= (0x1 << CMD_XFR_TYP_RSPTYP_SHF);
+		val32 |= (0x1u << CMD_XFR_TYP_RSPTYP_SHF);
 		val32 |= CMD_XFR_TYP_CCCEN;
 		break;
 	case MMC_RSP_TYPE_R3:
 	case MMC_RSP_TYPE_R4:
-		val32 |= (0x2 << CMD_XFR_TYP_RSPTYP_SHF);
+		val32 |= (0x2u << CMD_XFR_TYP_RSPTYP_SHF);
 		break;
 	case MMC_RSP_TYPE_R1:
 	case MMC_RSP_TYPE_R5:
 	case MMC_RSP_TYPE_R6:
-		val32 |= (0x2 << CMD_XFR_TYP_RSPTYP_SHF);
+		val32 |= (0x2u << CMD_XFR_TYP_RSPTYP_SHF);
 		val32 |= CMD_XFR_TYP_CICEN;
 		val32 |= CMD_XFR_TYP_CCCEN;
 		break;
 	case MMC_RSP_TYPE_R1b:
 	case MMC_RSP_TYPE_R5b:
-		val32 |= (0x3 << CMD_XFR_TYP_RSPTYP_SHF);
+		val32 |= (0x3u << CMD_XFR_TYP_RSPTYP_SHF);
 		val32 |= CMD_XFR_TYP_CICEN;
 		val32 |= CMD_XFR_TYP_CCCEN;
 		break;
@@ -733,7 +732,7 @@ static int sdhc_enable_clock(volatile void *base_addr)
 		ZF_LOGE("HC reported invalid base clock, assuming divisor of 16 is fine");
 		clkctrl = readw(base_addr + CLOCK_CTRL);
 		clkctrl &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-		clkctrl |= (1 << 3);
+		clkctrl |= (1u << 3);
 		goto writeback;
 	}
 
@@ -746,7 +745,7 @@ static int sdhc_enable_clock(volatile void *base_addr)
 	}
 
 	for (i = 0; i < 8; i++) {
-		u8 div = ((1 << i) << CLK_CTRL_SDCLKS_SHF);
+		u8 div = ((1u << i) << CLK_CTRL_SDCLKS_SHF);
 		if ((bclk / div) > 63 || (bclk / div) < 10) {
 			ZF_LOGD("divisor %d invalid...", div);
 			continue;
@@ -755,7 +754,7 @@ static int sdhc_enable_clock(volatile void *base_addr)
 		ZF_LOGD("divisor %d valid!", div);
 		validDiv = 1;
 		clkctrl &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-		clkctrl |= ((1 << i) << CLK_CTRL_SDCLKS_SHF);
+		clkctrl |= ((1u << i) << CLK_CTRL_SDCLKS_SHF);
 	}
 
 	if (!validDiv) {
@@ -804,9 +803,9 @@ static int sdhc_set_clock_div(
 		/* DDR mode is not supported on SDHCI v1.00 (Hollywood/Latte),
 		 * so always use the SDR clock divisor path. */
 		val16 &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-		val16 |= (sdclks_div << CLK_CTRL_SDCLKS_SHF);
+		val16 |= ((unsigned int)sdclks_div << CLK_CTRL_SDCLKS_SHF);
 		val16 &= ~(CLK_CTRL_DVS_MASK << CLK_CTRL_DVS_SHF);
-		val16 |= (dvs_div << CLK_CTRL_DVS_SHF);
+		val16 |= ((unsigned int)dvs_div << CLK_CTRL_DVS_SHF);
 
 		/* Write out the Clock Control register */
 		writew(val16, base_addr + CLOCK_CTRL);
@@ -814,7 +813,7 @@ static int sdhc_set_clock_div(
 		/* Set data timeout value */
 		val8 = readb(base_addr + TIMEOUT_CTRL);
 		val8 &= ~TIMEOUT_CTRL_DTOCV_MASK;
-		val8 |= (dtocv << TIMEOUT_CTRL_DTOCV_SHF);
+		val8 |= ((unsigned int)dtocv << TIMEOUT_CTRL_DTOCV_SHF);
 		writeb(val8, base_addr + TIMEOUT_CTRL);
 #if 0
 	} else {
