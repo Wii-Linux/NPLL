@@ -159,17 +159,16 @@ static inline void writel(u32 v, volatile void *a) {
 }
 
 static inline void writew(u16 v, volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
 
 	addr = (u32)a;
-	shift = (addr & 0x2) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x2u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
 	sync(); barrier();
 	tmp = *(vu32*)(a);
-	tmp &= ~(0xffff << shift);
+	tmp &= ~(0xffffu << shift);
 	tmp |= (v << shift);
 	writel(tmp, a);
 	sync(); barrier();
@@ -178,17 +177,16 @@ static inline void writew(u16 v, volatile void *a) {
 }
 
 static inline void writeb(u8 v, volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
 
 	addr = (u32)a;
-	shift = (addr & 0x3) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x3u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
 	sync(); barrier();
 	tmp = *(vu32*)(a);
-	tmp &= ~(0xff << shift);
+	tmp &= ~(0xffu << shift);
 	tmp |= (v << shift);
 	writel(tmp, a);
 	sync(); barrier();
@@ -198,6 +196,7 @@ static inline void writeb(u8 v, volatile void *a) {
 
 static inline u32 readl(volatile void *a) {
 	u32 ret;
+
 	udelay(SDHC_DELAY);
 	sync(); barrier();
 	ret = *(vu32*)(a);
@@ -207,12 +206,12 @@ static inline u32 readl(volatile void *a) {
 }
 
 static inline u16 readw(volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
+
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	shift = (addr & 0x2) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x2u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 	sync(); barrier();
 	tmp = *(vu32*)(a);
@@ -222,12 +221,12 @@ static inline u16 readw(volatile void *a) {
 }
 
 static inline u8 readb(volatile void *a) {
-	u32 addr, tmp;
-	int shift;
+	u32 addr, tmp, shift;
+
 	udelay(SDHC_DELAY);
 	addr = (u32)a;
-	shift = (addr & 0x3) * 8;
-	addr &= ~0x3;
+	shift = (addr & 0x3u) * 8u;
+	addr &= ~0x3u;
 	a = (volatile void *)addr;
 	sync(); barrier();
 	tmp = *(vu32*)(a);
