@@ -2513,7 +2513,7 @@ static FRESULT dir_register (	/* FR_OK:succeeded, FR_DENIED:no free entry or too
 		dp->blk_ofs = dp->dptr - SZDIRE * (n_ent - 1);	/* Set the allocated entry block offset */
 
 		if (dp->obj.stat & 4) {			/* Has the directory been stretched by new allocation? */
-			dp->obj.stat &= ~4u;
+			dp->obj.stat &= ~(BYTE)4u;
 			res = fill_first_frag(&dp->obj);	/* Fill the first fragment on the FAT if needed */
 			if (res != FR_OK) return res;
 			res = fill_last_frag(&dp->obj, dp->clust, 0xFFFFFFFF);	/* Fill the last fragment on the FAT if needed */
