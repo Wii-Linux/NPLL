@@ -76,7 +76,7 @@ HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 ASFLAGS :=
 CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong
 #CFLAGS  += -DDO_TRACE
-CFLAGS  += -O3 -Wall -Wextra -Wformat=2
+CFLAGS  += -O3 -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 
 SOURCE  := entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c
@@ -117,6 +117,12 @@ $(FAT_COMBINED): $(FAT_OBJ)
 	$(HIDE)$(LD) -r -o $@ $^
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
+
+
+build/libc/cc-runtime.o: src/libc/cc-runtime.c
+	$(info $s  CC $<)
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -Wno-conversion -Wno-undef -Wno-sign-conversion -o $@ -c $<
 
 build/%.o: src/%.c
 	$(info $s  CC $<)
