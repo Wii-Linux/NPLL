@@ -80,11 +80,11 @@ static int check_fs (u8 *_vbr) {
 	struct mbr *vbr = (struct mbr *)_vbr;
 
 #if FF_FS_EXFAT
-	if (vbr->sig[0] == 0xAA && vbr->sig[1] == 0x55 && !memcmp(&_vbr[BS_JmpBoot], "\xEB\x76\x90" "EXFAT   ", 11)) return 1;	/* It is an exFAT VBR */
+	if (vbr->sig[0] == 0x55 && vbr->sig[1] == 0xAA && !memcmp(&_vbr[BS_JmpBoot], "\xEB\x76\x90" "EXFAT   ", 11)) return 1;	/* It is an exFAT VBR */
 #endif
 	b = _vbr[BS_JmpBoot];
 	if (b == 0xEB || b == 0xE9 || b == 0xE8) {	/* Valid JumpBoot code? (short jump, near jump or near call) */
-		if (vbr->sig[0] == 0xAA && vbr->sig[1] == 0x55 && !memcmp(&_vbr[BS_FilSysType32], "FAT32   ", 8)) {
+		if (vbr->sig[0] == 0x55 && vbr->sig[1] == 0xAA && !memcmp(&_vbr[BS_FilSysType32], "FAT32   ", 8)) {
 			return 0;	/* It is an FAT32 VBR */
 		}
 		/* FAT volumes created in the early MS-DOS era lack BS_55AA and BS_FilSysType, so FAT VBR needs to be identified without them. */
@@ -100,7 +100,7 @@ static int check_fs (u8 *_vbr) {
 				return 0;	/* It can be presumed an FAT VBR */
 		}
 	}
-	return (vbr->sig[0] == 0xAA && vbr->sig[1] == 0x55) ? 2 : 3;	/* Not an FAT VBR (with valid or invalid BS) */
+	return (vbr->sig[0] == 0x55 && vbr->sig[1] == 0xAA) ? 2 : 3;	/* Not an FAT VBR (with valid or invalid BS) */
 }
 
 #define MAX_FILES 16
@@ -125,8 +125,14 @@ static bool fatProbe(struct filesystem *fs, struct partition *part) {
 	u8 ALIGN(32) vbr[512];
 	int ret;
 
-	B_Read(part, vbr, 0, 512);
+	ret = B_Read(part, vbr, 512, 0);
+	if (ret != 512) {
+		log_printf("fatProbe: B_Read returned %d\r\n", ret);
+		return false;
+	}
+
 	ret = check_fs(vbr);
+	log_printf("check fs ret: %d\r\n", ret);
 	switch (ret) {
 	case 0: {
 		if (fs == &FS_FAT) {
@@ -156,6 +162,7 @@ static int fatMount(struct filesystem *fs, struct partition *part) {
 	(void)fs;
 	/* do we already have a mounted partition? */
 	assert(!partitions[0]);
+	assert(part);
 
 	/* reset internal state */
 	memset(&fatfsObj, 0, sizeof(fatfsObj));
