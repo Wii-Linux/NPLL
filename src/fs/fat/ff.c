@@ -788,7 +788,7 @@ static DWORD tchar2uni (	/* Returns a character in UTF-16 encoding (>=0x10000 on
 	if (dbc_1st((BYTE)wc)) {	/* Is it a DBC 1st byte? */
 		sb = (BYTE)*p++;		/* Get 2nd byte */
 		if (!dbc_2nd(sb)) return 0xFFFFFFFF;	/* Invalid code? */
-		wc = (wc << 8) + sb;	/* Make a DBC */
+		wc = (WCHAR)((wc << 8) + sb);	/* Make a DBC */
 	}
 	if (wc != 0) {
 		wc = ff_oem2uni(wc, CODEPAGE);	/* ANSI/OEM ==> Unicode */
@@ -2032,7 +2032,7 @@ static void gen_numname (
 			for (i = 0; i < 16; i++) {
 				crc_sreg = (crc_sreg << 1) + (wc & 1);
 				wc >>= 1;
-				if (crc_sreg & 0x10000) crc_sreg ^= 0x11021;
+				if (crc_sreg & 0x10000u) crc_sreg ^= 0x11021u;
 			}
 		}
 		seq = (WORD)crc_sreg;
@@ -2075,7 +2075,7 @@ static BYTE sum_sfn (
 	UINT n = 11;
 
 	do {
-		sum = (sum >> 1) + (sum << 7) + *dir++;
+		sum = (BYTE)((sum >> 1) + (sum << 7) + *dir++);
 	} while (--n);
 	return sum;
 }
@@ -2102,7 +2102,7 @@ static WORD xdir_sum (	/* Get checksum of the directoly entry block */
 		if (i == XDIR_SetSum) {	/* Skip 2-byte sum field */
 			i++;
 		} else {
-			sum = ((sum & 1) ? 0x8000 : 0) + (sum >> 1) + dir[i];
+			sum = (WORD)(((sum & 1) ? 0x8000u : 0) + (sum >> 1) + dir[i]);
 		}
 	}
 	return sum;
@@ -2120,8 +2120,8 @@ static WORD xname_sum (	/* Get check sum (to be used as hash) of the file name *
 
 	while ((chr = *name++) != 0) {
 		chr = (WCHAR)ff_wtoupper(chr);		/* File name needs to be up-case converted */
-		sum = ((sum & 1) ? 0x8000 : 0) + (sum >> 1) + (chr & 0xFF);
-		sum = ((sum & 1) ? 0x8000 : 0) + (sum >> 1) + (chr >> 8);
+		sum = ((sum & 1u) ? 0x8000u : 0) + (sum >> 1) + (chr & 0xFFu);
+		sum = ((sum & 1u) ? 0x8000u : 0) + (sum >> 1) + (chr >> 8);
 	}
 	return sum;
 }
@@ -2133,7 +2133,7 @@ static DWORD xsum32 (	/* Returns 32-bit checksum */
 	DWORD sum			/* Previous sum value */
 )
 {
-	sum = ((sum & 1) ? 0x80000000 : 0) + (sum >> 1) + dat;
+	sum = ((sum & 1u) ? 0x80000000u : 0) + (sum >> 1) + dat;
 	return sum;
 }
 #endif
