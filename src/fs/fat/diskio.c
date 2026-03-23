@@ -12,10 +12,12 @@
 /* storage control modules to the FatFs module with a defined API.       */
 /*-----------------------------------------------------------------------*/
 
+#define MOUDLE "fat"
 #include "ff.h"			/* Basic definitions of FatFs */
 #include "diskio.h"		/* Declarations FatFs MAI */
 
 #include <npll/block.h>
+#include <npll/log.h>
 #include <npll/partition.h>
 
 struct partition *partitions[FF_VOLUMES] = { NULL };
@@ -75,8 +77,10 @@ DRESULT disk_read (
 
 	blocksz = partitions[pdrv]->bdev->blockSize;
 	result = B_Read(partitions[pdrv], buff, count * blocksz, sector * blocksz);
-	if (result != (ssize_t)(count * blocksz))
+	if (result != (ssize_t)(count * blocksz)) {
+		log_printf("B_Read ret %d\r\n", result);
 		return RES_ERROR;
+	}
 
 	return RES_OK;
 }
