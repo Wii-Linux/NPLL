@@ -36,10 +36,14 @@ struct blockDevice {
 };
 
 /* registered block devices */
+extern uint B_NumDevices;
 extern struct blockDevice *B_Devices[];
 
 /* initialize the block core */
 extern void B_Init(void);
+
+/* shut down the block core */
+extern void B_Shutdown(void);
 
 /*
  * Register a block device and probe its partition table.

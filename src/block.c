@@ -16,9 +16,9 @@
 #include <npll/types.h>
 #include <npll/utils.h>
 
-static int B_NumDevices = 0;
 static int initialized = 0;
 
+uint B_NumDevices = 0;
 struct blockDevice *B_Devices[MAX_BDEV];
 
 static int findDev(const struct blockDevice *bdev) {
@@ -40,6 +40,14 @@ void B_Init(void) {
 	memset(B_Devices, 0, sizeof(B_Devices));
 
 	initialized = 1;
+}
+
+void B_Shutdown(void) {
+	if (!initialized)
+		return;
+
+	assert(!B_NumDevices);
+	initialized = 0;
 }
 
 void B_Register(struct blockDevice *bdev) {

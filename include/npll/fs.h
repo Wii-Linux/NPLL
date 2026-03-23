@@ -74,6 +74,9 @@ extern struct partition *FS_MountedPartition;
 /* initialize the FS core */
 extern void FS_Init(void);
 
+/* shut down the FS core */
+extern void FS_Shutdown(void);
+
 /* mount a filesystem on a partition (unmounts any currently mounted FS first) */
 extern int FS_Mount(struct filesystem *fs, struct partition *part);
 

@@ -32,6 +32,14 @@ void FS_Init(void) {
 	initialized = true;
 }
 
+void FS_Shutdown(void) {
+	if (!initialized)
+		return;
+
+	assert(!FS_Mounted && !FS_MountedPartition);
+	initialized = false;
+}
+
 int FS_Mount(struct filesystem *fs, struct partition *part) {
 	int ret;
 

@@ -129,6 +129,9 @@ int ELF_LoadMem(const void *data) {
 		phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
 	}
 
+	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
+	H_PrepareForExecEntry();
+
 	/* lets do this thing */
 	ELF_DoEntry(virtToPhys(ehdr->e_entry));
 
@@ -199,6 +202,9 @@ int ELF_LoadFile(int fd) {
 
 	/* close the file */
 	FS_Close(fd);
+
+	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
+	H_PrepareForExecEntry();
 
 	/* lets do this thing */
 	ELF_DoEntry(virtToPhys(ehdr.e_entry));
