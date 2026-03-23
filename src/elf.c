@@ -53,6 +53,7 @@ bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, ssize_t *off
 	/* sanity check */
 	if (phdr->p_type != PT_LOAD) {
 		log_printf("Skipping segment: type %d != %d (PT_LOAD)\r\n", phdr->p_type, PT_LOAD);
+		*bail = 0;
 		return false;
 	}
 
@@ -62,12 +63,14 @@ bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, ssize_t *off
 		addr = (void *)phdr->p_vaddr;
 	if (!addr) {
 		log_puts("Skipping segment: no address");
+		*bail = 0;
 		return false;
 	}
 
 	/* verify there's anything to copy */
 	if (!phdr->p_filesz || !phdr->p_memsz) {
 		log_puts("Skipping segment: no data to copy");
+		*bail = 0;
 		return false;
 	}
 
@@ -135,8 +138,8 @@ int ELF_LoadMem(const void *data) {
 
 int ELF_LoadFile(int fd) {
 	/* should be aligned since we're reading into these */
-	ALIGN(32) Elf32_Ehdr ehdr;
-	ALIGN(32) Elf32_Phdr phdr;
+	Elf32_Ehdr ALIGN(32) ehdr;
+	Elf32_Phdr ALIGN(32) phdr;
 	void *addr;
 	u32 size;
 	int i;
