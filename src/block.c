@@ -71,6 +71,8 @@ void B_Register(struct blockDevice *bdev) {
 		ret = FS_Mount(fs, bdev->partitions[i]);
 		if (ret)
 			log_printf("FS_Mount failed on %s part %d: %d\r\n", bdev->name, i, ret);
+		else
+			return; /* success! */
 	}
 }
 
