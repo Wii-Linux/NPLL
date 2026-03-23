@@ -122,7 +122,7 @@ static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolA
 
 	pool->cur_bottom = (void *)block;
 
-	log_printf("alloc sz %u(%u) from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, block->size, pool->name, (u32)pool->cur_bottom, (u32)mem);
+	//log_printf("alloc sz %u(%u) from %s; new bottom: 0x%08x, data: 0x%08x\r\n", size, block->size, pool->name, (u32)pool->cur_bottom, (u32)mem);
 
 	return mem;
 }
@@ -199,7 +199,7 @@ void free(void *ptr) {
 
 			bottom += sizeof(struct block) + block->size;
 			pools[i].cur_bottom = (void *)bottom;
-			log_puts("successfully freed block!");
+			//log_puts("successfully freed block!");
 			break;
 		}
 	}
