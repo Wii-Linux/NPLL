@@ -46,6 +46,7 @@ int IOS_DevShaExploit(void) {
 	if (HW_AHBPROT & AHBPROT_PPCKERN)
 		return 0;
 
+	IOS_Reset();
 	// backup the start, then copy our shellcode to mem1
 	u32 *mem1 = (u32 *)MEM1_CACHED_BASE;
 	memcpy(mem1, mem1_prepare, sizeof(mem1_prepare));
