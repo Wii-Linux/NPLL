@@ -25,53 +25,81 @@ static mmc_card_t mmcDev = NULL;
 static struct blockDevice sdmmcBdev;
 static bool sdmmcRegistered = false;
 
+/* TODO: maybe move alignment handling into B_Read? */
 static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
-	unsigned long startBlock;
-	int nblocks;
-	long ret;
-	u32 blkSize = bdev->blockSize;
+	u8 ALIGN(32) tmp[512];
+	void *ogDest;
+	uint blkSize;
+	size_t ret, startBlock, remaining, headSkip, headBytes, alignedBlocks, tailBytes;
 
-	/* must be block-aligned */
-	if (off % blkSize || len % blkSize)
+	/* precompute a bunch of junk */
+	blkSize = bdev->blockSize;
+	startBlock = (size_t)(off / blkSize);
+	remaining = len;
+	headSkip = off % blkSize;
+	headBytes = alignedBlocks = tailBytes = 0;
+
+	//log_printf("read: dest=0x%08x, SB=%u, len=%u, HS=%u, HB=%u\r\n", dest, startBlock, len, headSkip, headBytes);
+
+	/* destination buffer must be 32B aligned else the HC locks up */
+	if ((u32)dest & 0x1f) {
+		log_puts("sdmmcRead: cannot use unaligned buffer!!");
 		return -1;
+	}
 
-	/* dma addr must (?) be 32B aligned */
-	if ((u32)dest & 0x1f)
-		return -2;
+	/* if we have an unaligned first block, read it separately */
+	if (headSkip) {
+		ret = mmc_block_read(mmcDev, startBlock, 1, tmp,
+			(uintptr_t)virtToPhys(tmp), NULL, NULL);
+		if (ret != blkSize)
+			return -1;
 
-	startBlock = (unsigned long)(off / blkSize);
-	nblocks = (int)(len / blkSize);
+		headBytes = blkSize - headSkip;
+		if (headBytes > remaining)
+			headBytes = remaining;
 
-	dcache_flush(dest, len);
-	ret = mmc_block_read(mmcDev, startBlock, nblocks, dest,
-			     (uintptr_t)virtToPhys(dest), NULL, NULL);
-	dcache_invalidate(dest, len);
+		memcpy(dest, tmp + headSkip, headBytes);
 
-	return ret;
+		dest += headBytes;
+		remaining -= headBytes;
+		startBlock++;
+	}
+
+	alignedBlocks = remaining / blkSize;
+	tailBytes = remaining % blkSize;
+
+	/* read the remaining aligned portions in one pass, if any */
+	if (alignedBlocks) {
+		ret = mmc_block_read(mmcDev, startBlock, alignedBlocks, dest,
+			(uintptr_t)virtToPhys(dest), NULL, NULL);
+		if (ret != alignedBlocks * blkSize)
+			return -1;
+
+		dest += alignedBlocks * blkSize;
+		startBlock += alignedBlocks;
+	}
+
+	/* if we have an unaligned last block, read it separately */
+	if (tailBytes) {
+		ret = mmc_block_read(mmcDev, startBlock, 1, tmp,
+			(uintptr_t)virtToPhys(tmp), NULL, NULL);
+		if (ret != blkSize)
+			return -1;
+
+		memcpy(dest, tmp, tailBytes);
+	}
+
+	dcache_invalidate(ogDest, len);
+	return len;
 }
 
 static ssize_t sdmmcWrite(struct blockDevice *bdev, const void *src, size_t len, u64 off) {
-	unsigned long startBlock;
-	int nblocks;
-	long ret;
-	u32 blkSize = bdev->blockSize;
-
-	/* must be block-aligned */
-	if (off % blkSize || len % blkSize)
-		return -1;
-
-	/* dma addr must (?) be 32B aligned */
-	if ((u32)src & 0x1f)
-		return -2;
-
-	startBlock = (unsigned long)(off / blkSize);
-	nblocks = (int)(len / blkSize);
-
-	dcache_flush((void *)src, len);
-	ret = mmc_block_write(mmcDev, startBlock, nblocks, src,
-			      (uintptr_t)virtToPhys(src), NULL, NULL);
-
-	return ret;
+	/* TODO: rewrite this like the new sdmmcRead once I care about writes */
+	(void)bdev;
+	(void)src;
+	(void)len;
+	(void)off;
+	return -1;
 }
 
 static void sdmmcRegisterBlock(void) {
