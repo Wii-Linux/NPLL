@@ -397,8 +397,12 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		if (cmd->data->blocks > 1) {
 			mix_ctrl |= MIX_CTRL_MSBSEL;
 		}
-		if (cmd->index == MMC_READ_SINGLE_BLOCK) {
+		if (cmd->index == MMC_READ_SINGLE_BLOCK
+		    || cmd->index == MMC_READ_MULTIPLE_BLOCK) {
 			mix_ctrl |= MIX_CTRL_DTDSEL;
+		}
+		if (cmd->data->blocks > 1) {
+			mix_ctrl |= MIX_CTRL_AC12EN;
 		}
 
 		/* Configure DMA */
@@ -607,7 +611,8 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 		assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA path");
 		if (host->blocks_remaining) {
 			volatile void *io_port = (void *)host->base + DATA_BUFF_ACC_PORT;
-			u32 *usr_buf = (u32 *)cmd->data->vbuf;
+			u32 blocks_done = cmd->data->blocks - host->blocks_remaining;
+			u32 *usr_buf = (u32 *)((u8 *)cmd->data->vbuf + blocks_done * cmd->data->block_size);
 			if (int_status & INT_STATUS_BRR) {
 				/* Buffer Read Ready.
 				 * The hardware 32-bit byteswapper reverses each word,
@@ -674,7 +679,7 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	int ret;
-	u64 tb = mftb();
+	u64 tb;
 
 	/* Initialise callbacks */
 	cmd->complete = 0;
@@ -695,10 +700,11 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 
 	/* finalise the transacton */
 	if (cb == NULL) {
+		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
 			sdhc_handle_irq(sdio, 0);
-			if (T_HasElapsed(tb, 500 * 1000)) {
+			if (T_HasElapsed(tb, 1000 * 1000)) {
 				ZF_LOGE("timeout waiting for command completion");
 				return -1;
 			}

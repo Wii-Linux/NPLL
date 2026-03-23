@@ -507,6 +507,9 @@ exit_transfer_data:
 long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
                     int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
 {
+    u32 command = (nblocks > 1)
+                      ? MMC_READ_MULTIPLE_BLOCK
+                      : MMC_READ_SINGLE_BLOCK;
     return transfer_data(
                mmc_card,
                start,
@@ -515,7 +518,7 @@ long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
                pbuf,
                cb,
                token,
-               MMC_READ_SINGLE_BLOCK);
+               command);
 }
 
 long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
@@ -524,6 +527,9 @@ long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
     // vbuf's `const` gets dropped during the cast as the underlying layer
     // accepts only non-const buffer, however it is ok, as we are sending the
     // write command, what quarantees that the buffer won't be overwritten.
+    u32 command = (nblocks > 1)
+                      ? MMC_WRITE_MULTIPLE_BLOCK
+                      : MMC_WRITE_BLOCK;
     return transfer_data(
                mmc_card,
                start,
@@ -532,7 +538,7 @@ long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
                pbuf,
                cb,
                token,
-               MMC_WRITE_BLOCK);
+               command);
 }
 
 long long mmc_card_capacity(mmc_card_t mmc_card)
