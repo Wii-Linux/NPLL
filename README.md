@@ -1,9 +1,9 @@
 # NPLL - Nintendo® PowerPC Linux® Loader
 
 NPLL is a bootloader for all 3 of Nintendo's PowerPC video game consoles:
-- GameCube®
-- Wii®
-- Wii U®
+- GameCube™
+- Wii™
+- Wii U™
 
 It provides an interface to load Linux on these platforms, all in one universal binary.
 
@@ -64,9 +64,9 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
-"GameCube®" is a registered trademark of Nintendo of America Inc.  
-"Wii®" is a registered trademark of Nintendo of America Inc.  
-"Wii U®" is a registered trademark of Nintendo of America Inc.  
+"GameCube™" is a trademark of Nintendo of America Inc.  
+"Wii™" is a trademark of Nintendo of America Inc.  
+"Wii U™" is a trademark of Nintendo of America Inc.  
 "Linux®" is the registered trademark of Linus Torvalds in the U.S. and other countries.  
 
-All code unless otherwise stated is Copyright (C) 2025 Techflash and NPLL contributors.  See the relevant file for additional copyright information.
+All code unless otherwise stated is Copyright (C) 2025-2026 Techflash and NPLL contributors.  See the relevant file for additional copyright information.
