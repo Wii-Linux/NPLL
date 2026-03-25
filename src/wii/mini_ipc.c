@@ -47,18 +47,16 @@ struct mini_state {
 static struct mini_state state;
 static bool initialized = false;
 
-void MINI_Init(void) {
-	u32 infohdr_ptr, ppcmsg;
+enum MINI_Err MINI_ValidInfoHdr(void) {
+	u32 infohdr_ptr;
 	struct infohdr *infohdr;
-	struct ipc_request_mini req;
-	int ret;
 
 	/* read the infohdr pointer from the region we just mapped */
 	infohdr_ptr = *(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
 
 	if (infohdr_ptr < MEM2_PHYS_BASE || infohdr_ptr >= (MEM2_PHYS_BASE + MEM2_SIZE_WII)) {
-		log_printf("bogus infohdr ptr 0x%08x\r\n", infohdr_ptr);
-		panic("bogus infohdr ptr");
+		/* log_printf("bogus infohdr ptr 0x%08x\r\n", infohdr_ptr); */
+		return MINI_BAD_INFOHDR_PTR;
 	}
 
 	infohdr_ptr = (u32)physToCached(infohdr_ptr);
@@ -66,17 +64,36 @@ void MINI_Init(void) {
 
 	/* valid infohdr? */
 	if (memcmp(infohdr->magic, "IPC", 3) != 0) {
-		log_printf("invalid IPC magic: %c%c%c\r\n", infohdr->magic[0], infohdr->magic[1], infohdr->magic[2]);
-		panic("invalid IPC magic");
+		/*log_printf("invalid IPC magic: %c%c%c\r\n", infohdr->magic[0], infohdr->magic[1], infohdr->magic[2]);*/
+		return MINI_BAD_INFOHDR_MAGIC;
 	}
 
 	if (infohdr->version != 1) {
-		log_printf("unknown IPC version %d\r\n", infohdr->version);
-		panic("unknown MINI IPC version");
+		/*log_printf("unknown IPC version %d\r\n", infohdr->version);*/
+		return MINI_BAD_INFOHDR_VERSION;
 	}
+
+	return MINI_OK;
+}
+
+enum MINI_Err MINI_Init(void) {
+	u32 ppcmsg, infohdr_ptr;
+	struct ipc_request_mini req;
+	int ret;
+	struct infohdr *infohdr;
+	enum MINI_Err hdrerr;
+
+	hdrerr = MINI_ValidInfoHdr();
+	if (hdrerr != MINI_OK)
+		return hdrerr;
 
 	/* set up our internal state */
 	memset(&state, 0, sizeof(state));
+
+	/* read the infohdr pointer from the region we just mapped */
+	infohdr_ptr = *(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
+	infohdr_ptr = (u32)physToCached(infohdr_ptr);
+	infohdr = (struct infohdr *)infohdr_ptr;
 
 	state.infohdr = infohdr;
 	state.in_size = infohdr->ipc_in_size;
@@ -108,7 +125,7 @@ void MINI_Init(void) {
 
 	H_WiiMEM2Top = infohdr->mem2_boundary;
 
-	return;
+	return MINI_OK;
 }
 
 static u16 peek_outtail(void) {
@@ -147,9 +164,10 @@ static int inqueue_full(void) {
 	return peek_inhead() == ((state.in_tail + 1) & (state.in_size - 1));
 }
 
-int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
+enum MINI_Err MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	int i = 0, arg = 0;
-	assert(initialized);
+	if (!initialized)
+		return MINI_NOT_INIT;
 
 	if (inqueue_full()) {
 		log_puts("in queue full, this might be bad...");
@@ -164,7 +182,7 @@ int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 			if (i > 10000) {
 				log_puts("abandoning all hope for submitting this request, "
 					"Starlet is locked up; please reboot the system to restore functionality.");
-				return -1;
+				return MINI_TIMEOUT;
 			}
 		}
 	}
@@ -181,13 +199,14 @@ int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1;
 
 	/* success, Starlet is processing it */
-	return 0;
+	return MINI_OK;
 }
 
-int MINI_IPCPost(u32 code, u32 tag, uint num_args, ...) {
+enum MINI_Err MINI_IPCPost(u32 code, u32 tag, uint num_args, ...) {
 	va_list args;
-	int ret;
-	assert(initialized);
+	enum MINI_Err ret;
+	if (!initialized)
+		return MINI_NOT_INIT;
 
 	if (num_args > 0) {
 		va_start(args, num_args);
@@ -203,9 +222,10 @@ int MINI_IPCPost(u32 code, u32 tag, uint num_args, ...) {
 }
 
 /* TODO: IRQs? */
-int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
+enum MINI_Err MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
 	uint i = 0;
-	assert(initialized);
+	if (!initialized)
+		return MINI_NOT_INIT;
 
 	while (peek_outtail() == state.out_head) {
 		udelay(5000);
@@ -218,11 +238,11 @@ int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
 			log_puts("abandoning all hope for receiving this request, "
 				"Starlet is locked up; please reboot the system to restore functionality.");
 			memset(req, 0, sizeof(struct ipc_request_mini));
-			return -1;
+			return MINI_TIMEOUT;
 		}
 		if (i > max_attempts && max_attempts > 1) {
 			memset(req, 0, sizeof(struct ipc_request_mini));
-			return -1;
+			return MINI_TIMEOUT;
 		}
 	}
 
@@ -234,19 +254,20 @@ int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
 	poke_outhead();
 
 	/* success, read your message */
-	return 0;
+	return MINI_OK;
 }
 
-int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts) {
-	int error = 0;
-	assert(initialized);
+enum MINI_Err MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts) {
+	enum MINI_Err error = 0;
+	if (!initialized)
+		return MINI_NOT_INIT;
 
 	error = MINI_IPCRecv(req, max_recv_attempts);
 	if (error)
 		return error;
 	while (req->code != code || req->tag != tag) {
 		log_printf("Got response with wrong info!  Expecting: code=%d, tag=%d; Received: code=%d, tag=%d\r\n", code, tag, req->code, req->tag);
-		error = -1;
+		error = MINI_TIMEOUT;
 
 		max_attempts--;
 		if (max_attempts <= 0)
@@ -260,17 +281,22 @@ int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max
 }
 
 
-int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...) {
+enum MINI_Err MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...) {
 	va_list args;
-	int error = 0;
+	enum MINI_Err error = MINI_OK;
 
-	assert(initialized);
+	if (!initialized)
+		return MINI_NOT_INIT;
 
-	if (num_args > 0)
+	if (num_args > 0) {
 		va_start(args, num_args);
 
-	/* send the message */
-	error = MINI_IPCVpost(code, state.cur_tag, num_args, args);
+		/* send the message */
+		error = MINI_IPCVpost(code, state.cur_tag, num_args, args);
+	}
+	else
+		error = MINI_IPCVpost(code, state.cur_tag, num_args, NULL);
+
 	if (error)
 		goto out;
 
@@ -281,8 +307,6 @@ int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attem
 
 	/* increment our tag */
 	state.cur_tag++;
-
-	return 0;
 
 out:
 	if (num_args > 0)

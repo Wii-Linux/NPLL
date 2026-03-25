@@ -256,12 +256,12 @@ void IOS_Reset(void) {
 		udelay(1000);
 		_log_printf(".");
 	}
-	_log_puts(" Done.\r\n");
+	_log_puts(" Done.");
 
 	log_printf("Closing file descriptors");
 	for (i = 0; i < 32; i++) {
 		IOS_Close(i);
 		_log_printf(".");
 	}
-	_log_puts(" Done.\r\n");
+	_log_puts(" Done.");
 }

@@ -24,6 +24,8 @@
 #define IPC_MINI_CODE_SLWPING       0x00000000
 #define IPC_MINI_CODE_PING          0x01000000
 #define IPC_MINI_CODE_GETVERS       0x00000002
+#define IPC_MINI_CODE_WRITE32       0x00000100
+#define IPC_MINI_CODE_SET32         0x00000106
 
 #define IPC_MINI_CODE_PPC_BOOT_MEM  0x00060000
 #define IPC_MINI_CODE_PPC_BOOT_FILE 0x00060001
@@ -52,36 +54,50 @@ struct ipc_request_mini {
 	u32 args[6];
 };
 
+enum MINI_Err {
+	MINI_OK,
+	MINI_BAD_INFOHDR_PTR,
+	MINI_BAD_INFOHDR_MAGIC,
+	MINI_BAD_INFOHDR_VERSION,
+	MINI_TIMEOUT,
+	MINI_NOT_INIT
+};
+
+/*
+ * Check if a valid infohdr is present in MEM2.
+ * Does not require MINI_Init.
+ */
+enum MINI_Err MINI_ValidInfoHdr(void);
 
 /*
  * Initialize MINI IPC interface, only meant to be called by
  * the IPC core.
  */
-void MINI_Init(void);
+enum MINI_Err MINI_Init(void);
 
 /*
  * Post a message w/ va_args.  See MINI_IPCPost.
  */
-int MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args);
+enum MINI_Err MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args);
 
 /*
  * Post a message to Starlet.
  *
- * Returns -ETIMEDOUT if Starlet is stuck for too long.
- * Returns -EINVAL if not using MINI, or IPC not initialized.
+ * Returns MINI_TIMEOUT if Starlet is stuck for too long.
+ * Returns MINI_NOT_INIT if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCPost(u32 code, u32 tag, uint num_args, ...);
+enum MINI_Err MINI_IPCPost(u32 code, u32 tag, uint num_args, ...);
 
 /*
  * Receive a message from Starlet, filling in 'req' with
  * the message that has been received.
  *
- * Returns -ETIMEDOUT if Starlet is stuck for too long.
- * Returns -EINVAL if not using MINI, or IPC not initialized.
+ * Returns MINI_TIMEOUT if Starlet is stuck for too long.
+ * Returns MINI_NOT_INIT if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts);
+enum MINI_Err MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts);
 
 /*
  * Receive a message from Starlet, whose code and tag match
@@ -92,22 +108,22 @@ int MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts);
  * 'max_attempts' is how many times we wait for the message, if we ended up
  * receiving some other message.
  *
- * Returns -ETIMEDOUT if Starlet is stuck for too long.
- * Returns -EINVAL if not using MINI, or IPC not initialized.
+ * Returns MINI_TIMEOUT if Starlet is stuck for too long.
+ * Returns MINI_NOT_INIT if not using MINI, or IPC not initialized.
  * Returns 0 on success.
  */
-int MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts);
+enum MINI_Err MINI_IPCRecvTagged(struct ipc_request_mini *req, u32 code, u32 tag, uint max_recv_attempts, uint max_attempts);
 
 /*
  * Exchange a message with Starlet, filling in 'req' with
  * the message that has been received.
  *
- * Returns -ETIMEDOUT if Starlet is stuck for too long,
+ * Returns MINI_TIMEOUT if Starlet is stuck for too long,
  *   for either receiving the message, or replying.
- * Returns -EINVAL if not using MINI, or IPC not initialized.
+ * Returns MINI_NOT_INIT if not using MINI, or IPC not initialized.
  * Returns 0 on success for both send and receive.
  */
-int MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...);
+enum MINI_Err MINI_IPCExchange(struct ipc_request_mini *req, u32 code, uint max_recv_attempts, uint max_attempts, uint num_args, ...);
 
 
 #endif
