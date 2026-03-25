@@ -513,17 +513,16 @@ static void viDrvInit(void) {
 
 	/* XFB must be in MEM1, 32B aligned */
 	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * XFB_WIDTH * XFB_HEIGHT, 32);
-
-	/* rgbFB can go wherever */
-	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
-	viVidInfo.fb = (u32 *)((u32)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
-
+	clear_fb(black);
 	VIDEO_Init(0);
 	VIDEO_SetFrameBuffer(xfb);
 	if (H_ConsoleType == CONSOLE_TYPE_WII)
 		VISetupEncoder();
 
-	clear_fb(black);
+	/* rgbFB can go wherever */
+	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
+	viVidInfo.fb = (u32 *)((u32)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
+
 	clear_fb_rgb(black);
 	V_Register(&viVidInfo);
 
