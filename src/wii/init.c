@@ -319,7 +319,6 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	int error;
 	enum wiiInitState state;
 	enum MINI_Err miniErr;
-	struct ipc_request_mini req;
 	const char *stateStr, *prevStateStr;
 	u8 stateFlags;
 
@@ -507,11 +506,11 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		case STATE_MINI_PRIV_ESC: {
 			assert(GET_SFLAG(SFLAG_CUR_MINI));
 
-			miniErr = MINI_IPCExchange(&req, IPC_MINI_CODE_WRITE32, 3, 1, 2, virtToPhys(&HW_AHBPROT), 0xffffffff);
+			miniErr = MINI_IPCPost(IPC_MINI_CODE_WRITE32, 0, 2, virtToPhys(&HW_AHBPROT), 0xffffffff);
 			if (miniErr != MINI_OK)
 				panic("Failed to write AHBPROT via MINI");
 
-			miniErr = MINI_IPCExchange(&req, IPC_MINI_CODE_SET32, 3, 1, 2, virtToPhys(&HW_SRNPROT), SRNPROT_AHPEN);
+			miniErr = MINI_IPCPost(IPC_MINI_CODE_SET32, 0, 2, virtToPhys(&HW_SRNPROT), SRNPROT_AHPEN);
 			if (miniErr != MINI_OK)
 				panic("Failed to write SRNPROT via MINI");
 
