@@ -352,11 +352,6 @@ static int mmc_reset(mmc_card_t card)
     cmd.rsp_type = MMC_RSP_TYPE_NONE;
     host_send_command(card, &cmd, NULL, NULL);
 
-    /* TODO: review this command. */
-    cmd.index = MMC_SEND_EXT_CSD;
-    cmd.arg = 0x1AA;
-    cmd.rsp_type = MMC_RSP_TYPE_R1;
-    host_send_command(card, &cmd, NULL, NULL);
     return 0;
 }
 
