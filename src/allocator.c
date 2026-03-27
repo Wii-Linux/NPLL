@@ -10,10 +10,8 @@
  * common case for memory allocations in NPLL.
  *
  * It supports freeing blocks of memory, but only if they're the most
- * recent allocation, otherwise the free fails, leaking memory. Being the
- * most recent is actually more likely than you may think, since NPLL
- * runs completely single-threaded, without any multitasking or even
- * interrupts enabled.
+ * recent allocation, otherwise the block is marked and the free is
+ * postponed until all the more recent allocations are freed.
  *
  * In contrast to a standard "bump" allocator, this allocator allocates
  * _downwards_ from the top.  The first pool is placed immediately before
@@ -40,6 +38,19 @@
 
 #define BLOCK_HDR_MAGIC "\x7fMBL"
 #define BLOCK_HDR_MAGIC_SIZE 4
+
+/* Marks a block that can be freed.
+ *
+ * This mask forces MIN_ALIGN to be >= 2.
+ */
+#define BLOCK_SIZE_CAN_FREE_MASK 0x1u
+
+/* Marks a block that has been freed.
+ *
+ * The size of struct block is smaller than MIN_ALIGN,
+ * which guarantees block size 0 is impossible during alloc.
+ */
+#define BLOCK_SIZE_FREE 0u
 
 #include <npll/allocator.h>
 #include <npll/console.h>
@@ -95,6 +106,19 @@ struct block {
 /* our pools */
 static struct pool pools[MAX_POOLS];
 
+static inline bool _blockCanFree(struct block *block) {
+	return !!(block->size & BLOCK_SIZE_CAN_FREE_MASK);
+}
+
+static inline struct block *_blockFree(struct block *block) {
+	u32 size = (block->size & ~BLOCK_SIZE_CAN_FREE_MASK);
+	block->size = BLOCK_SIZE_FREE;
+	return (struct block *)((size_t)block + sizeof(struct block) + size);
+}
+
+static inline bool _poolContains(struct pool *pool, void *ptr) {
+	return (ptr >= pool->cur_bottom && ptr < pool->top);
+}
 
 /* actually allocate from a pool */
 static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolAlloc(struct pool *pool, size_t size, size_t align) {
@@ -118,7 +142,9 @@ static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolA
 		panic("_poolAlloc: out of memory");
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
-	block->size = pool->cur_bottom - mem; /* to the next block */
+	block->size = (u32)pool->cur_bottom - (u32)mem; /* to the next block */
+	if (_blockCanFree(block))
+		panic("_poolAlloc: bad size");
 
 	pool->cur_bottom = (void *)block;
 
@@ -177,32 +203,42 @@ void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(e
 
 /* C stdlib free() implementation */
 void free(void *ptr) {
-	u32 bottom, mem;
+	struct pool *pool;
 	struct block *block;
 	int i;
 
 	for (i = 0; i < MAX_POOLS; i++) {
-		if (__unlikely(memcmp(pools[i].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
+		pool = &pools[i];
+		if (__unlikely(memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
 			panic("free: corrupted pool metadata");
 
-		if (__unlikely(!pools[i].top && !pools[i].bottom && !pools[i].cur_bottom))
+		if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
 			continue;
 
-		mem = ((u32)ptr) - sizeof(struct block);
-		bottom = (u32)pools[i].cur_bottom;
+		if (!_poolContains(pool, ptr))
+			continue; /* wrong pool */
 
-		/* it's the lowest allocation, we can free it */
-		if (mem == bottom) {
-			block = (struct block *)mem;
+		block = (struct block *)((size_t)ptr - sizeof(struct block));
+		if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
+			panic("free: corrupted block metadata");
+		if (_blockCanFree(block))
+			panic("free: double free");
+		block->size |= BLOCK_SIZE_CAN_FREE_MASK;
+
+		/* deallocate lowest free blocks */
+		while (block == pool->cur_bottom && _blockCanFree(block)) {
+			block = _blockFree(block);
+			pool->cur_bottom = (void *)block;
+			//log_puts("successfully freed block!");
+			if (!_poolContains(pool, block))
+				break; /* empty pool */
+
 			if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
 				panic("free: corrupted block metadata");
-
-			bottom += sizeof(struct block) + block->size;
-			pools[i].cur_bottom = (void *)bottom;
-			//log_puts("successfully freed block!");
-			break;
 		}
+		return; /* done */
 	}
+	panic("free: no pool"); /* double free or other memory */
 }
 
 /* C stdlib malloc() implementation */
