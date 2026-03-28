@@ -191,7 +191,7 @@ enum si_device_type {
  * N64 Controller analog treshholds
  */
 #define N64_STICK_CENTER 128
-#define N64_STICK_DEADZONE 64
+#define N64_STICK_DEADZONE 32
 #define N64_STICK_MIN_THRESH 32
 #define N64_STICK_MAX_THRES 224
 
@@ -209,6 +209,7 @@ struct n64_pad_state {
 	u16 buttons;
 	u8 stickX;
 	u8 stickY;
+	u64 lastTB;
 };
 
 struct si_device_state {
@@ -542,10 +543,15 @@ static void probeGCNPad(int chan) {
 }
 
 static void probeN64Pad(int chan) {
-	u64 startTB;
+	u64 startTB, lastTB;
 	u32 inbuf, prevButtons, buttons, pressed;
 	u8 stickX, stickY, prevStickX, prevStickY;
 	int i;
+
+	lastTB = devices[chan].n64_pad.lastTB;
+	if (!T_HasElapsed(lastTB, 60*1000))
+		return;
+	lastTB = mftb();
 
 	/*
 	 * Sanitize hardware state.  If we don't do this, probing devices on
@@ -588,8 +594,8 @@ static void probeN64Pad(int chan) {
 
 	/* unpack report */
 	buttons = inbuf & 0xffff0000; /* ingore stick */
-	stickX = (inbuf & N64_CONTROLLER_DIRECT_STICK_X) >> N64_CONTROLLER_DIRECT_STICK_X_SHIFT;
-	stickY = (inbuf & N64_CONTROLLER_DIRECT_STICK_Y) >> N64_CONTROLLER_DIRECT_STICK_Y_SHIFT;
+	stickX = ((inbuf & N64_CONTROLLER_DIRECT_STICK_X) >> N64_CONTROLLER_DIRECT_STICK_X_SHIFT) + 128;
+	stickY = ((inbuf & N64_CONTROLLER_DIRECT_STICK_Y) >> N64_CONTROLLER_DIRECT_STICK_Y_SHIFT) + 128;
 
 	/* determine state transitions of buttons */
 	pressed = buttons & ~prevButtons;
@@ -620,10 +626,12 @@ static void probeN64Pad(int chan) {
 	else if (stickX < N64_STICK_CENTER - N64_STICK_DEADZONE && prevStickX > N64_STICK_CENTER - N64_STICK_DEADZONE)
 		IN_NewEvent(INPUT_EV_LEFT);
 
+
 	/* save state for next time */
 	devices[chan].n64_pad.buttons = (u16)(buttons >> 16);
 	devices[chan].n64_pad.stickX = stickX;
 	devices[chan].n64_pad.stickY = stickY;
+	devices[chan].n64_pad.lastTB = lastTB;
 }
 
 static void siCallback(void) {
@@ -638,11 +646,11 @@ static void siCallback(void) {
 	/* Probe inputs */
 	for (i = 0; i < 4; i++) {
 		switch (devices[i].type) {
-		case SI_DEVICE_TYPE_N64_MOUSE:
 		case SI_DEVICE_TYPE_GCN_CONTROLLER: {
 			probeGCNPad(i);
 			break;
 		}
+		case SI_DEVICE_TYPE_N64_MOUSE:
 		case SI_DEVICE_TYPE_N64_CONTROLLER: {
 			probeN64Pad(i);
 			break;
