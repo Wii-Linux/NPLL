@@ -194,8 +194,6 @@ enum si_device_type {
 #define N64_STICK_DEADZONE 64
 #define N64_STICK_MIN_THRESH 32
 #define N64_STICK_MAX_THRES 224
-#define N64_TRIGGER_MIN_THRESH 32
-#define N64_TRIGGER_MAX_THRESH 224
 
 struct gcn_pad_state {
 	u16 buttons;
@@ -381,8 +379,7 @@ static void checkConnected(void) {
 			 * YAGCD calls this out for having the current rumble motor state, but I'm sure it has more...
 			 * TODO: investigate what's in here, and see if there's any reason to care
 			 */
-			status = resp >> 8;
-			/*(void)status;*/
+			status = (u8)(resp >> 8);
 			devices[i].id = id;
 
 			/*
@@ -614,13 +611,13 @@ static void probeN64Pad(int chan) {
 	if (pressed & N64_CONTROLLER_DIRECT_DPAD_RIGHT)
 		IN_NewEvent(INPUT_EV_RIGHT);
 
-	if (stickY > N64_STICK_CENTER + GCN_STICK_DEADZONE && prevStickY < N64_STICK_CENTER + GCN_STICK_DEADZONE)
+	if (stickY > N64_STICK_CENTER + N64_STICK_DEADZONE && prevStickY < N64_STICK_CENTER + N64_STICK_DEADZONE)
 		IN_NewEvent(INPUT_EV_UP);
-	else if (stickY < N64_STICK_CENTER - GCN_STICK_DEADZONE && prevStickY > N64_STICK_CENTER - GCN_STICK_DEADZONE)
+	else if (stickY < N64_STICK_CENTER - N64_STICK_DEADZONE && prevStickY > N64_STICK_CENTER - N64_STICK_DEADZONE)
 		IN_NewEvent(INPUT_EV_DOWN);
-	if (stickX > N64_STICK_CENTER + GCN_STICK_DEADZONE && prevStickX < N64_STICK_CENTER + GCN_STICK_DEADZONE)
+	if (stickX > N64_STICK_CENTER + N64_STICK_DEADZONE && prevStickX < N64_STICK_CENTER + N64_STICK_DEADZONE)
 		IN_NewEvent(INPUT_EV_RIGHT);
-	else if (stickX < N64_STICK_CENTER - GCN_STICK_DEADZONE && prevStickX > N64_STICK_CENTER - GCN_STICK_DEADZONE)
+	else if (stickX < N64_STICK_CENTER - N64_STICK_DEADZONE && prevStickX > N64_STICK_CENTER - N64_STICK_DEADZONE)
 		IN_NewEvent(INPUT_EV_LEFT);
 
 	/* save state for next time */
