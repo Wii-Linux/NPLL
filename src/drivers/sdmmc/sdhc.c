@@ -717,7 +717,7 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
-			sdhc_handle_irq(sdio, 0);
+			//sdhc_handle_irq(sdio, 0);
 			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
 				ZF_LOGE("timeout waiting for command completion");
 				ZF_LOGD("doing sw reset of DAT+CMD due to command timeout");

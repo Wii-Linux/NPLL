@@ -4,7 +4,6 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include "npll/utils.h"
 #define MODULE "hollywood_sdmmc"
 
 #include <stdlib.h>
@@ -17,6 +16,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/utils.h>
 #include "sdmmc/sdhc.h"
 
 static REGISTER_DRIVER(sdmmcDrv);
@@ -24,6 +24,7 @@ static sdio_host_dev_t sdioDev;
 static mmc_card_t mmcDev = NULL;
 static struct blockDevice sdmmcBdev;
 static bool sdmmcRegistered = false;
+static bool checkConnected = false;
 
 /* TODO: maybe move alignment handling into B_Read? */
 static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
@@ -137,6 +138,10 @@ static void sdmmcUnregisterBlock(void) {
 static void sdmmcCB(void) {
 	u32 pstate;
 	int ret;
+	if (!checkConnected)
+		return;
+
+	checkConnected = false;
 
 	if (sdmmcDrv.state == DRIVER_STATE_NO_HARDWARE) {
 		/* check for a card */
@@ -168,14 +173,27 @@ static void sdmmcCB(void) {
 	}
 }
 
+static void sdmmcIRQ(enum irqDev dev) {
+	// log_puts("sdmmcIRQ");
+	sdio_handle_irq(&sdioDev, dev);
+	checkConnected = true;
+}
+
+static const int sdmmcIRQTable[2] = {
+	IRQDEV_SDHCI0,
+	IRQDEV_SDHCI1
+};
+
 static void sdmmcInit(void) {
 	u32 pstate;
 	int ret;
 
 	D_AddCallback(sdmmcCB);
+	IRQ_RegisterHandler(IRQDEV_SDHCI0, sdmmcIRQ);
+	IRQ_RegisterHandler(IRQDEV_SDHCI1, sdmmcIRQ);
 
 	/* initialize the controller */
-	ret = sdhc_init(SDHC0_ADDR, NULL, 0, &sdioDev);
+	ret = sdhc_init(SDHC0_ADDR, sdmmcIRQTable, 2, &sdioDev);
 	if (ret) {
 		log_printf("sdio_init failed with %d\r\n", ret);
 		sdmmcDrv.state = DRIVER_STATE_NO_HARDWARE;

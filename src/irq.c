@@ -44,8 +44,8 @@ void IRQ_Init(void) {
 		HW_PPCIRQMASK = 0;
 		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
 
-		/* unmask GPIO */
-		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO;
+		/* unmask GPIO and SDHCI0 */
+		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
 	}
 
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -68,8 +68,8 @@ void IRQ_Init(void) {
 		/* unmask Latte IRQs in the Flipper PIC */
 		PI_INTMR |= PI_IRQDEV_LATTE;
 
-		/* unmask GPIO */
-		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO;
+		/* unmask GPIO and SDHCI0 */
+		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
 	}
 
 	/* clear all handlers */
@@ -97,6 +97,10 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 			IRQ_DoHandle(IRQDEV_GPIO);
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIO;
 		}
+		if (intsr & HW_IRQDEV_SDHCI0) {
+			IRQ_DoHandle(IRQDEV_SDHCI0);
+			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI0;
+		}
 	}
 
 	/* TODO: Handle other Latte PIC IRQs */
@@ -109,6 +113,10 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		if (intsr & HW_IRQDEV_GPIO) {
 			IRQ_DoHandle(IRQDEV_GPIO);
 			LT_PPC0INT1STS = HW_IRQDEV_GPIO;
+		}
+		if (intsr & HW_IRQDEV_SDHCI0) {
+			IRQ_DoHandle(IRQDEV_SDHCI0);
+			LT_PPC0INT1STS = HW_IRQDEV_SDHCI0;
 		}
 	}
 
