@@ -352,6 +352,11 @@ static int mmc_reset(mmc_card_t card)
 	cmd.rsp_type = MMC_RSP_TYPE_NONE;
 	host_send_command(card, &cmd, NULL, NULL);
 
+	/* TODO: review this command. */
+	cmd.index = MMC_SEND_EXT_CSD;
+	cmd.arg = 0x1AA;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	host_send_command(card, &cmd, NULL, NULL);
 	return 0;
 }
 
@@ -499,8 +504,8 @@ exit_transfer_data:
 	return is_success ? bytes_transferred : ret;
 }
 
-long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
-					int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
+static long _mmc_block_read(mmc_card_t mmc_card, unsigned long start,
+				int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
 {
 	u32 command = (nblocks > 1)
 			? MMC_READ_MULTIPLE_BLOCK
@@ -516,8 +521,22 @@ long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
 			   command);
 }
 
-long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
-					 const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
+long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
+			int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
+	long ret;
+	int tries = 3;
+
+	while (tries--) {
+		ret = _mmc_block_read(mmc_card, start, nblocks, vbuf, pbuf, cb, token);
+		if (ret == nblocks * 512)
+			break;
+	}
+
+	return ret;
+}
+
+static long _mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
+				const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
 {
 	// vbuf's `const` gets dropped during the cast as the underlying layer
 	// accepts only non-const buffer, however it is ok, as we are sending the
@@ -534,6 +553,20 @@ long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
 			cb,
 			token,
 			command);
+}
+
+long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
+			const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
+	long ret;
+	int tries = 3;
+
+	while (tries--) {
+		ret = _mmc_block_write(mmc_card, start, nblocks, vbuf, pbuf, cb, token);
+		if (ret == nblocks * 512)
+			break;
+	}
+
+	return ret;
 }
 
 long long mmc_card_capacity(mmc_card_t mmc_card)

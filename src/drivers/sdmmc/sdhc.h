@@ -26,6 +26,7 @@ typedef struct sdhc *sdhc_dev_t;
 
 int sdhc_init(void *iobase, const int *irq_table, int nirqs, sdio_host_dev_t *dev);
 
-#define SDHC_INIT_TIMEOUT_US 1000 * 1000
+#define SDHC_INIT_TIMEOUT_US 250 * 1000
+#define SDHC_CMD_TIMEOUT_US 250 * 1000
 
 #endif /* _INTERNAL_SDMMC_SDHC_H */

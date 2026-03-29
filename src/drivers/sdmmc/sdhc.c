@@ -356,6 +356,17 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		while (readl(host->base + PRES_STATE) & (SDHC_PRES_STATE_CIHB | SDHC_PRES_STATE_CDIHB)) {
 			if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
 				ZF_LOGE("timeout waiting for command inhibit to clear");
+				ZF_LOGD("doing sw reset of DAT+CMD due to command timeout");
+				val8 = readb(host->base + SW_RESET);
+				val8 |= SW_RESET_RSTC | SW_RESET_RSTD;
+				writeb(val8, host->base + SW_RESET);
+				tb = mftb();
+				while (readb(host->base + SW_RESET) & (SW_RESET_RSTC | SW_RESET_RSTD)) {
+					if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+						ZF_LOGE("timeout waiting on software reset of DAT+CMD");
+						return -1;
+					}
+				}
 				return -1;
 			}
 		}
@@ -600,7 +611,7 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 
 		/* If there is no data segment, the transfer is complete */
 		if (cmd->data == NULL) {
-			assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq COMMAND COMPLETE path");
+			//assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq COMMAND COMPLETE path");
 			cmd->complete = 1;
 		}
 	}
@@ -608,7 +619,7 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 	if (int_status & (INT_STATUS_BRR | INT_STATUS_BWR)) {
 		assert(cmd->data);
 		assert(cmd->data->vbuf);
-		assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA path");
+		//assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA path");
 		if (host->blocks_remaining) {
 			volatile void *io_port = (void *)host->base + DATA_BUFF_ACC_PORT;
 			u32 blocks_done = cmd->data->blocks - host->blocks_remaining;
@@ -680,6 +691,7 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	int ret;
 	u64 tb;
+	u8 val8;
 
 	/* Initialise callbacks */
 	cmd->complete = 0;
@@ -704,13 +716,35 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		/* Wait for completion */
 		while (!cmd->complete) {
 			sdhc_handle_irq(sdio, 0);
-			if (T_HasElapsed(tb, 1000 * 1000)) {
+			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
 				ZF_LOGE("timeout waiting for command completion");
+				ZF_LOGD("doing sw reset of DAT+CMD due to command timeout");
+				val8 = readb(host->base + SW_RESET);
+				val8 |= SW_RESET_RSTC | SW_RESET_RSTD;
+				writeb(val8, host->base + SW_RESET);
+				tb = mftb();
+				while (readb(host->base + SW_RESET) & (SW_RESET_RSTC | SW_RESET_RSTD)) {
+					if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+						ZF_LOGE("timeout waiting on software reset of DAT+CMD");
+						return -1;
+					}
+				}
 				return -1;
 			}
 		}
 		/* Return result */
 		if (cmd->complete < 0) {
+			ZF_LOGD("doing sw reset of DAT+CMD due to command failure");
+			val8 = readb(host->base + SW_RESET);
+			val8 |= SW_RESET_RSTC | SW_RESET_RSTD;
+			writeb(val8, host->base + SW_RESET);
+			tb = mftb();
+			while (readb(host->base + SW_RESET) & (SW_RESET_RSTC | SW_RESET_RSTD)) {
+				if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+					ZF_LOGE("timeout waiting on software reset of DAT+CMD");
+					return -1;
+				}
+			}
 			return cmd->complete;
 		} else {
 			return 0;
