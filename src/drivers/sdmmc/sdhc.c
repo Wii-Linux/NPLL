@@ -18,10 +18,11 @@
 #include <assert.h>
 #include <npll/allocator.h>
 #include <npll/cache.h>
+#include <npll/drivers/sdio.h>
 #include <npll/timer.h>
+#include <npll/utils.h>
 #include "mmc.h"
 #include "compat.h"
-#include "npll/drivers/sdio.h"
 
 
 #define DS_ADDR               0x00 //DMA System Address
@@ -667,6 +668,7 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 		cmd->next = NULL;
 		/* Send callback if required */
 		if (cmd->cb) {
+			assert(addrIsValidCached(cmd->cb));
 			cmd->cb(sdio, 0, cmd, cmd->token);
 		}
 	}

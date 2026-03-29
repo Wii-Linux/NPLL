@@ -275,8 +275,8 @@ static int mmc_card_registry(mmc_card_t card)
 static int mmc_voltage_validation(mmc_card_t card)
 {
 	struct mmc_cmd cmd = {.data = NULL};
-	int voltage;
-	int ret;
+	int ret, retries = 5;
+	unsigned int voltage;
 
 	/* Send CMD55 to issue an application specific command. */
 	cmd.index = MMC_APP_CMD;
@@ -296,11 +296,14 @@ static int mmc_voltage_validation(mmc_card_t card)
 		cmd.rsp_type = MMC_RSP_TYPE_R3;
 		card->type = CARD_TYPE_MMC;
 	}
-	ret = host_send_command(card, &cmd, NULL, NULL);
+	ret = 1;
+	while (ret && retries--)
+		ret = host_send_command(card, &cmd, NULL, NULL);
+
 	if (ret) {
+		ZF_LOGE("Unknown card");
 		card->type = CARD_TYPE_UNKNOWN;
-		/* TODO: Be nicer */
-		assert(0);
+		return 1;
 	}
 	card->ocr = cmd.response[0];
 
@@ -312,6 +315,8 @@ static int mmc_voltage_validation(mmc_card_t card)
 		voltage |= BIT(25);
 		voltage |= BIT(24);
 	}
+
+	retries = 5;
 
 	/* Wait until the voltage level is set. */
 	do {
@@ -327,8 +332,12 @@ static int mmc_voltage_validation(mmc_card_t card)
 		cmd.rsp_type = MMC_RSP_TYPE_R3;
 		host_send_command(card, &cmd, NULL, NULL);
 		udelay(100000);
-	} while (!(cmd.response[0] & (1U << 31)));
+	} while (!(cmd.response[0] & BIT(31)) && retries--);
 	card->ocr = cmd.response[0];
+	if (!(cmd.response[0] & BIT(31))) {
+		ZF_LOGE("Timeout waiting on voltage to be set");
+		return 1;
+	}
 
 	/* Check CCS bit */
 	if (card->ocr & BIT(30)) {
@@ -523,7 +532,7 @@ static long _mmc_block_read(mmc_card_t mmc_card, unsigned long start,
 
 long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
 			int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
-	long ret;
+	long ret = -1;
 	int tries = 3;
 
 	while (tries--) {
@@ -557,7 +566,7 @@ static long _mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nbloc
 
 long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
 			const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
-	long ret;
+	long ret = -1;
 	int tries = 3;
 
 	while (tries--) {
