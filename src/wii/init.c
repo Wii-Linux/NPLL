@@ -301,12 +301,12 @@ enum wiiInitState {
 
 #define SET_SFLAG(flag, cond) { \
 	if ((cond)) \
-		stateFlags |= flag; \
+		stateFlags |= ((u8)(flag)); \
 	else \
-		stateFlags &= ~flag; \
+		stateFlags &= (u8)~((u8)(flag)); \
 }
 
-#define GET_SFLAG(flag) !!(stateFlags & flag)
+#define GET_SFLAG(flag) !!(stateFlags & (flag))
 
 #define DUMP_STATE() \
 	log_printf("H_InitWii: state %s -> %s\r\n", prevStateStr, stateStr); \
