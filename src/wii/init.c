@@ -90,7 +90,7 @@ static void armbootnow(void) {
 	u32 num_tikviews ALIGN(32);
 	u64 titleID;
 	iosVer = IOS_GetVersion();
-	titleID = TITLE_ID_IOS | iosVer;
+	titleID = TITLE_ID_IOS | (u8)iosVer;
 
 	H_WiiBootIOS = iosVer;
 	log_printf("IOS (%d) detected, trying to load MINI\r\n", iosVer);
@@ -116,14 +116,14 @@ static void armbootnow(void) {
 	ES_Init();
 
 	/* copy it into MEM2 */
-	memcpy((void *)armbuf, __mini_armboot_bin_data, __mini_armboot_bin_size);
-	dcache_flush((void *)armbuf, __mini_armboot_bin_size);
+	memcpy((void *)armbuf, __mini_armboot_bin_data, (uint)__mini_armboot_bin_size);
+	dcache_flush((void *)armbuf, (uint)__mini_armboot_bin_size);
 
 	/* find the "mov pc, r0" trampoline used to launch a new IOS image */
 	trampoline_addr = 0;
 	for (i = 0; i < 0x1000; i++) {
-		if (sram[i] == 0xE1A0F000) {
-			trampoline_addr = 0xFFFF0000 + (i * 4);
+		if (sram[i] == 0xE1A0F000u) {
+			trampoline_addr = 0xFFFF0000u + (uint)(i * 4);
 			log_printf("found LaunchIOS trampoline at %08x\n", trampoline_addr);
 			break;
 		}
@@ -138,7 +138,7 @@ static void armbootnow(void) {
 	if (trampoline_addr != 0) {
 		for (i = 0; i < 0x1000; i++) {
 			if (sram[i] == trampoline_addr) {
-				trampoline_pointer = 0xFFFF0000 + (i * 4);
+				trampoline_pointer = 0xFFFF0000u + (uint)(i * 4);
 				trampoline_off = i;
 				log_printf("found LaunchIOS trampoline pointer at 0x%08x/0x%08x\r\n", trampoline_pointer, &sram[i]);
 				break;
@@ -226,7 +226,7 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 }
 
 static void __attribute__((noreturn)) wiiExit(void) {
-	u32 iosVer = H_WiiBootIOS;
+	u32 iosVer = (u32)H_WiiBootIOS;
 	int i = 0;
 	void (*stub)(void);
 	struct ipc_request_mini req;
@@ -316,7 +316,6 @@ enum wiiInitState {
 
 void __attribute__((noreturn)) H_InitWii(void) {
 	u32 batl, batu, hid4;
-	int error;
 	enum wiiInitState state;
 	enum MINI_Err miniErr;
 	const char *stateStr, *prevStateStr;
@@ -438,6 +437,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			armbootnow();
 			SET_SFLAG(SFLAG_RAN_ABN, true);
+			break;
 		}
 		case STATE_HW_UNRESTRICT: {
 			/* set up SRAM access */

@@ -25,13 +25,13 @@ typedef struct {
 } __attribute__((packed)) tikview_t;
 
 static inline i32 IOS_GetVersion(void) {
-	return *(u32 *)(MEM1_UNCACHED_BASE + 0x3140) >> 16;
+	return (u16)(*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) >> 16);
 }
 extern int ES_Init(void);
 extern i32 ES_GetTikViewsCount(u64 title_id, u32 *num_views);
 extern i32 ES_GetTikViews(u64 title_id, tikview_t *tikviews, u32 num_views);
 extern i32 ES_LaunchTitle(u64 title_id, tikview_t *tikview);
 
-#define TITLE_ID_IOS 0x100000000
+#define TITLE_ID_IOS 0x100000000ull
 
 #endif /* _IOS_ES_H */
