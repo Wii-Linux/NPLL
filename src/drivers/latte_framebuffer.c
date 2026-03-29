@@ -5,21 +5,35 @@
  */
 
 #include <string.h>
+#include <npll/allocator.h>
 #include <npll/cache.h>
-#include <npll/video.h>
 #include <npll/drivers.h>
 #include <npll/latte/r600.h>
+#include <npll/types.h>
+#include <npll/video.h>
 
 static REGISTER_DRIVER(fbDrv);
 
 static void fbFlush(void);
 
+/* TV */
+#define REAL_FB (u32 *)0x97500000
+#if 0
+/* DRC/Gamepad */
+#define REAL_FB (u32 *)0x978c0000
+#endif
+
+#define FB_SIZE (uint)(fbVidInfo.width * fbVidInfo.height * (uint)sizeof(u32))
+
+static const u32 *realFb = REAL_FB;
+static u32 *shadowFb;
+
 static struct videoInfo fbVidInfo = {
-	.fb = (u32 *)0x97500000, /* TV */
+	.fb = NULL, /* TV */
 	.width = 1280,
 	.height = 720,
 #if 0
-	.fb = (u32 *)0x978c0000, /* DRC/Gamepad */
+	.fb = NULL, /* DRC/Gamepad */
 	.width = 896, /* weird width/height, comes from linux-loader, check this? */
 	.height = 504,
 #endif
@@ -29,7 +43,8 @@ static struct videoInfo fbVidInfo = {
 
 
 static void fbFlush(void) {
-	dcache_flush(fbVidInfo.fb, fbVidInfo.width * fbVidInfo.height * sizeof(u32));
+	memcpy((void *)realFb, shadowFb, FB_SIZE);
+	dcache_flush(realFb, FB_SIZE);
 }
 
 static void fbInit(void) {
@@ -38,9 +53,13 @@ static void fbInit(void) {
 	DGRPH_CONTROL = DGRPH_DEPTH_32BPP | DGRPH_FORMAT_32BPP_ARGB8888 | DGRPH_ARRAY_LINEAR_ALIGNED;
 
 	/* clear to black */
-	memset(fbVidInfo.fb, 0, (fbVidInfo.width * fbVidInfo.height * sizeof(u32)));
+	memset((void *)realFb, 0, FB_SIZE);
+	dcache_flush(realFb, FB_SIZE);
+	shadowFb = M_PoolAlloc(POOL_MEM2, FB_SIZE, 32);
+	memset(shadowFb, 0, FB_SIZE);
 
 	/* register w/ video subsys */
+	fbVidInfo.fb = (void *)shadowFb;
 	V_Register(&fbVidInfo);
 
 	/* we're all good */
@@ -48,6 +67,7 @@ static void fbInit(void) {
 }
 
 static void fbCleanup(void) {
+	free(shadowFb);
 }
 
 static REGISTER_DRIVER(fbDrv) = {
