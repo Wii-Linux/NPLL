@@ -437,6 +437,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			armbootnow();
 			SET_SFLAG(SFLAG_RAN_ABN, true);
+			GOTO_STATE(STATE_ANALYZE);
 			break;
 		}
 		case STATE_HW_UNRESTRICT: {
