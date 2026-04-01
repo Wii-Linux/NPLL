@@ -83,6 +83,7 @@ enum MINI_Err MINI_Init(void) {
 	struct infohdr *infohdr;
 	enum MINI_Err hdrerr;
 
+	/* intentionally does not check initialized so that it can be called again while reloading */
 	hdrerr = MINI_ValidInfoHdr();
 	if (hdrerr != MINI_OK)
 		return hdrerr;

@@ -280,6 +280,7 @@ enum wiiInitState {
 	STATE_HW_UNRESTRICT,
 	STATE_ANALYZE_MINI,
 	STATE_MINI_INIT,
+	STATE_MINI_RELOAD,
 	STATE_MINI_PRIV_ESC,
 	STATE_POST_IOS_SANITIZE,
 	STATE_READY
@@ -299,29 +300,32 @@ enum wiiInitState {
 #define SFLAG_RAN_DEVSHA    BIT(5)
 #define SFLAG_RAN_ABN       BIT(6)
 #define SFLAG_MINI_INIT     BIT(7)
+#define SFLAG_MINI_RELOADED BIT(8)
 
 #define SET_SFLAG(flag, cond) { \
 	if ((cond)) \
-		stateFlags |= ((u8)(flag)); \
+		stateFlags |= ((u16)(flag)); \
 	else \
-		stateFlags &= (u8)~((u8)(flag)); \
+		stateFlags &= (u16)~((u16)(flag)); \
 }
 
 #define GET_SFLAG(flag) !!(stateFlags & (flag))
 
 #define DUMP_STATE() \
 	log_printf("H_InitWii: state %s -> %s\r\n", prevStateStr, stateStr); \
-	log_printf("H_InitWii: ahb=%d, srn=%d, mem2=%d, origMINI=%d, curMINI=%d, devsha=%d, ABN=%d\r\n", \
+	log_printf("H_InitWii: ahb=%d, srn=%d, mem2=%d, origMINI=%d, curMINI=%d, devsha=%d, ABN=%d, miniInit=%d, miniRld=%d\r\n", \
 		GET_SFLAG(SFLAG_AHBPROT_PERMS), GET_SFLAG(SFLAG_SRNPROT_PERMS), GET_SFLAG(SFLAG_MEM2_ACCESS), \
-		GET_SFLAG(SFLAG_ORIG_MINI), GET_SFLAG(SFLAG_CUR_MINI), GET_SFLAG(SFLAG_RAN_DEVSHA), GET_SFLAG(SFLAG_RAN_ABN));
+		GET_SFLAG(SFLAG_ORIG_MINI), GET_SFLAG(SFLAG_CUR_MINI), GET_SFLAG(SFLAG_RAN_DEVSHA), GET_SFLAG(SFLAG_RAN_ABN), \
+		GET_SFLAG(SFLAG_MINI_INIT), GET_SFLAG(SFLAG_MINI_RELOADED));
 
 void __attribute__((noreturn)) H_InitWii(void) {
 	u64 tb;
 	u32 batl, batu, hid4;
+	vu32 *armbuf;
 	enum wiiInitState state;
 	enum MINI_Err miniErr;
 	const char *stateStr, *prevStateStr;
-	u8 stateFlags;
+	u16 stateFlags;
 
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
@@ -481,8 +485,13 @@ void __attribute__((noreturn)) H_InitWii(void) {
 				GOTO_STATE(STATE_MINI_PRIV_ESC);
 				break;
 			}
-			/* MINI, was originally MINI, initialized, has perms -> STATE_READY */
-			else if (GET_SFLAG(SFLAG_MINI_INIT) && GET_SFLAG(SFLAG_ORIG_MINI) && GET_SFLAG(SFLAG_MEM2_ACCESS) && GET_SFLAG(SFLAG_AHBPROT_PERMS) && GET_SFLAG(SFLAG_SRNPROT_PERMS)) {
+			/* MINI, was originally MINI, initialized, has perms -> STATE_MINI_RELOAD */
+			else if (GET_SFLAG(SFLAG_MINI_INIT) && GET_SFLAG(SFLAG_ORIG_MINI) && !GET_SFLAG(SFLAG_MINI_RELOADED) && GET_SFLAG(SFLAG_MEM2_ACCESS) && GET_SFLAG(SFLAG_AHBPROT_PERMS) && GET_SFLAG(SFLAG_SRNPROT_PERMS)) {
+				GOTO_STATE(STATE_MINI_RELOAD);
+				break;
+			}
+			/* MINI, was originally MINI, initialized, reloaded, has perms -> STATE_READY */
+			else if (GET_SFLAG(SFLAG_MINI_INIT) && GET_SFLAG(SFLAG_ORIG_MINI) && GET_SFLAG(SFLAG_MINI_RELOADED) && GET_SFLAG(SFLAG_MEM2_ACCESS) && GET_SFLAG(SFLAG_AHBPROT_PERMS) && GET_SFLAG(SFLAG_SRNPROT_PERMS)) {
 				GOTO_STATE(STATE_READY);
 				break;
 			}
@@ -503,6 +512,24 @@ void __attribute__((noreturn)) H_InitWii(void) {
 				panic("MINI_Init failed");
 			}
 			SET_SFLAG(SFLAG_MINI_INIT, true);
+			GOTO_STATE(STATE_ANALYZE);
+			break;
+		}
+		case STATE_MINI_RELOAD: {
+			assert(GET_SFLAG(SFLAG_CUR_MINI) && GET_SFLAG(SFLAG_MINI_INIT));
+
+			/* load _our_ copy of MINI into scratch MEM2 */
+			armbuf = (vu32 *)(MEM2_CACHED_BASE + 0x01000000);
+			memcpy((void *)armbuf, __mini_armboot_bin_data, (uint)__mini_armboot_bin_size);
+			dcache_flush((void *)armbuf, (uint)__mini_armboot_bin_size);
+
+			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
+			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
+			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf));
+			udelay(250 * 1000); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
+
+			SET_SFLAG(SFLAG_MINI_INIT, false);
+			SET_SFLAG(SFLAG_MINI_RELOADED, true);
 			GOTO_STATE(STATE_ANALYZE);
 			break;
 		}
