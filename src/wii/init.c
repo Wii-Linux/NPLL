@@ -22,6 +22,7 @@
 #include <npll/cache.h>
 #include <npll/tiny_usbgecko.h>
 #include <npll/hollywood/gpio.h>
+#include <npll/hollywood/ohci.h>
 #include <npll/log.h>
 #include <string.h>
 #include <npll/utils.h>
@@ -315,6 +316,7 @@ enum wiiInitState {
 		GET_SFLAG(SFLAG_ORIG_MINI), GET_SFLAG(SFLAG_CUR_MINI), GET_SFLAG(SFLAG_RAN_DEVSHA), GET_SFLAG(SFLAG_RAN_ABN));
 
 void __attribute__((noreturn)) H_InitWii(void) {
+	u64 tb;
 	u32 batl, batu, hid4;
 	enum wiiInitState state;
 	enum MINI_Err miniErr;
@@ -523,6 +525,17 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			assert(GET_SFLAG(SFLAG_CUR_MINI) && !GET_SFLAG(SFLAG_ORIG_MINI) && GET_SFLAG(SFLAG_AHBPROT_PERMS));
 
 			/* TODO: all of this */
+			tb = mftb();
+			OHCI_HC_COMMAND_STATUS(0) |= OHCI_HC_COMMAND_STATUS_HCR;
+			OHCI_HC_COMMAND_STATUS(1) |= OHCI_HC_COMMAND_STATUS_HCR;
+			while ((OHCI_HC_COMMAND_STATUS(0) | OHCI_HC_COMMAND_STATUS(1)) & OHCI_HC_COMMAND_STATUS_HCR) {
+				if (T_HasElapsed(tb, 1000))
+					panic("OHCI reset timed out");
+			}
+			OHCI_HC_INTERRUPT_DISABLE(0) = 0xffffffff;
+			OHCI_HC_INTERRUPT_DISABLE(1) = 0xffffffff;
+			OHCI_HC_INTERRUPT_STATUS(0) = OHCI_HC_INTERRUPT_STATUS(0);
+			OHCI_HC_INTERRUPT_STATUS(1) = OHCI_HC_INTERRUPT_STATUS(1);
 			GOTO_STATE(STATE_READY);
 			break;
 		}
