@@ -71,6 +71,7 @@ void H_PrepareForExecEntry(void) {
 	case CONSOLE_TYPE_WII: {
 		HW_PPCIRQMASK = 0;
 		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
+		HW_RESETS &= ~RESETS_RSTB_DSP;
 		/* fallthrough */
 	}
 	case CONSOLE_TYPE_GAMECUBE: {

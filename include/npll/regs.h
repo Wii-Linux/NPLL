@@ -91,6 +91,7 @@
 #define HW_AIPROT            _HOLLYWOOD_REG(0x70)
 #define HW_RESETS            _HOLLYWOOD_REG(0x194)
 #  define RESETS_RSTBINB         BIT(0)
+#  define RESETS_RSTB_DSP        BIT(22)
 #define HW_VERSION           _HOLLYWOOD_REG(0x214)
 #define HW_MEM_PROT_SPL      _HOLLYWOOD_MC_REG(0x4)
 #define HW_MEM_PROT_SPL_BASE _HOLLYWOOD_MC_REG(0x6)
