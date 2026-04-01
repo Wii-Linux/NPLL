@@ -463,16 +463,15 @@ static void clear_fb(rgb fill_rgb) {
 
 	while ((void *)fb < ((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) {
 		*fb = fill_yuv;
-		dcache_flush(fb, 4);
 		fb++;
 	}
+	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
 }
 
 static void clear_fb_rgb(rgb fill_rgb) {
 	u32 *fb = rgbFb;
 	while ((void *)fb < ((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) {
 		*fb = fill_rgb.as_u32;
-		dcache_flush(fb, 4);
 		fb++;
 	}
 }
@@ -493,9 +492,9 @@ static void viFlush(void) {
 		src++;
 
 		*dest = make_yuv(rgb1, rgb2);
-		dcache_flush(dest, 4);
 		dest++;
 	}
+	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
 }
 
 static struct videoInfo viVidInfo = {
