@@ -4,10 +4,10 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include "npll/irq.h"
 #include <stdbool.h>
 #include <string.h>
 #include <npll/console.h>
+#include <npll/irq.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 

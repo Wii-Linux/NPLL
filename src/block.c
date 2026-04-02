@@ -4,12 +4,12 @@
  * Copyright (C) 2026 Techflash
  */
 
-#include "npll/fs.h"
 #define MODULE "block"
 
 #include <assert.h>
 #include <string.h>
 #include <npll/block.h>
+#include <npll/fs.h>
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/partition.h>

@@ -11,12 +11,12 @@
  * see file COPYING or http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
 */
 
-#include "npll/timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/irq.h>
 #include <npll/panic.h>
+#include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 

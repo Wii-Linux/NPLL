@@ -7,8 +7,8 @@
 #ifndef _FS_H
 #define _FS_H
 
-#include "npll/partition.h"
 #include <npll/block.h>
+#include <npll/partition.h>
 #include <npll/types.h>
 
 /*

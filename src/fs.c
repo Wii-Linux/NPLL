@@ -4,12 +4,12 @@
  * Copyright (C) 2026 Techflash
  */
 
-#include "npll/partition.h"
 #define MODULE "fs"
 
 #include <assert.h>
 #include <npll/fs.h>
 #include <npll/log.h>
+#include <npll/partition.h>
 #include <npll/types.h>
 #include "fs/fat/glue.h"
 
