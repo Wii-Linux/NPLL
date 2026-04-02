@@ -9,10 +9,6 @@
 #include <npll/video.h>
 
 void __attribute__((noreturn)) mainLoop(void) {
-	while (1) {
+	while (1)
 		D_RunCallbacks();
-		UI_HandleInputs();
-		UI_Redraw();
-		V_Flush();
-	}
 }

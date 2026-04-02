@@ -11,6 +11,7 @@
  * see file COPYING or http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
 */
 
+#include "npll/timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <npll/cache.h>
@@ -42,9 +43,7 @@ static void dump_stack_trace(u32 *sp) {
 
 
 static void __attribute__((noreturn)) E_DecrementerHandler(void) {
-	u32 val = 0xffffffff;
-
-	asm("mtdec	%0" : "=r" (val));
+	T_DECHandler();
 	IRQ_Return();
 }
 

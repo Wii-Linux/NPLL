@@ -16,6 +16,7 @@
 #include <npll/menu.h>
 #include <npll/output.h>
 #include <npll/regs.h>
+#include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 
@@ -65,6 +66,7 @@ void __attribute__((noreturn)) init(void) {
 	/* it's a GameCube, there is nothing else to determine */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		_log_puts("Detected hardware: Nintendo GameCube");
+		T_Init();
 		H_InitGameCube();
 		__builtin_unreachable();
 	}
@@ -81,6 +83,7 @@ void __attribute__((noreturn)) init(void) {
 	if ((lt_chiprevid & 0xFFFF0000) != 0xCAFE0000) {
 		_log_puts("Detected hardware: Nintendo Wii");
 detectedWii:
+		T_Init();
 		H_InitWii();
 		__builtin_unreachable();
 	}
@@ -91,6 +94,7 @@ detectedWii:
 		_log_puts("Detected hardware: Nintendo Wii U (native)");
 		H_ConsoleType = CONSOLE_TYPE_WII_U;
 		H_WiiURev = lt_chiprevid;
+		T_Init();
 		H_InitWiiU();
 		__builtin_unreachable();
 	}

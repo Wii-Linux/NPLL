@@ -31,10 +31,9 @@ u32 *V_FbPtr;
 int V_FbWidth;
 int V_FbHeight;
 int V_FbStride;
-static u64 lastFlush = 0;
 
-/* 60 FPS */
-#define FRAME_MS_TARGET 16
+/* 15 FPS */
+#define FRAME_MS_TARGET 66
 #define MAX_NAME 128
 #define FONT_WIDTH 8
 #define FONT_HEIGHT 16
@@ -389,14 +388,48 @@ static struct outputDevice videoOutDev = {
 	.ansiEscSupport = true
 };
 
+#ifdef VID_BENCH
+static u64 flushTB;
+static u64 tbStart[300] = {0};
+static u64 tbEnd[300] = {0};
+static uint numFlushes = 0;
+extern u32 ticksPerUsec;
+#endif
 void V_Flush(void) {
-	if (__likely(!T_HasElapsed(lastFlush, FRAME_MS_TARGET * 1000)))
-		return;
-
+	#ifdef VID_BENCH
+	u64 total;
+	int i;
+	#endif
 	assert_msg(V_ActiveDriver, "Tried to V_Flush with no driver");
 
-	if (V_ActiveDriver->flush)
-		V_ActiveDriver->flush();
+	if (!V_ActiveDriver->flush)
+		return;
+
+	#ifdef VID_BENCH
+	tbStart[numFlushes] = mftb();
+	#endif
+	V_ActiveDriver->flush();
+	#ifdef VID_BENCH
+	tbEnd[numFlushes] = mftb();
+	numFlushes++;
+
+	if (T_HasElapsed(flushTB, 5000 * 1000)) {
+		total = 0;
+		for (i = 0; i < numFlushes; i++)
+			total += tbEnd[i] - tbStart[i];
+		total /= ticksPerUsec;
+		total /= numFlushes;
+		log_printf("avg V_Flush us: %u\r\n", total);
+		flushTB = mftb();
+		numFlushes = 0;
+	}
+	#endif
+}
+
+static void flushWrapper(void *arg) {
+	(void)arg;
+
+	V_Flush();
 }
 
 void V_Register(struct videoInfo *info) {
@@ -419,5 +452,9 @@ void V_Register(struct videoInfo *info) {
 	color[0] = colors[colorIdx[0]];
 	color[1] = colors[colorIdx[1]];
 
+	#ifdef VID_BENCH
+	flushTB = mftb();
+	#endif
 	O_AddDevice(&videoOutDev);
+	T_QueueRepeatingEvent(FRAME_MS_TARGET * 1000, flushWrapper, NULL);
 }

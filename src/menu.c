@@ -14,9 +14,9 @@
 #include <npll/input.h>
 #include <npll/menu.h>
 #include <npll/output.h>
-#include <npll/video.h>
-#include <npll/utils.h>
 #include <npll/timer.h>
+#include <npll/utils.h>
+#include <npll/video.h>
 
 #define LOG_LINES 5
 /* will need to be increased when OSes to boot start being detected */
@@ -100,9 +100,16 @@ static struct menu rootMenu = {
 	.previous = NULL
 };
 
+static void uiRedrawWrapper(void *arg) {
+	(void)arg;
+	UI_HandleInputs();
+	UI_Redraw();
+}
+
 void UI_Init(void) {
 	memset(logLines, 0, sizeof(logLines));
 	UI_Switch(&rootMenu);
+	T_QueueRepeatingEvent(10 * 1000, uiRedrawWrapper, NULL);
 }
 
 void UI_HandleInputs(void) {

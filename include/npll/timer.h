@@ -25,8 +25,15 @@ static inline u64 mftb(void) {
 	return (u64)(((u64)hi << 32) | lo);
 }
 
+static inline void mtdec(u32 val) {
+	asm("mtdec	%0" : : "r" (val));
+}
+
 extern void udelay(u32 usec);
+extern void T_Init(void);
 extern bool T_HasElapsed(u64 startTB, u32 usecSince);
+extern void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData);
+extern void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData);
+extern void T_DECHandler(void);
 
 #endif /* _TIMER_H */
-
