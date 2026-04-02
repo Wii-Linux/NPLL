@@ -29,7 +29,6 @@ static bool checkConnected = false;
 /* TODO: maybe move alignment handling into B_Read? */
 static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
 	u8 ALIGN(32) tmp[512];
-	void *ogDest;
 	uint blkSize;
 	size_t ret, startBlock, remaining, headSkip, headBytes, alignedBlocks, tailBytes;
 
@@ -50,6 +49,7 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 
 	/* if we have an unaligned first block, read it separately */
 	if (headSkip) {
+		dcache_invalidate(tmp, sizeof(tmp));
 		ret = mmc_block_read(mmcDev, startBlock, 1, tmp,
 			(uintptr_t)virtToPhys(tmp), NULL, NULL);
 		if (ret != blkSize)
@@ -71,6 +71,7 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 
 	/* read the remaining aligned portions in one pass, if any */
 	if (alignedBlocks) {
+		dcache_invalidate(dest, alignedBlocks * blkSize);
 		ret = mmc_block_read(mmcDev, startBlock, alignedBlocks, dest,
 			(uintptr_t)virtToPhys(dest), NULL, NULL);
 		if (ret != alignedBlocks * blkSize)
@@ -82,6 +83,7 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 
 	/* if we have an unaligned last block, read it separately */
 	if (tailBytes) {
+		dcache_invalidate(tmp, sizeof(tmp));
 		ret = mmc_block_read(mmcDev, startBlock, 1, tmp,
 			(uintptr_t)virtToPhys(tmp), NULL, NULL);
 		if (ret != blkSize)
@@ -90,7 +92,6 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 		memcpy(dest, tmp, tailBytes);
 	}
 
-	dcache_invalidate(ogDest, len);
 	return len;
 }
 

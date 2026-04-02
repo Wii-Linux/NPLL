@@ -125,7 +125,7 @@ struct mmc_cmd {
 	void		   *token;
 	/* For queueing */
 	struct mmc_cmd *next;
-	int complete;
+	volatile int complete;
 };
 
 struct cid {

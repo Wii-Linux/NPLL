@@ -167,6 +167,7 @@ static inline void writew(u16 v, volatile void *a) {
 	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
+	udelay(SDHC_DELAY);
 	sync(); barrier();
 	tmp = *(vu32*)(a);
 	tmp &= ~(0xffffu << shift);
@@ -185,6 +186,7 @@ static inline void writeb(u8 v, volatile void *a) {
 	addr &= ~0x3u;
 	a = (volatile void *)addr;
 
+	udelay(SDHC_DELAY);
 	sync(); barrier();
 	tmp = *(vu32*)(a);
 	tmp &= ~(0xffu << shift);
@@ -394,8 +396,8 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		val8 |= 0xE;
 		writeb(val8, host->base + TIMEOUT_CTRL);
 
-		/* Set the DMA boundary. */
 		val32 = (cmd->data->block_size & BLK_ATT_BLKSIZE_MASK);
+		val32 |= (0x7u << 12); /* set Host DMA Buffer Boundary to 7 to prevent DINT */
 		val32 |= (cmd->data->blocks << BLK_ATT_BLKCNT_SHF);
 		writel(val32, host->base + BLK_ATT);
 
@@ -495,19 +497,28 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
-	struct mmc_cmd *cmd = host->cmd_list_head;
+	struct mmc_cmd *cmd;
 	u32 status32;
 	u16 int_status, err_status;
+
+check_again:
+	/* Re-fetch cmd in case cleanup advanced the list */
+	cmd = host->cmd_list_head;
 
 	/* Read INT_STATUS and ERR_INT_STATUS atomically from one 32-bit word.
 	 * They share offset 0x30: INT_STATUS in [15:0], ERR_INT_STATUS in [31:16]. */
 	status32 = readl(host->base + INT_STATUS);
 	int_status = (u16)(status32);
 	err_status = (u16)(status32 >> 16);
+
+	/* Nothing pending — done */
+	if (!int_status && !err_status)
+		return 0;
+
 	if (!cmd) {
 		/* Clear flags */
 		writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
-		return 0;
+		goto check_again;
 	}
 	/** Handle errors **/
 	if (err_status & ERR_INT_STATUS_TNE) {
@@ -582,6 +593,8 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 	}
 	if (int_status & INT_STATUS_DINT) {
 		ZF_LOGD("DMA interrupt");
+		/* Re-arm SDMA */
+		writel(readl(host->base + DS_ADDR), host->base + DS_ADDR);
 	}
 	if (int_status & INT_STATUS_BGE) {
 		ZF_LOGD("Block gap event");
@@ -673,7 +686,8 @@ static int sdhc_handle_irq(sdio_host_dev_t *sdio, int irq UNUSED)
 		}
 	}
 
-	return 0;
+	/* in case we got more */
+	goto check_again;
 }
 
 static int sdhc_is_voltage_compatible(sdio_host_dev_t *sdio, int mv)
