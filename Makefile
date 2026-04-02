@@ -23,6 +23,13 @@ OBJCOPY := $(CROSS_PREFIX)objcopy
 endif
 endif
 
+VERSION := $(word 1, \
+	$(if $(shell command -v git && [ -d .git ]),$(shell git describe --tags --always --dirty)) \
+	)
+ifeq ($(VERSION),)
+VERSION := "unknown"
+endif
+
 # for building MINI
 # the basename dance is a hack, since MINI needs a very specific value of WIIDEV.
 # If the path to your cross compiler looks like:
@@ -74,7 +81,7 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong
+CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"'
 #CFLAGS  += -DDO_TRACE
 # -O3 is just too buggy and unstable :(
 CFLAGS  += -O2 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits

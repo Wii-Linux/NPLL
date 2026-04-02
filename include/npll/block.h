@@ -31,7 +31,7 @@ struct blockDevice {
 	ssize_t (*write)(struct blockDevice *bdev, const void *src, size_t len, u64 off);
 
 	/* partitions on this device */
-	int numPartitions;
+	uint numPartitions;
 	struct partition *partitions[MAX_PARTITIONS];
 };
 

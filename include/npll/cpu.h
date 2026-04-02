@@ -8,6 +8,8 @@
 #define _CPU_H
 
 /* SPR Numbers */
+#define PVR    287
+
 #define IBAT0U 528
 #define IBAT0L 529
 #define IBAT1U 530

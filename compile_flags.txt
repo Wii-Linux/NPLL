@@ -7,3 +7,4 @@
 -Wall
 -Wextra
 -Wformat=2
+-DVERSION="v0.1"

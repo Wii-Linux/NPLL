@@ -8,7 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <npll/block.h>
 #include <npll/console.h>
+#include <npll/cpu.h>
+#include <npll/fs.h>
 #include <npll/menu.h>
 
 static void sysinfoMenuInit(struct menu *m);
@@ -32,13 +35,17 @@ struct menu UI_SysInfoMenu = {
 static void sysinfoMenuInit(struct menu *m) {
 	char tmp[256];
 	char *name;
+	uint i, j;
 
 	/* allocate scratch space */
 	m->content = malloc(4096);
 	assert(m->content);
 	memset(m->content, 0, 4096);
 
-	/* step 1: report console type */
+	/* step 1: report NPLL ver */
+	strcat(m->content, "NPLL Version: " VERSION "\r\n");
+
+	/* step 2: report console type */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
 		strcat(m->content, "Console Type: Nintendo GameCube");
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
@@ -53,9 +60,9 @@ static void sysinfoMenuInit(struct menu *m) {
 	strcat(m->content, "\r\n");
 
 
-	/* step 2: report SoC revision */
+	/* step 3: report SoC revision */
 
-	/* step 2a: report Flipper revision if GameCube */
+	/* step 3a: report Flipper revision if GameCube */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		switch (H_GCNRev) {
 		case PI_CHIPID_REV_A: {
@@ -85,7 +92,7 @@ static void sysinfoMenuInit(struct menu *m) {
 		strcat(m->content, "\r\n");
 	}
 
-	/* step 2b: report Hollywood revision if Wii/Wii U */
+	/* step 3b: report Hollywood revision if Wii/Wii U */
 	if (H_ConsoleType == CONSOLE_TYPE_WII || H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		if (H_ConsoleType == CONSOLE_TYPE_WII)
 			name = "Hollywood SoC Revision";
@@ -103,7 +110,7 @@ static void sysinfoMenuInit(struct menu *m) {
 		strcat(m->content, "\r\n");
 	}
 
-	/* step 2c: report Latte revision if Wii U */
+	/* step 3c: report Latte revision if Wii U */
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		switch (H_WiiURev) {
 		case LT_CHIPREVID_REV_LATTE_A11: {
@@ -149,7 +156,7 @@ static void sysinfoMenuInit(struct menu *m) {
 		strcat(m->content, "\r\n");
 	}
 
-	/* step 3: report boot method, if applicable */
+	/* step 4: report boot method, if applicable */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) /* TODO: Determine */
 		strcat(m->content, "Boot method: Unknown\r\n");
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
@@ -165,8 +172,27 @@ static void sysinfoMenuInit(struct menu *m) {
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) /* TODO: Determine */
 		strcat(m->content, "Boot method: linux-loader\r\n");
 
-	/* TODO: Storage once that's fully inplemented */
-	/* TODO: Memory */
+	/* step 5: report CPU PVR */
+	sprintf(tmp, "CPU PVR: 0x%08x\r\n", mfspr(PVR));
+	strcat(m->content, tmp);
+
+	/* step 6: memory (TODO) */
+
+	/* step 7: report attached storage */
+	strcat(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
+	for (i = 0; i < B_NumDevices; i++) {
+		sprintf(tmp, "- %s: %llu bytes, %u partitions\r\n",
+			B_Devices[i]->name, B_Devices[i]->size, B_Devices[i]->numPartitions);
+		strcat(m->content, tmp);
+		for (j = 0; j < B_Devices[i]->numPartitions; j++) {
+			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx\r\n",
+				FS_MountedPartition == B_Devices[i]->partitions[j] ? '*' : ' ',
+				j, B_Devices[i]->partitions[j]->size, B_Devices[i]->partitions[j]->offset);
+			strcat(m->content, tmp);
+		}
+	}
+
+
 	/* TODO: Clock speeds */
 }
 
