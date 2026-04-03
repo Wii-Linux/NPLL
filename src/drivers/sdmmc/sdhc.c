@@ -350,6 +350,12 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	val16 = INT_STATUS_CINS  | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
 	if (get_dma_mode(host, cmd) == DMA_MODE_NONE) {
 		val16 |= INT_STATUS_BRR | INT_STATUS_BWR;
+	} else {
+		/* Enable DINT so boundary crossings are visible in
+		 * INT_STATUS and can be detected by the polling fallback
+		 * in sdhc_send_cmd
+		 */
+		val16 |= INT_STATUS_DINT;
 	}
 	writew(val16, host->base + INT_STATUS_EN);
 
@@ -722,6 +728,8 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 	if (host->cmd_list_head == cmd) {
 		ret = sdhc_next_cmd(host);
 		if (ret) {
+			host->cmd_list_head = NULL;
+			host->cmd_list_tail = &host->cmd_list_head;
 			return ret;
 		}
 	}
@@ -731,7 +739,8 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
-			//sdhc_handle_irq(sdio, 0);
+			/* Poll for DINT (SDMA boundary) to keep the DMA moving */
+			sdhc_handle_irq(sdio, 0);
 			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
 				ZF_LOGE("timeout waiting for command completion");
 				ZF_LOGD("doing sw reset of DAT+CMD due to command timeout");
@@ -742,9 +751,13 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 				while (readb(host->base + SW_RESET) & (SW_RESET_RSTC | SW_RESET_RSTD)) {
 					if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
 						ZF_LOGE("timeout waiting on software reset of DAT+CMD");
+						host->cmd_list_head = NULL;
+						host->cmd_list_tail = &host->cmd_list_head;
 						return -1;
 					}
 				}
+				host->cmd_list_head = NULL;
+				host->cmd_list_tail = &host->cmd_list_head;
 				return -1;
 			}
 		}

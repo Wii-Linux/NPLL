@@ -90,16 +90,16 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 	if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		intsr = HW_PPCIRQFLAG;
 		if (intsr & HW_IRQDEV_GPIOB) {
-			IRQ_DoHandle(IRQDEV_GPIOB);
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIOB;
+			IRQ_DoHandle(IRQDEV_GPIOB);
 		}
 		if (intsr & HW_IRQDEV_GPIO) {
-			IRQ_DoHandle(IRQDEV_GPIO);
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIO;
+			IRQ_DoHandle(IRQDEV_GPIO);
 		}
 		if (intsr & HW_IRQDEV_SDHCI0) {
-			IRQ_DoHandle(IRQDEV_SDHCI0);
 			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI0;
+			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
 	}
 
@@ -107,16 +107,16 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		intsr = LT_PPC0INT1STS;
 		if (intsr & HW_IRQDEV_GPIOB) {
-			IRQ_DoHandle(IRQDEV_GPIOB);
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
+			IRQ_DoHandle(IRQDEV_GPIOB);
 		}
 		if (intsr & HW_IRQDEV_GPIO) {
-			IRQ_DoHandle(IRQDEV_GPIO);
 			LT_PPC0INT1STS = HW_IRQDEV_GPIO;
+			IRQ_DoHandle(IRQDEV_GPIO);
 		}
 		if (intsr & HW_IRQDEV_SDHCI0) {
-			IRQ_DoHandle(IRQDEV_SDHCI0);
 			LT_PPC0INT1STS = HW_IRQDEV_SDHCI0;
+			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
 	}
 
