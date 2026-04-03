@@ -1,7 +1,7 @@
 /*
  * NPLL - Cleanup
  *
- * Copyright (C) 2026
+ * Copyright (C) 2026 Techflash
  */
 
 #include <npll/block.h>
