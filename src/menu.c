@@ -4,23 +4,32 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#define MODULE "menu"
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <npll/cpu.h>
+#include <npll/allocator.h>
+#include <npll/block.h>
+#include <npll/config.h>
 #include <npll/console.h>
+#include <npll/cpu.h>
 #include <npll/drivers.h>
+#include <npll/fs.h>
 #include <npll/input.h>
+#include <npll/irq.h>
+#include <npll/log.h>
 #include <npll/menu.h>
 #include <npll/output.h>
+#include <npll/partition.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include <npll/video.h>
 
 #define LOG_LINES 5
-/* will need to be increased when OSes to boot start being detected */
-#define ROOT_MENU_ENTRIES_MAX 4
+/* FIXME: make this dynamic */
+#define ROOT_MENU_ENTRIES_MAX 20
 
 static bool hasChanged = true;
 static int selected = 0;
@@ -34,6 +43,14 @@ static struct logLine logLines[LOG_LINES];
 static int logLineIdx = 0;
 static int curFooterLines;
 static struct menu *curMenu = NULL;
+
+struct configPartition {
+	struct menuEntry *entries[MAX_ENTRIES];
+	uint numEntries;
+	struct partition *part;
+};
+static uint numParts = 0;
+static struct configPartition partitions[MAX_PARTITIONS * MAX_BDEV];
 
 static void rootMenuRebootCB(struct menuEntry *dummy) {
 	(void)dummy;
@@ -108,6 +125,7 @@ static void uiRedrawWrapper(void *arg) {
 
 void UI_Init(void) {
 	memset(logLines, 0, sizeof(logLines));
+	memset(partitions, 0, sizeof(partitions));
 	UI_Switch(&rootMenu);
 	T_QueueRepeatingEvent(10 * 1000, uiRedrawWrapper, NULL);
 }
@@ -357,4 +375,47 @@ void UI_LogPutchar(char *cptr) {
 		logLines[logLineIdx].start = cptr;
 
 	logLines[logLineIdx].len++;
+}
+
+void UI_AddPart(struct partition *part) {
+	bool irqs;
+	int num, i;
+	struct menuEntry *entries;
+
+	num = C_Probe(&entries);
+	if (num == -1)
+		log_printf("C_Probe failed for partition %u of %s (%s)\r\n", part->index, part->bdev->name, FS_Mounted->name);
+	else if (num == 0)
+		return; /* no entries */
+	else if (num >= 1) {
+		irqs = IRQ_DisableSave();
+		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
+		partitions[numParts].part = part;
+		partitions[numParts].numEntries = num;
+		for (i = 0; i < num; i++) {
+			partitions[numParts].entries[i] = &curMenu->entries[curMenu->numEntries];
+			UI_AddEntry(&entries[i]);
+		}
+		numParts++;
+		free(entries);
+		IRQ_Restore(irqs);
+	}
+}
+
+void UI_DelPart(struct partition *part) {
+	int i, partToDel = 0;
+	bool irqs = IRQ_DisableSave();
+
+	for (i = 0; i < numParts; i++) {
+		if (partitions[i].part == part) {
+			partToDel = i;
+			break;
+		}
+	}
+
+	if (!partToDel)
+		return;
+
+	memmove(&partitions[partToDel], &partitions[partToDel + 1], (numParts - partToDel - 1) * sizeof(struct configPartition));
+	IRQ_Restore(irqs);
 }

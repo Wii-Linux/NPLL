@@ -8,10 +8,12 @@
 
 #include <assert.h>
 #include <string.h>
+#include <npll/allocator.h>
 #include <npll/block.h>
 #include <npll/fs.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/menu.h>
 #include <npll/partition.h>
 #include <npll/types.h>
 #include <npll/utils.h>
@@ -71,6 +73,7 @@ void B_Register(struct blockDevice *bdev) {
 		   bdev->name, bdev->size, bdev->numPartitions);
 
 	/* now probe all of its partitions for filesystems */
+	ret = -1;
 	for (i = 0; i < bdev->numPartitions; i++) {
 		fs = FS_Probe(bdev->partitions[i]);
 		if (!fs)
@@ -79,13 +82,15 @@ void B_Register(struct blockDevice *bdev) {
 		ret = FS_Mount(fs, bdev->partitions[i]);
 		if (ret)
 			log_printf("FS_Mount failed on %s part %d: %d\r\n", bdev->name, i, ret);
-		else
-			return; /* success! */
+		else {
+			UI_AddPart(bdev->partitions[i]);
+			break; /* success! */
+		}
 	}
 }
 
 void B_Unregister(const struct blockDevice *bdev) {
-	int idx, size;
+	int idx, i, size;
 	bool irqs;
 
 	assert_msg(initialized, "block: B_Unregister w/o B_Init");
@@ -93,6 +98,14 @@ void B_Unregister(const struct blockDevice *bdev) {
 	assert_msg(addrIsValidCached((void *)bdev), "block: invalid device passed to B_Unregister");
 	idx = findDev(bdev);
 	assert_msg(idx > -1, "block: unregistering non-existent device");
+
+	for (i = 0; i < bdev->numPartitions; i++) {
+		if (bdev->partitions[i] == FS_MountedPartition)
+			FS_Unmount();
+
+		UI_DelPart(bdev->partitions[i]);
+		free(bdev->partitions[i]);
+	}
 
 	size = (MAX_BDEV - idx - 1) * sizeof(struct blockDevice *);
 

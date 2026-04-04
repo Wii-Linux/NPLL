@@ -61,6 +61,7 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 - `ELF` - ELF binary handling
 - `UI`  - Menu UI
 - `P`   - Block device partition management
+- `C`   - Config file handling
 
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
