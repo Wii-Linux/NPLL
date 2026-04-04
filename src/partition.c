@@ -19,11 +19,12 @@
  * Try to parse an MBR partition table from the first sector of the device.
  * Returns the number of valid partitions found, or 0 if no MBR was found.
  */
-static int probeMBR(struct blockDevice *bdev) {
+static uint probeMBR(struct blockDevice *bdev) {
 	u8 ALIGN(32) _mbr[512];
 	struct mbr *mbr;
 	struct mbrEntry *entries;
-	int i, extIdx, count = 0;
+	uint i, count = 0;
+	int extIdx;
 	ssize_t ret;
 	u64 firstExtOff, extendedOff = 0;
 
@@ -111,7 +112,7 @@ static int probeMBR(struct blockDevice *bdev) {
 					log_puts("ignoring additional extended partition in EBR");
 					continue;
 				}
-				extIdx = i;
+				extIdx = (int)i;
 				continue;
 			}
 
@@ -151,7 +152,7 @@ static int probeMBR(struct blockDevice *bdev) {
 }
 
 void P_ProbePartitions(struct blockDevice *bdev) {
-	int count;
+	uint count;
 
 	bdev->numPartitions = 0;
 	memset(bdev->partitions, 0, sizeof(bdev->partitions));

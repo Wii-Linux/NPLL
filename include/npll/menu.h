@@ -8,6 +8,7 @@
 #define _MENU_H
 
 #include <stdbool.h>
+#include <npll/partition.h>
 #include <npll/types.h>
 
 struct menuEntry {
@@ -18,7 +19,7 @@ struct menuEntry {
 
 struct menu {
 	struct menuEntry *entries;
-	int numEntries;
+	uint numEntries;
 	char *header;
 	char *content;
 	char *footer;
@@ -63,6 +64,8 @@ extern void UI_LogPutchar(char *cptr);
 /* has dummy param so that it can be used directly as a .selected() */
 extern void UI_UpLevel(struct menuEntry *_dummy);
 
+extern void UI_AddPart(struct partition *part);
+extern void UI_DelPart(struct partition *part);
 
 extern struct menu UI_SysInfoMenu;
 

@@ -23,7 +23,7 @@ struct partition {
 	u8 type;
 
 	/* partition index (0-based) */
-	int index;
+	uint index;
 };
 
 /* https://en.wikipedia.org/wiki/Partition_type#List_of_partition_IDs */

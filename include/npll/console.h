@@ -63,5 +63,6 @@ extern int H_WiiBootIOS;
 extern void *H_WiiMEM2Top;
 extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
+extern void H_PrepareForExecEntry(void);
 
 #endif /* _CONSOLE_H */

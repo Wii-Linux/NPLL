@@ -23,9 +23,9 @@ extern void V_Register(struct videoInfo *info);
 
 extern struct videoInfo *V_ActiveDriver;
 extern u32 *V_FbPtr;
-extern int V_FbWidth;
-extern int V_FbHeight;
-extern int V_FbStride;
+extern uint V_FbWidth;
+extern uint V_FbHeight;
+extern uint V_FbStride;
 
 enum {
 	C_BLACK,

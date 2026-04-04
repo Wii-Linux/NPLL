@@ -32,16 +32,16 @@
 #define ROOT_MENU_ENTRIES_MAX 20
 
 static bool hasChanged = true;
-static int selected = 0;
+static uint selected = 0;
 struct logLine {
 	const char *start;
-	int len;
+	uint len;
 	bool done;
 };
 
 static struct logLine logLines[LOG_LINES];
-static int logLineIdx = 0;
-static int curFooterLines;
+static uint logLineIdx = 0;
+static uint curFooterLines;
 static struct menu *curMenu = NULL;
 
 struct configPartition {
@@ -86,7 +86,7 @@ static struct menuEntry rootMenuEntries[ROOT_MENU_ENTRIES_MAX] = {
 };
 
 static void rootMenuInit(struct menu *m) {
-	int idx = 1;
+	uint idx = 1;
 
 	if (H_PlatOps->reboot) {
 		memcpy(&rootMenuEntries[idx], &rebootEntry, sizeof(struct menuEntry));
@@ -135,7 +135,6 @@ void UI_HandleInputs(void) {
 
 	assert(curMenu);
 
-	mtspr(DABR, 0);
 	ev = IN_ConsumeEvent();
 	while (ev) {
 		hasChanged = true;
@@ -154,7 +153,6 @@ void UI_HandleInputs(void) {
 
 		ev = IN_ConsumeEvent();
 	}
-	mtspr(DABR, (u32)&selected | BIT(2) | BIT(1));
 }
 
 static void outputToDevice(char c, void *arg) {
@@ -168,7 +166,7 @@ static void putsDev(const struct outputDevice *odev, const char *str) {
 }
 
 static void drawLine(const struct outputDevice *odev) {
-	int i;
+	uint i;
 
 	/* some of our output devices can benefit from bulk transfers */
 	for (i = odev->columns; i > 0; i -= 4) {
@@ -184,7 +182,7 @@ static void drawLine(const struct outputDevice *odev) {
 }
 
 static void drawLogs(const struct outputDevice *odev) {
-	int i, j, maxLen;
+	uint i, j, maxLen;
 	bool cutOff;
 
 	for (i = 0; i < LOG_LINES; i++) {
@@ -226,7 +224,7 @@ static void drawLogs(const struct outputDevice *odev) {
 
 
 void UI_Redraw(void) {
-	int i, j;
+	uint i, j;
 	const struct outputDevice *odev;
 
 	if (__likely(!hasChanged))
@@ -350,8 +348,8 @@ void UI_LogPutchar(char *cptr) {
 		return; /* we'll get the \n next */
 
 	if (*cptr == '\n' && !logLines[logLineIdx].done && logLines[logLineIdx].start) {
-		if (!(logLineIdx >= 0 && logLineIdx < LOG_LINES)) {
-			printf("bogus logLineIdx: %d\r\n", logLineIdx);
+		if (logLineIdx >= LOG_LINES) {
+			printf("bogus logLineIdx: %u\r\n", logLineIdx);
 			panic("bogus logLineIdx");
 		}
 
@@ -366,8 +364,8 @@ void UI_LogPutchar(char *cptr) {
 		logLineIdx--;
 		hasChanged = true;
 	}
-	if (!(logLineIdx >= 0 && logLineIdx < LOG_LINES)) {
-		printf("bogus logLineIdx: %d\r\n", logLineIdx);
+	if (logLineIdx >= LOG_LINES) {
+		printf("bogus logLineIdx: %u\r\n", logLineIdx);
 		panic("bogus logLineIdx");
 	}
 
@@ -379,7 +377,8 @@ void UI_LogPutchar(char *cptr) {
 
 void UI_AddPart(struct partition *part) {
 	bool irqs;
-	int num, i;
+	uint i;
+	int num;
 	struct menuEntry *entries;
 
 	num = C_Probe(&entries);
@@ -391,8 +390,8 @@ void UI_AddPart(struct partition *part) {
 		irqs = IRQ_DisableSave();
 		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
 		partitions[numParts].part = part;
-		partitions[numParts].numEntries = num;
-		for (i = 0; i < num; i++) {
+		partitions[numParts].numEntries = (uint)num;
+		for (i = 0; i < (uint)num; i++) {
 			partitions[numParts].entries[i] = &curMenu->entries[curMenu->numEntries];
 			UI_AddEntry(&entries[i]);
 		}
@@ -403,7 +402,7 @@ void UI_AddPart(struct partition *part) {
 }
 
 void UI_DelPart(struct partition *part) {
-	int i, partToDel = 0;
+	uint i, partToDel = 0;
 	bool irqs = IRQ_DisableSave();
 
 	for (i = 0; i < numParts; i++) {

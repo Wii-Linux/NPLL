@@ -19,9 +19,9 @@ typedef struct mmc_card *mmc_card_t;
 typedef void (*mmc_cb)(mmc_card_t mmc_card, int status, size_t bytes_transferred, void *token);
 
 
-static inline size_t mmc_block_size(mmc_card_t mmc_card)
-{
-    return 512;
+static inline size_t mmc_block_size(mmc_card_t mmc_card) {
+	(void)mmc_card;
+	return 512;
 }
 
 /** Initialise an MMC card
@@ -49,7 +49,7 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card);
 
  * @return              The number of bytes read, negative on failure.
  */
-long mmc_block_read(mmc_card_t mmc_card, unsigned long start_block, int nblocks,
+long mmc_block_read(mmc_card_t mmc_card, unsigned long start_block, uint nblocks,
                     void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token);
 
 /** Write blocks to the MMC
@@ -66,7 +66,7 @@ long mmc_block_read(mmc_card_t mmc_card, unsigned long start_block, int nblocks,
  * @param[in] token     A token to pass, unmodified, to the provided callback function.
  * @return              The number of bytes read, negative on failure.
  */
-long mmc_block_write(mmc_card_t mmc_card, unsigned long start_block, int nblocks,
+long mmc_block_write(mmc_card_t mmc_card, unsigned long start_block, uint nblocks,
                      const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token);
 
 /**

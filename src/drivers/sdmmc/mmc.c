@@ -121,7 +121,7 @@ static int mmc_decode_csd(mmc_card_t mmc_card, struct csd *csd)
 	return 0;
 }
 
-static struct mmc_cmd *mmc_cmd_new(u32 index, u32 arg, int rsp_type)
+static struct mmc_cmd *mmc_cmd_new(u32 index, u32 arg, enum mmc_rsp_type rsp_type)
 {
 	struct mmc_cmd *cmd;
 	cmd = malloc(sizeof(*cmd));
@@ -218,12 +218,12 @@ static int mmc_card_registry(mmc_card_t card)
 	cmd.arg = 0;
 	cmd.rsp_type = MMC_RSP_TYPE_R6;
 	host_send_command(card, &cmd, NULL, NULL);
-	card->raw_rca = (cmd.response[0] >> 16);
+	card->raw_rca = (u16)(cmd.response[0] >> 16);
 	ZF_LOGD("New Card RCA: %x", card->raw_rca);
 
 	/* Read CSD, Status */
 	cmd.index = MMC_SEND_CSD;
-	cmd.arg = card->raw_rca << 16;
+	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R2;
 	host_send_command(card, &cmd, NULL, NULL);
 
@@ -240,7 +240,7 @@ static int mmc_card_registry(mmc_card_t card)
 
 	/* Select the card */
 	cmd.index = MMC_SELECT_CARD;
-	cmd.arg = card->raw_rca << 16;
+	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1b;
 	host_send_command(card, &cmd, NULL, NULL);
 
@@ -250,7 +250,7 @@ static int mmc_card_registry(mmc_card_t card)
 	 * the card also needs to switch to 4-bit mode.
 	 */
 	cmd.index = MMC_APP_CMD;
-	cmd.arg = card->raw_rca << 16;
+	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1;
 	host_send_command(card, &cmd, NULL, NULL);
 	cmd.index = SD_SET_BUS_WIDTH;
@@ -374,6 +374,7 @@ static void mmc_blockop_completion_cb(struct sdio_host_dev *sdio, int stat, stru
 {
 	struct mmc_completion_token *t;
 	size_t bytes;
+	(void)sdio;
 
 	t = (struct mmc_completion_token *)token;
 	if (stat == 0) {
@@ -451,8 +452,8 @@ long transfer_data(
 
 	/* Determine command argument */
 	const u32 arg = (mmc_card->high_capacity)
-						 ? start
-						 : (start * block_size);
+						 ? (u32)start
+						 : (u32)(start * block_size);
 
 	/* Allocate command structure
 	 *
@@ -474,7 +475,7 @@ long transfer_data(
 	struct mmc_completion_token *mmc_token = NULL;
 
 	/* Add a data segment */
-	ret = mmc_cmd_add_data(cmd, vbuf, pbuf, start, block_size, nblocks);
+	ret = mmc_cmd_add_data(cmd, vbuf, pbuf, (u32)start, block_size, nblocks);
 	if (ret < 0) {
 		goto exit_transfer_data;
 	}
@@ -510,11 +511,11 @@ exit_transfer_data:
 	}
 
 	const size_t bytes_transferred = cb ? 0 : (block_size * nblocks);
-	return is_success ? bytes_transferred : ret;
+	return is_success ? (long)bytes_transferred : ret;
 }
 
 static long _mmc_block_read(mmc_card_t mmc_card, unsigned long start,
-				int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
+				uint nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
 {
 	u32 command = (nblocks > 1)
 			? MMC_READ_MULTIPLE_BLOCK
@@ -531,20 +532,20 @@ static long _mmc_block_read(mmc_card_t mmc_card, unsigned long start,
 }
 
 long mmc_block_read(mmc_card_t mmc_card, unsigned long start,
-			int nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
+			uint nblocks, void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
 	long ret = -1;
 	int tries = 3;
 
 	while (tries--) {
 		ret = _mmc_block_read(mmc_card, start, nblocks, vbuf, pbuf, cb, token);
-		if (ret == nblocks * 512)
+		if ((unsigned long)ret == nblocks * 512)
 			break;
 	}
 
 	return ret;
 }
 
-static long _mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
+static long _mmc_block_write(mmc_card_t mmc_card, unsigned long start, uint nblocks,
 				const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token)
 {
 	// vbuf's `const` gets dropped during the cast as the underlying layer
@@ -564,14 +565,14 @@ static long _mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nbloc
 			command);
 }
 
-long mmc_block_write(mmc_card_t mmc_card, unsigned long start, int nblocks,
+long mmc_block_write(mmc_card_t mmc_card, unsigned long start, uint nblocks,
 			const void *vbuf, uintptr_t pbuf, mmc_cb cb, void *token) {
 	long ret = -1;
 	int tries = 3;
 
 	while (tries--) {
 		ret = _mmc_block_write(mmc_card, start, nblocks, vbuf, pbuf, cb, token);
-		if (ret == nblocks * 512)
+		if ((unsigned long)ret == nblocks * 512)
 			break;
 	}
 

@@ -23,7 +23,7 @@ struct outputDevice {
 	void (*writeStr)(const char *str);
 };
 
-extern int O_NumDevices;
+extern uint O_NumDevices;
 extern const struct outputDevice *O_Devices[];
 extern void O_AddDevice(const struct outputDevice *dev);
 extern void O_RemoveDevice(const struct outputDevice *dev);

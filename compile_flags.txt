@@ -7,4 +7,11 @@
 -Wall
 -Wextra
 -Wformat=2
+-Wconversion
+-Wsign-conversion
+-Wshadow
+-Wundef
+-Wstrict-overflow=5
+-Wshift-overflow=2
+-Wtype-limits
 -DVERSION="v0.1"

@@ -131,9 +131,9 @@ void VIDEO_Init(int VideoMode)
 	for(Counter=0; Counter<64; Counter++)
 	{
 		if(Counter==1)
-			*(vu16 *)(MEM_VIDEO_BASE + 2*Counter) = video_initstate[Counter] & 0xFFFE;
+			*(vu16 *)(MEM_VIDEO_BASE + 2 * Counter) = video_initstate[Counter] & 0xFFFE;
 		else
-			*(vu16 *)(MEM_VIDEO_BASE + 2*Counter) = video_initstate[Counter];
+			*(vu16 *)(MEM_VIDEO_BASE + 2 * Counter) = video_initstate[Counter];
 	}
 
 	video_mode = VideoMode;
@@ -169,10 +169,10 @@ void VIDEO_BlackOut(void)
 {
 	VIDEO_WaitVSync();
 
-	int active = R_VIDEO_VTIMING >> 4;
+	uint active = R_VIDEO_VTIMING >> 4;
 
-	R_VIDEO_PRB_ODD = R_VIDEO_PRB_ODD + ((active<<1)-2);
-	R_VIDEO_PRB_EVEN = R_VIDEO_PRB_EVEN + ((active<<1)-2);
+	R_VIDEO_PRB_ODD = R_VIDEO_PRB_ODD + ((active << 1) - 2);
+	R_VIDEO_PRB_EVEN = R_VIDEO_PRB_EVEN + ((active << 1) - 2);
 	R_VIDEO_PSB_ODD = R_VIDEO_PSB_ODD + 2;
 	R_VIDEO_PSB_EVEN = R_VIDEO_PSB_EVEN + 2;
 
@@ -191,28 +191,28 @@ void VIDEO_Shutdown(void)
 
 static inline void aveSetDirection(u32 dir)
 {
-	u32 val = (HW_GPIOB_DIR & ~0x8000)|0x4000;
-	if(dir) val |= 0x8000;
+	u32 val = (HW_GPIOB_DIR & ~0x8000u) | 0x4000u;
+	if(dir) val |= 0x8000u;
 	HW_GPIOB_DIR = val;
 }
 
 static inline void aveSetSCL(u32 scl)
 {
-	u32 val = HW_GPIOB_OUT & ~0x4000;
-	if(scl) val |= 0x4000;
+	u32 val = HW_GPIOB_OUT & ~0x4000u;
+	if (scl) val |= 0x4000;
 	HW_GPIOB_OUT = val;
 }
 
 static inline void aveSetSDA(u32 sda)
 {
-	u32 val = HW_GPIOB_OUT & ~0x8000;
-	if(sda) val |= 0x8000;
+	u32 val = HW_GPIOB_OUT & ~0x8000u;
+	if (sda) val |= 0x8000;
 	HW_GPIOB_OUT = val;
 }
 
 static inline u32 aveGetSDA()
 {
-	if(HW_GPIOB_IN & 0x8000)
+	if (HW_GPIOB_IN & 0x8000u)
 		return 1;
 	else
 		return 0;
@@ -328,8 +328,8 @@ static void __VIWriteI2CRegister16(u8 reg, u16 data)
 {
 	u8 buf[3];
 	buf[0] = reg;
-	buf[1] = data >> 8;
-	buf[2] = data & 0xFF;
+	buf[1] = (u8)(data >> 8);
+	buf[2] = (u8)(data & 0xFF);
 	__VISendI2CData(SLAVE_AVE,buf,3);
 	udelay(2);
 }
@@ -338,20 +338,20 @@ static void __VIWriteI2CRegister32(u8 reg, u32 data)
 {
 	u8 buf[5];
 	buf[0] = reg;
-	buf[1] = data >> 24;
-	buf[2] = (data >> 16) & 0xFF;
-	buf[3] = (data >> 8) & 0xFF;
+	buf[1] = (u8)(data >> 24);
+	buf[2] = (u8)(data >> 16) & 0xFF;
+	buf[3] = (u8)(data >> 8) & 0xFF;
 	buf[4] = data & 0xFF;
 	__VISendI2CData(SLAVE_AVE,buf,5);
 	udelay(2);
 }
 
-static void __VIWriteI2CRegisterBuf(u8 reg, int size, u8 *data)
+static void __VIWriteI2CRegisterBuf(u8 reg, uint size, u8 *data)
 {
 	u8 buf[0x100];
 	buf[0] = reg;
 	memcpy(&buf[1], data, size);
-	__VISendI2CData(SLAVE_AVE,buf,size+1);
+	__VISendI2CData(SLAVE_AVE,buf, size + 1);
 	udelay(2);
 }
 
@@ -369,7 +369,7 @@ static void __VISetYUVSEL(u8 dtvstatus)
 		vdacFlagRegion = 2;
 		break;
 	}
-	__VIWriteI2CRegister8(0x01, (dtvstatus<<5) | (vdacFlagRegion&0x1f));
+	__VIWriteI2CRegister8(0x01, (u8)((uint)dtvstatus << 5) | (u8)((uint)vdacFlagRegion & 0x1f));
 }
 
 static void __VISetFilterEURGB60(u8 enable)
@@ -440,7 +440,7 @@ typedef union {
 		u32 as_u32;
 } rgb;
 
-static int make_yuv(rgb c1, rgb c2) {
+static u32 make_yuv(rgb c1, rgb c2) {
   int y1, cb1, cr1, y2, cb2, cr2, cb, cr;
 
   y1 = (299 * c1.as_xrgb.r + 587 * c1.as_xrgb.g  + 114 * c1.as_xrgb.b) / 1000;
@@ -454,14 +454,14 @@ static int make_yuv(rgb c1, rgb c2) {
   cb = (cb1 + cb2) >> 1;
   cr = (cr1 + cr2) >> 1;
 
-  return ((y1 << 24) | (cb << 16) | (y2 << 8) | cr);
+  return ((u32)y1 << 24) | ((u32)cb << 16) | ((u32)y2 << 8) | (u32)cr;
 }
 
 static void clear_fb(rgb fill_rgb) {
 	u32 *fb = (u32 *)xfb;
 	u32 fill_yuv = make_yuv(fill_rgb, fill_rgb);
 
-	while ((void *)fb < ((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) {
+	while ((void *)fb - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) > 0) {
 		*fb = fill_yuv;
 		fb++;
 	}
@@ -470,7 +470,7 @@ static void clear_fb(rgb fill_rgb) {
 
 static void clear_fb_rgb(rgb fill_rgb) {
 	u32 *fb = rgbFb;
-	while ((void *)fb < ((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) {
+	while ((void *)fb - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) > 0) {
 		*fb = fill_rgb.as_u32;
 		fb++;
 	}
@@ -484,8 +484,8 @@ static void viFlush(void) {
 
 	src  = rgbFb;
 	dest = (u32 *)xfb;
-	while ((void *)src < ((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32)) &&
-	       (void *)dest < ((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) {
+	while ((void *)src - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) > 0 &&
+	       (void *)dest - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) > 0) {
 		rgb1 = (rgb)*src;
 		src++;
 		rgb2 = (rgb)*src;

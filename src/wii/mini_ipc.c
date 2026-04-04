@@ -193,7 +193,7 @@ enum MINI_Err MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	while (num_args--)
 		state.in_queue[state.in_tail].args[arg++] = va_arg(args, u32);
 
-	state.in_tail = (state.in_tail + 1) & (state.in_size - 1);
+	state.in_tail = (u16)((state.in_tail + 1) & (state.in_size - 1));
 
 	/* send it off */
 	poke_intail();
@@ -251,7 +251,7 @@ enum MINI_Err MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
 	memcpy(req, (void *)&state.out_queue[state.out_head], sizeof(struct ipc_request_mini));
 
 	/* update our state and hardware state accordingly */
-	state.out_head = (state.out_head + 1) & (state.out_size - 1);
+	state.out_head = (u16)((state.out_head + 1) & (state.out_size - 1));
 	poke_outhead();
 
 	/* success, read your message */

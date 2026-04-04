@@ -97,7 +97,7 @@ void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 
 	/* shift queue forward to make room */
 	if (max != -1) /* don't shift nothing */
-		memmove(&events[idx + 1], &events[idx], (max - idx + 1) * sizeof(struct timedEvent));
+		memmove(&events[idx + 1], &events[idx], (uint)(max - idx + 1) * sizeof(struct timedEvent));
 
 	/* insert the event */
 	events[idx].fireTB = fireTB;
@@ -106,7 +106,7 @@ void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 
 	/* reprogram DEC if this is the first queued event */
 	if (idx == 0)
-		mtdec(events[0].fireTB - mftb());
+		mtdec((u32)(events[0].fireTB - mftb()));
 
 	IRQ_Restore(irqs);
 }
@@ -149,7 +149,7 @@ void T_DECHandler(void) {
 	 * else set it to the max possible value
 	 */
 	if (events[0].callback)
-		mtdec(events[0].fireTB - mftb());
+		mtdec((u32)(events[0].fireTB - mftb()));
 	else
 		mtdec(0xffffffff);
 }

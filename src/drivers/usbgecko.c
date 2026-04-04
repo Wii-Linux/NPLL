@@ -25,9 +25,9 @@ static REGISTER_DRIVER(usbgeckoDrv);
 #define UG_SLOTA 0
 #define UG_SLOTB 1
 
-static int slot = -1;
+static uint slot = (uint)-1;
 
-static u16 usbgeckoTransaction(u16 tx, int port) {
+static u16 usbgeckoTransaction(u16 tx, uint port) {
 	u16 rx;
 
 	H_EXISelect(port, 0, 32);
@@ -37,19 +37,19 @@ static u16 usbgeckoTransaction(u16 tx, int port) {
 	return rx;
 }
 
-static int usbgeckoIsAdapterPresent(int port) {
+static int usbgeckoIsAdapterPresent(uint port) {
 	return usbgeckoTransaction(0x9000, port) == 0x0470;
 }
 
-static int usbgeckoTXReady(int port) {
+static int usbgeckoTXReady(uint port) {
 	return usbgeckoTransaction(0xc000, port) & 0x0400;
 }
 
-static int usbgeckoRXReady(int port) {
+static int usbgeckoRXReady(uint port) {
 	return usbgeckoTransaction(0xd000, port) & 0x0400;
 }
 
-static int usbgeckoGetChar(int port, int retryCount) {
+static int usbgeckoGetChar(uint port, int retryCount) {
 	u16 data;
 	int i;
 
@@ -70,7 +70,7 @@ static void usbgeckoWriteChar(const char c) {
 		/* spin */
 	}
 
-	usbgeckoTransaction(0xb000 | (c << 4), slot);
+	usbgeckoTransaction(0xb000u | (u16)(c << 4), slot);
 }
 
 static void usbgeckoWriteStr(const char *str) {
@@ -82,7 +82,7 @@ static void usbgeckoWriteStr(const char *str) {
 
 static u8 tinyBuf[16] = { 0 };
 static u8 *buf;
-static int bufIdx = 0;
+static uint bufIdx = 0;
 static u32 binSz = 0;
 static enum {
 	STATE_IDLE = 0,
@@ -173,8 +173,6 @@ again:
 		break;
 	}
 	case STATE_GET_DATA: {
-		int ret;
-
 		buf[bufIdx] = data;
 		bufIdx++;
 
@@ -240,7 +238,7 @@ static void usbgeckoInit(void) {
 	else if (usbgeckoIsAdapterPresent(UG_SLOTA))
 		slot = UG_SLOTA;
 	else {
-		slot = -1;
+		slot = (uint)-1;
 		usbgeckoDrv.state = DRIVER_STATE_NO_HARDWARE;
 
 		/* restore */
@@ -258,7 +256,7 @@ static void usbgeckoInit(void) {
 	usbgeckoDrv.state = DRIVER_STATE_READY;
 
 	usbgeckoWriteStr("USB Gecko driver is now enabled in Slot-");
-	usbgeckoWriteChar('A' + slot);
+	usbgeckoWriteChar('A' + (char)slot);
 	usbgeckoWriteChar('\r');
 	usbgeckoWriteChar('\n');
 	O_AddDevice(&outDev);

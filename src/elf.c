@@ -7,6 +7,7 @@
 #define MODULE "ELF"
 
 #include <string.h>
+#include <npll/console.h>
 #include <npll/cache.h>
 #include <npll/elf_abi.h>
 #include <npll/elf.h>
@@ -46,7 +47,7 @@ int ELF_CheckValid(const void *data) {
 	return 0;
 }
 
-bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, ssize_t *off, int *bail) {
+static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_t *off, int *bail) {
 	void *addr;
 	u32 size;
 
@@ -102,7 +103,7 @@ int ELF_LoadMem(const void *data) {
 	u32 size;
 	int i, ret;
 	bool load;
-	ssize_t off;
+	size_t off;
 
 	/* get start of phdrs */
 	phdr = (const Elf32_Phdr *)((u32)data + ehdr->e_phoff);
@@ -145,9 +146,10 @@ int ELF_LoadFile(int fd) {
 	Elf32_Phdr ALIGN(32) phdr;
 	void *addr;
 	u32 size;
-	int i;
+	uint i;
 	bool load;
-	ssize_t ret, off;
+	ssize_t ret;
+	size_t off;
 
 	/* read in the ehdr */
 	ret = FS_Seek(fd, 0);
@@ -162,7 +164,7 @@ int ELF_LoadFile(int fd) {
 	}
 
 	for (i = 0; i < ehdr.e_phnum; i++) {
-		ret = FS_Seek(fd, ehdr.e_phoff + (i * ehdr.e_phentsize));
+		ret = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
 		if (ret != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
 			log_printf("FS_Seek for phdr returned: %d\r\n", ret);
 			return ELF_ERR_FS_ERROR;
@@ -179,8 +181,8 @@ int ELF_LoadFile(int fd) {
 		else if (!load)
 			continue;
 
-		ret = FS_Seek(fd, off);
-		if (ret != off) {
+		ret = FS_Seek(fd, (ssize_t)off);
+		if (ret != (ssize_t)off) {
 			log_printf("FS_Seek for segment %d returned: %d\r\n", i, ret);
 			return ELF_ERR_FS_ERROR;
 		}

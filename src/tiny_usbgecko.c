@@ -31,22 +31,22 @@
 #define   EXI_CR_RW             (2u << 2)
 #define   EXI_CR_TLEN(len)      (((u8)(len) - 1) << 4)
 
-static int slot = -1;
+static uint slot = (uint)-1;
 static vu32 *exi_regs;
 
-static vu32 *EXI_CSR(int chan) {
-	return (vu32 *)((u32)exi_regs + (0x14 * chan) + 0x00);
+static vu32 *EXI_CSR(uint chan) {
+	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x00u);
 }
 
-static vu32 *EXI_CR(int chan) {
-	return (vu32 *)((u32)exi_regs + (0x14 * chan) + 0x0c);
+static vu32 *EXI_CR(uint chan) {
+	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x0cu);
 }
 
-static vu32 *EXI_DATA(int chan) {
-	return (vu32 *)((u32)exi_regs + (0x14 * chan) + 0x10);
+static vu32 *EXI_DATA(uint chan) {
+	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x10u);
 }
 
-static u32 tinyUGTransaction(u32 tx, int port) {
+static u32 tinyUGTransaction(u32 tx, uint port) {
 	*EXI_CSR(port) = EXI_CSR_CLK_32MHZ | EXI_CSR_CS_0;
 	*EXI_DATA(port) = tx;
 	*EXI_CR(port) = EXI_CR_TLEN(2) | EXI_CR_RW | EXI_CR_TSTART;
@@ -59,10 +59,10 @@ static u32 tinyUGTransaction(u32 tx, int port) {
 	return *EXI_DATA(port);
 }
 
-static int tinyUGIsAdapterPresent(int port) {
+static int tinyUGIsAdapterPresent(uint port) {
 	return tinyUGTransaction(0x90000000, port) == 0x04700000;
 }
-static int tinyUGTXReady(int port) {
+static int tinyUGTXReady(uint port) {
 	return tinyUGTransaction(0xc0000000, port) & 0x04000000;
 }
 
@@ -71,7 +71,7 @@ static void tinyUGWriteChar(const char c) {
 		/* spin */
 	}
 
-	tinyUGTransaction(0xb0000000 | ((u8)c << 20), slot);
+	tinyUGTransaction(0xb0000000 | ((u32)c << 20), slot);
 }
 
 static void tinyUGWriteStr(const char *str) {
@@ -106,7 +106,7 @@ void H_TinyUGInit(void) {
 	else if (tinyUGIsAdapterPresent(UG_SLOTA))
 		slot = UG_SLOTA;
 	else {
-		slot = -1;
+		slot = (uint)-1;
 		return;
 	}
 

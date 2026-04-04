@@ -8,7 +8,7 @@
 #include <npll/output.h>
 
 int putchar(int c) {
-	int i;
+	uint i;
 	for (i = 0; i < O_NumDevices; i++)
 		O_Devices[i]->writeChar((char)c);
 
@@ -17,7 +17,7 @@ int putchar(int c) {
 
 
 int puts(const char *str) {
-	int i;
+	uint i;
 	for (i = 0; i < O_NumDevices; i++) {
 		O_Devices[i]->writeStr(str);
 		O_Devices[i]->writeChar('\r');

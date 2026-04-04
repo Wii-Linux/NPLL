@@ -84,12 +84,11 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 }
 
 void E_Init(void) {
-	u32 vector;
-	u32 len_2200;
+	u32 vector, len_2200, *insn;
 	TRACE();
 
 	for (vector = 0x100; vector < 0x1800; vector += 0x10) {
-		u32 *insn = physToCached(vector);
+		insn = physToCached(vector);
 
 		insn[0] = 0xbc002000;			// stmw 0,0x2000(0)
 		insn[1] = 0x38600000 | (u32)vector;	// li 3,vector
@@ -98,7 +97,7 @@ void E_Init(void) {
 	}
 	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
 
-	len_2200 = &exception_2200_end - &exception_2200_start;
+	len_2200 = (u32)&exception_2200_end - (u32)&exception_2200_start;
 	memcpy(physToCached(0x2200), &exception_2200_start, len_2200);
 	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
 }

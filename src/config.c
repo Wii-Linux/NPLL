@@ -95,8 +95,13 @@ int C_Probe(struct menuEntry **entriesOut) {
 	}
 
 	size = FS_GetSize(fd);
-	file = malloc(size);
-	ret = FS_Read(fd, file, size);
+	if (size <= 0) {
+		log_printf("FS_GetSize on gumboot/gumboot.lst failed: %d\r\n", size);
+		return -1;
+	}
+
+	file = malloc((size_t)size);
+	ret = FS_Read(fd, file, (size_t)size);
 	if (ret != size) {
 		log_printf("FS_Read on gumboot/gumboot.lst failed: %d\r\n", ret);
 		free(file);

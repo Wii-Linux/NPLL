@@ -76,7 +76,7 @@ DRESULT disk_read (
 		return RES_PARERR;
 
 	blocksz = partitions[pdrv]->bdev->blockSize;
-	result = B_Read(partitions[pdrv], buff, count * blocksz, sector * blocksz);
+	result = B_Read(partitions[pdrv], buff, (size_t)((u64)count * blocksz), sector * blocksz);
 	if (result != (ssize_t)(count * blocksz)) {
 		log_printf("B_Read ret %d\r\n", result);
 		return RES_ERROR;
@@ -107,7 +107,7 @@ DRESULT disk_write (
 		return RES_PARERR;
 
 	blocksz = partitions[pdrv]->bdev->blockSize;
-	result = B_Write(partitions[pdrv], buff, count * blocksz, sector * blocksz);
+	result = B_Write(partitions[pdrv], buff, (size_t)((u64)count * blocksz), sector * blocksz);
 	if (result != (ssize_t)(count * blocksz))
 		return RES_ERROR;
 
@@ -134,7 +134,7 @@ DRESULT disk_ioctl (
 	case CTRL_SYNC:
 		return RES_OK; /* all operations are synchronous anyways */
 	case GET_SECTOR_COUNT: {
-		*(UINT *)buff = partitions[pdrv]->bdev->size / partitions[pdrv]->bdev->blockSize;
+		*(UINT *)buff = (UINT)(partitions[pdrv]->bdev->size / partitions[pdrv]->bdev->blockSize);
 		return RES_OK;
 	}
 	case GET_SECTOR_SIZE:

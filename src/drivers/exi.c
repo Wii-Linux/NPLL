@@ -75,8 +75,7 @@ static volatile struct exi_regs *regs;
 /*
  * Convert MHz speed to EXI speed index
  */
-static unsigned int exiSpeedFromMhz(unsigned int mhz)
-{
+static uint exiSpeedFromMhz(uint mhz) {
 	if (mhz > 32)
 		return EXI_CSR_CLK_64MHZ;
 	else if (mhz > 16)
@@ -97,13 +96,13 @@ static unsigned int exiSpeedFromMhz(unsigned int mhz)
  * Selects the desired device (CS line) on the given
  * EXI channel, and sets the desired clock speed.
  */
-void H_EXISelect(unsigned int channel, unsigned int cs, unsigned int clkMhz) {
+void H_EXISelect(uint channel, uint cs, uint clkMhz) {
 	u32 csr;
 
 	dbg("Channel %d, selecting CS %d at clock %dMHz\r\n", channel, cs, clkMhz);
 
 	csr = 0;
-	csr |= (1 << (EXI_CSR_CS_SHIFT + cs)); /* set the appropriate CS bit */
+	csr |= BIT((EXI_CSR_CS_SHIFT + cs)); /* set the appropriate CS bit */
 	csr |= exiSpeedFromMhz(clkMhz);         /* set the appropriate CLK bits */
 	dbg("Writing CSR=0x%08x\r\n", csr);
 	regs->channels[channel].csr = csr;     /* write CSR back */
@@ -113,7 +112,7 @@ void H_EXISelect(unsigned int channel, unsigned int cs, unsigned int clkMhz) {
  * Deselects any selected device (CS line) on the given
  * EXI channel.
  */
-void H_EXIDeselect(unsigned int channel) {
+void H_EXIDeselect(uint channel) {
 	dbg("Writing CSR=0x00000000\r\n");
 	regs->channels[channel].csr = 0;
 }
@@ -123,11 +122,7 @@ void H_EXIDeselect(unsigned int channel) {
  * Both the read and write will be of the same size if using both.
  * Assumes desired device is already selected.
  */
-int H_EXIXferImm(unsigned int channel,
-		 unsigned int len,
-		 unsigned int mode,
-		 const void *in, void *out)
-{
+int H_EXIXferImm(uint channel, uint len, uint mode, const void *in, void *out) {
 	u32 cr, data;
 
 	if (len > 4 ||
@@ -168,10 +163,10 @@ int H_EXIXferImm(unsigned int channel,
 	if (mode & EXI_MODE_WRITE) {
 		switch (len) {
 		case 1:
-			data = *(u8 *)in << 24;
+			data = (u32)*(u8 *)in << 24;
 			break;
 		case 2:
-			data = *(u16 *)in << 16;
+			data = (u32)*(u16 *)in << 16;
 			break;
 		case 3:
 			data = (*(u32 *)in & 0x00ffffff) << 8;
@@ -220,10 +215,10 @@ int H_EXIXferImm(unsigned int channel,
 		/* write it back */
 		switch (len) {
 		case 1:
-			*(u8 *)out = (data & 0xff000000) >> 24;
+			*(u8 *)out = (u8)((data & 0xff000000) >> 24);
 			break;
 		case 2:
-			*(u16 *)out = (data & 0xffff0000) >> 16;
+			*(u16 *)out = (u16)((data & 0xffff0000) >> 16);
 			break;
 		case 3:
 			*(u32 *)out = (data & 0xffffff00) >> 8;
@@ -236,10 +231,6 @@ int H_EXIXferImm(unsigned int channel,
 		}
 	}
 	return 0;
-}
-
-static void exiCallback(void) {
-
 }
 
 static void exiInit(void) {
@@ -258,15 +249,11 @@ static void exiInit(void) {
 		break;
 	}
 
-	/* register our callback */
-	D_AddCallback(exiCallback);
-
 	/* we're all good */
 	exiDrv.state = DRIVER_STATE_READY;
 }
 
 static void exiCleanup(void) {
-	D_RemoveCallback(exiCallback);
 	exiDrv.state = DRIVER_STATE_NOT_READY;
 }
 

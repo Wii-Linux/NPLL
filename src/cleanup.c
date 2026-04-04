@@ -66,14 +66,14 @@ void H_PrepareForExecEntry(void) {
 		LT_PPC0INT2STS = LT_PPC0INT2STS;
 		LT_PPC1INT2STS = LT_PPC1INT2STS;
 		LT_PPC2INT2STS = LT_PPC2INT2STS;
-		/* fallthrough */
 	}
+		/* fallthrough */
 	case CONSOLE_TYPE_WII: {
 		HW_PPCIRQMASK = 0;
 		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
 		HW_RESETS &= ~RESETS_RSTB_DSP;
-		/* fallthrough */
 	}
+		/* fallthrough */
 	case CONSOLE_TYPE_GAMECUBE: {
 		PI_INTMR = 0;
 		PI_INTSR = PI_INTSR;

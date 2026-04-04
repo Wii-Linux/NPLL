@@ -54,7 +54,8 @@ void B_Shutdown(void) {
 
 void B_Register(struct blockDevice *bdev) {
 	bool irqs;
-	int i, ret;
+	int ret;
+	uint i;
 	struct filesystem *fs;
 
 	assert_msg(initialized, "block: B_Register w/o B_Init");
@@ -90,7 +91,8 @@ void B_Register(struct blockDevice *bdev) {
 }
 
 void B_Unregister(const struct blockDevice *bdev) {
-	int idx, i, size;
+	int idx;
+	uint i, size;
 	bool irqs;
 
 	assert_msg(initialized, "block: B_Unregister w/o B_Init");
@@ -107,7 +109,7 @@ void B_Unregister(const struct blockDevice *bdev) {
 		free(bdev->partitions[i]);
 	}
 
-	size = (MAX_BDEV - idx - 1) * sizeof(struct blockDevice *);
+	size = (uint)(MAX_BDEV - idx - 1) * sizeof(struct blockDevice *);
 
 	irqs = IRQ_DisableSave();
 	memmove(&B_Devices[idx], &B_Devices[idx + 1], size);

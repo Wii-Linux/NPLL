@@ -283,7 +283,7 @@ static const char *siTypeToStr(enum si_device_type type) {
 	}
 }
 
-static void drainInBuf(int chan) {
+static void drainInBuf(uint chan) {
 	vu32 resp;
 	/*
 	 * need to drain the input buffer; see YAGCD Sect. 5.8:
@@ -294,7 +294,7 @@ static void drainInBuf(int chan) {
 	(void)resp;
 }
 static void drainAllInBuf(void) {
-	int i;
+	uint i;
 	for (i = 0; i < 4; i++)
 		drainInBuf(i);
 }
@@ -304,7 +304,7 @@ static void checkConnected(void) {
 	u32 resp, poll;
 	u16 id;
 	u8 status;
-	int i, j, tries;
+	uint i, j, tries;
 	enum si_device_type type;
 	enum si_comerr_res comerr;
 
@@ -339,7 +339,7 @@ static void checkConnected(void) {
 			regs->buf[0] = SI_MKOUTBUF(JOYBUS_CMD_STATUS, 0x00, 0x00);;
 
 			/* actually do the transfer */
-			regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((u8)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+			regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((uint)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 			/* wait for transfer complete */
 			startTB = mftb();
@@ -484,13 +484,13 @@ static void checkConnected(void) {
 	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 }
 
-static void probeGCNPad(int chan) {
+static void probeGCNPad(uint chan) {
 	u32 inbufh, inbufl, prevButtons, buttons, pressed;
 	u8 lstickX, lstickY, prevLstickX, prevLstickY, cstickX, cstickY, ltrig, rtrig;
 
 	inbufh = regs->chan[chan].inbufh; /* buttons, main stick */
 	inbufl = regs->chan[chan].inbufl; /* c stick, L trigger, R trigger */
-	prevButtons = devices[chan].gcn_pad.buttons << 16;
+	prevButtons = (u32)devices[chan].gcn_pad.buttons << 16;
 	prevLstickX = devices[chan].gcn_pad.lstickX;
 	prevLstickY = devices[chan].gcn_pad.lstickY;
 
@@ -542,14 +542,14 @@ static void probeGCNPad(int chan) {
 	devices[chan].gcn_pad.rtrig = rtrig;
 }
 
-static void probeN64Pad(int chan) {
+static void probeN64Pad(uint chan) {
 	u64 startTB, lastTB;
 	u32 inbuf, prevButtons, buttons, pressed;
 	u8 stickX, stickY, prevStickX, prevStickY;
-	int i;
+	uint i;
 
 	lastTB = devices[chan].n64_pad.lastTB;
-	if (!T_HasElapsed(lastTB, 60*1000))
+	if (!T_HasElapsed(lastTB, 60 * 1000))
 		return;
 	lastTB = mftb();
 
@@ -573,7 +573,7 @@ static void probeN64Pad(int chan) {
 	regs->buf[0] = (((u32)JOYBUS_CMD_DIRECT_N64) << 24); /* N64 controllers only take 1 byte */
 
 	/* actually do the transfer */
-	regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (4u << SI_COMCSR_INLEN_SHIFT) | ((u8)chan << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+	regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (4u << SI_COMCSR_INLEN_SHIFT) | ((uint)chan << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 	/* wait for transfer complete */
 	startTB = mftb();
@@ -588,7 +588,7 @@ static void probeN64Pad(int chan) {
 	siHandleCOMERR(chan);
 
 	inbuf = regs->buf[0];
-	prevButtons = devices[chan].n64_pad.buttons << 16;
+	prevButtons = (u32)devices[chan].n64_pad.buttons << 16;
 	prevStickX = devices[chan].n64_pad.stickX;
 	prevStickY = devices[chan].n64_pad.stickY;
 
@@ -635,7 +635,7 @@ static void probeN64Pad(int chan) {
 }
 
 static void siCallback(void) {
-	int i;
+	uint i;
 
 	/* re-probe the ports to find connections/disconnections periodically */
 	if (T_HasElapsed(lastConnectedCheck, 250 * 1000)) {

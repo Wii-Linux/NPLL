@@ -81,7 +81,7 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"'
+CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # -O3 is just too buggy and unstable :(
 CFLAGS  += -O2 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
@@ -126,6 +126,11 @@ $(FAT_COMBINED): $(FAT_OBJ)
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
 
+# external files that trigger annoying warnings
+build/fs/fat/ff.o: src/fs/fat/ff.c
+	$(info $s  CC $<)
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -Wno-conversion -Wno-sign-conversion -o $@ -c $<
 
 build/libc/cc-runtime.o: src/libc/cc-runtime.c
 	$(info $s  CC $<)

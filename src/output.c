@@ -16,7 +16,7 @@
 
 #define MAX_DEV 16
 
-int O_NumDevices = 0;
+uint O_NumDevices = 0;
 const struct outputDevice *O_Devices[MAX_DEV];
 static int deviceNum = 0; /* 0 = debug, >=1 = real device */
 
@@ -47,7 +47,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 }
 
 void O_RemoveDevice(const struct outputDevice *dev) {
-	int i, size;
+	uint i, size;
 	bool irqs, found = false;
 
 	for (i = 0; i < MAX_DEV; i++) {

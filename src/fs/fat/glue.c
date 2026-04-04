@@ -157,7 +157,7 @@ static bool fatProbe(struct filesystem *fs, struct partition *part) {
 }
 
 static int fatMount(struct filesystem *fs, struct partition *part) {
-	int ret;
+	FRESULT ret;
 
 	(void)fs;
 	/* do we already have a mounted partition? */
@@ -235,7 +235,7 @@ static void fatClose(struct filesystem *fs, int fd) {
 	memset(&openFiles[fd], 0, sizeof(FIL));
 }
 
-static int fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
+static ssize_t fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 	FRESULT fr;
 	UINT bytesRead;
 
@@ -244,7 +244,7 @@ static int fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 
 	fr = f_read(&openFiles[fd], dest, len, &bytesRead);
 	if (fr == FR_OK && bytesRead == len)
-		return len;
+		return (ssize_t)len;
 
 	/* TODO: more error codes */
 	switch (fr) {
@@ -258,7 +258,7 @@ static int fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 }
 
 #if 0
-static int fatWrite(struct filesystem *fs, int fd, const void *src, size_t len) {
+static ssize_t fatWrite(struct filesystem *fs, int fd, const void *src, size_t len) {
 	FRESULT fr;
 	UINT bytesWritten;
 
@@ -267,7 +267,7 @@ static int fatWrite(struct filesystem *fs, int fd, const void *src, size_t len) 
 
 	fr = f_write(&openFiles[fd], src, len, &bytesWritten);
 	if (fr == FR_OK && bytesWritten == len)
-		return len;
+		return (ssize_t)len;
 
 	/* TODO: more error codes */
 	switch (fr) {
@@ -287,7 +287,7 @@ static ssize_t fatSeek(struct filesystem *fs, int fd, ssize_t off) {
 	(void)fs;
 	VALIDATE_FD(-EBADF);
 
-	fr = f_lseek(&openFiles[fd], off);
+	fr = f_lseek(&openFiles[fd], (FSIZE_t)off);
 	if (fr == FR_OK)
 		return off;
 

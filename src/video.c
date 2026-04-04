@@ -28,9 +28,7 @@
 
 struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
-int V_FbWidth;
-int V_FbHeight;
-int V_FbStride;
+uint V_FbWidth, V_FbHeight, V_FbStride;
 
 /* 15 FPS */
 #define FRAME_MS_TARGET 66
@@ -60,13 +58,13 @@ static u32 colors[16] = {
 	0xFFAAAAAA, /* light gray */ 0xFFFFFFFF, /* white */
 };
 
-static int colorIdx[2];
+static uint colorIdx[2];
 static u32 color[2];
 static void odevWriteChar(char c);
 
 static char *parsenum(const char *s, uint *num) {
 	char *end;
-	*num = strtol(s, &end, 10);
+	*num = (uint)strtoul(s, &end, 10);
 	return end;
 }
 
@@ -120,20 +118,24 @@ static void handleEscape(char c) {
 		if (num == 0)			/* No digit in sequence ... */
 			num = 1;		/* ... means "move by 1". */
 
-		if (c == 'A' || c == 'F')
-			posY -= num;
+		if (c == 'A' || c == 'F') {
+			if (posY < num)
+				posY = 0;
+			else
+				posY -= num;
+		}
 		if (c == 'C')
 			posX += num;
-		if (c == 'D')
-			posX -= num;
+		if (c == 'D') {
+			if (posX < num)
+				posX = 0;
+			else
+				posX -= num;
+		}
 		if (c == 'B' || c == 'E')
 			posY += num;
 		if (c == 'E' || c == 'F')
 			posX = 0;
-		if (posX < 0)
-			posX = 0;
-		if (posY < 0)
-			posY += 0;
 		break;
 	}
 	case 'H':
@@ -285,16 +287,19 @@ error:
 }
 
 static void maybeScroll(void) {
+	uint fontSz, size;
+	u8 *srcAddr, *startZeroAddr;
+
 	if (posY < videoOutDev.rows)
 		return;
 
 	posY = videoOutDev.rows - 1;
-	uint fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
-	u8 *srcAddr = (((u8 *)V_FbPtr) + fontSz);
-	int size = ((V_FbWidth * 4) * V_FbHeight) - fontSz;
+	fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
+	srcAddr = (((u8 *)V_FbPtr) + fontSz);
+	size = ((V_FbWidth * 4u) * V_FbHeight) - fontSz;
 	memmove(V_FbPtr, srcAddr, size);
 
-	u8 *startZeroAddr = (srcAddr + size) - fontSz;
+	startZeroAddr = (srcAddr + size) - fontSz;
 	memset(startZeroAddr, 0, fontSz);
 }
 

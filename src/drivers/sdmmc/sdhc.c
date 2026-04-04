@@ -321,7 +321,7 @@ static inline int UNUSED cap_sdma_supported(struct sdhc *host)
 	return !!(v & HOST_CTRL_CAP_DMAS);
 }
 
-static inline int UNUSED cap_max_buffer_size(struct sdhc *host)
+static inline uint UNUSED cap_max_buffer_size(struct sdhc *host)
 {
 	u32 v;
 	v = readl(host->base + HOST_CTRL_CAP);
@@ -398,7 +398,7 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	if (cmd->data) {
 		/* Set data timeout to maximum valid value for SDHCI v1.00 */
 		val8 = readb(host->base + TIMEOUT_CTRL);
-		val8 &= ~TIMEOUT_CTRL_DTOCV_MASK;
+		val8 &= (u8)~TIMEOUT_CTRL_DTOCV_MASK;
 		val8 |= 0xE;
 		writeb(val8, host->base + TIMEOUT_CTRL);
 
@@ -800,21 +800,21 @@ static int sdhc_enable_clock(volatile void *base_addr)
 	if (!bclk) {
 		ZF_LOGE("HC reported invalid base clock, assuming divisor of 16 is fine");
 		clkctrl = readw(base_addr + CLOCK_CTRL);
-		clkctrl &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
+		clkctrl &= (u16)~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
 		clkctrl |= (1u << 3);
 		goto writeback;
 	}
 
 	/* set it */
 	clkctrl = readw(base_addr + CLOCK_CTRL);
-	clkctrl &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
+	clkctrl &= (u16)~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
 	if (bclk <= 63 && bclk >= 10) {
 		ZF_LOGD("base clock already valid");
 		goto writeback;
 	}
 
 	for (i = 0; i < 8; i++) {
-		u8 div = ((1u << i) << CLK_CTRL_SDCLKS_SHF);
+		u32 div = ((1u << i) << CLK_CTRL_SDCLKS_SHF);
 		if ((bclk / div) > 63 || (bclk / div) < 10) {
 			ZF_LOGD("divisor %d invalid...", div);
 			continue;
@@ -822,8 +822,8 @@ static int sdhc_enable_clock(volatile void *base_addr)
 
 		ZF_LOGD("divisor %d valid!", div);
 		validDiv = 1;
-		clkctrl &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-		clkctrl |= ((1u << i) << CLK_CTRL_SDCLKS_SHF);
+		clkctrl &= (u16)~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
+		clkctrl |= (u16)((1u << i) << CLK_CTRL_SDCLKS_SHF);
 	}
 
 	if (!validDiv) {
@@ -871,18 +871,18 @@ static int sdhc_set_clock_div(
 
 		/* DDR mode is not supported on SDHCI v1.00 (Hollywood/Latte),
 		 * so always use the SDR clock divisor path. */
-		val16 &= ~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
-		val16 |= ((unsigned int)sdclks_div << CLK_CTRL_SDCLKS_SHF);
-		val16 &= ~(CLK_CTRL_DVS_MASK << CLK_CTRL_DVS_SHF);
-		val16 |= ((unsigned int)dvs_div << CLK_CTRL_DVS_SHF);
+		val16 &= (u16)~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
+		val16 |= (u16)((uint)sdclks_div << CLK_CTRL_SDCLKS_SHF);
+		val16 &= (u16)~(CLK_CTRL_DVS_MASK << CLK_CTRL_DVS_SHF);
+		val16 |= (u16)((uint)dvs_div << CLK_CTRL_DVS_SHF);
 
 		/* Write out the Clock Control register */
 		writew(val16, base_addr + CLOCK_CTRL);
 
 		/* Set data timeout value */
 		val8 = readb(base_addr + TIMEOUT_CTRL);
-		val8 &= ~TIMEOUT_CTRL_DTOCV_MASK;
-		val8 |= ((unsigned int)dtocv << TIMEOUT_CTRL_DTOCV_SHF);
+		val8 &= (u8)~TIMEOUT_CTRL_DTOCV_MASK;
+		val8 |= (u8)((uint)dtocv << TIMEOUT_CTRL_DTOCV_SHF);
 		writeb(val8, base_addr + TIMEOUT_CTRL);
 #if 0
 	} else {
