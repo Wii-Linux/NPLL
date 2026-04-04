@@ -116,8 +116,20 @@ static inline struct block *_blockFree(struct block *block) {
 	return (struct block *)((size_t)block + sizeof(struct block) + size);
 }
 
-static inline bool _poolContains(struct pool *pool, void *ptr) {
-	return (ptr >= pool->cur_bottom && ptr < pool->top);
+#define PTR_IN_POOL 0
+#define PTR_IS_USED 1
+#define PTR_IS_FREE 2
+static inline bool _poolPtr(struct pool *pool, void *ptr, int what) {
+	switch (what) {
+		case PTR_IN_POOL:
+			return (ptr >= pool->bottom && ptr < pool->top);
+		case PTR_IS_USED:
+			return (ptr >= pool->cur_bottom && ptr < pool->top);
+		case PTR_IS_FREE:
+			return (ptr >= pool->bottom && ptr < pool->cur_bottom);
+		default:
+			return false;
+	}
 }
 
 /* actually allocate from a pool */
@@ -215,14 +227,16 @@ void free(void *ptr) {
 		if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
 			continue;
 
-		if (!_poolContains(pool, ptr))
+		if (!_poolPtr(pool, ptr, PTR_IN_POOL))
 			continue; /* wrong pool */
+		if (!_poolPtr(pool, ptr, PTR_IS_USED))
+			panic("free: double free (freed)");
 
 		block = (struct block *)((size_t)ptr - sizeof(struct block));
 		if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
 			panic("free: corrupted block metadata");
 		if (_blockCanFree(block))
-			panic("free: double free");
+			panic("free: double free (pending)");
 		block->size |= BLOCK_SIZE_CAN_FREE_MASK;
 
 		/* deallocate lowest free blocks */
@@ -230,7 +244,7 @@ void free(void *ptr) {
 			block = _blockFree(block);
 			pool->cur_bottom = (void *)block;
 			//log_puts("successfully freed block!");
-			if (!_poolContains(pool, block))
+			if (!_poolPtr(pool, block, PTR_IN_POOL))
 				break; /* empty pool */
 
 			if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
@@ -238,7 +252,7 @@ void free(void *ptr) {
 		}
 		return; /* done */
 	}
-	panic("free: no pool"); /* double free or other memory */
+	panic("free: no pool, unknown memory");
 }
 
 /* C stdlib malloc() implementation */
