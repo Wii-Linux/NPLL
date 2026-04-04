@@ -461,7 +461,7 @@ static void clear_fb(rgb fill_rgb) {
 	u32 *fb = (u32 *)xfb;
 	u32 fill_yuv = make_yuv(fill_rgb, fill_rgb);
 
-	while ((void *)fb - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) > 0) {
+	while ((void *)fb - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) < 0) {
 		*fb = fill_yuv;
 		fb++;
 	}
@@ -470,7 +470,7 @@ static void clear_fb(rgb fill_rgb) {
 
 static void clear_fb_rgb(rgb fill_rgb) {
 	u32 *fb = rgbFb;
-	while ((void *)fb - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) > 0) {
+	while ((void *)fb - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) < 0) {
 		*fb = fill_rgb.as_u32;
 		fb++;
 	}
@@ -484,8 +484,8 @@ static void viFlush(void) {
 
 	src  = rgbFb;
 	dest = (u32 *)xfb;
-	while ((void *)src - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) > 0 &&
-	       (void *)dest - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) > 0) {
+	while ((void *)src - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) < 0 &&
+	       (void *)dest - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) < 0) {
 		rgb1 = (rgb)*src;
 		src++;
 		rgb2 = (rgb)*src;
