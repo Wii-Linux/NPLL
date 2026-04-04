@@ -413,8 +413,10 @@ void UI_DelPart(struct partition *part) {
 		}
 	}
 
-	if (!partToDel)
+	if (!partToDel) {
+		IRQ_Restore(irqs);
 		return;
+	}
 
 	memmove(&partitions[partToDel], &partitions[partToDel + 1], (numParts - partToDel - 1) * sizeof(struct configPartition));
 	IRQ_Restore(irqs);
