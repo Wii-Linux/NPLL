@@ -302,6 +302,13 @@ static ssize_t fatSeek(struct filesystem *fs, int fd, ssize_t off) {
 	}
 }
 
+static ssize_t fatGetSize(struct filesystem *fs, int fd) {
+	(void)fs;
+	VALIDATE_FD(-EBADF);
+
+	return (ssize_t)f_size(&openFiles[fd]);
+}
+
 
 struct filesystem VISIBLE FS_FAT = {
 	.name = "FAT",
@@ -312,7 +319,8 @@ struct filesystem VISIBLE FS_FAT = {
 	.open = fatOpen,
 	.close = fatClose,
 	.read = fatRead,
-	.seek = fatSeek
+	.seek = fatSeek,
+	.getSize = fatGetSize,
 };
 
 struct filesystem VISIBLE FS_exFAT = {
@@ -324,5 +332,6 @@ struct filesystem VISIBLE FS_exFAT = {
 	.open = fatOpen,
 	.close = fatClose,
 	.read = fatRead,
-	.seek = fatSeek
+	.seek = fatSeek,
+	.getSize = fatGetSize
 };

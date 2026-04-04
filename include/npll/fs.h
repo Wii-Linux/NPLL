@@ -63,6 +63,9 @@ struct filesystem {
 
 	/* Close an open file descriptor. */
 	void (*close)(struct filesystem *fs, int fd);
+
+	/* Return the size of the file, or negative on error */
+	ssize_t (*getSize)(struct filesystem *fs, int fd);
 };
 
 /* the currently mounted filesystem (NULL if none) */
@@ -94,6 +97,9 @@ extern ssize_t FS_Seek(int fd, ssize_t off);
 
 /* close an open file */
 extern void FS_Close(int fd);
+
+/* get the size of a file */
+extern ssize_t FS_GetSize(int fd);
 
 /* probe a partition and return the filesystem that it matches, or NULL if unknown / unsupported */
 extern struct filesystem *FS_Probe(struct partition *part);

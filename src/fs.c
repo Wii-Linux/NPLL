@@ -111,6 +111,14 @@ void FS_Close(int fd) {
 	FS_Mounted->close(FS_Mounted, fd);
 }
 
+ssize_t FS_GetSize(int fd) {
+	assert_msg(initialized, "fs: FS_GetSize w/o FS_Init");
+	assert_msg(FS_Mounted, "fs: FS_GetSize with no mounted filesystem");
+	assert_msg(FS_Mounted->getSize, "fs: filesystem has no getSize");
+
+	return FS_Mounted->getSize(FS_Mounted, fd);
+}
+
 struct filesystem *FS_Probe(struct partition *part) {
 	int i;
 	assert_msg(initialized, "fs: FS_Probe w/o FS_Init");
