@@ -67,6 +67,9 @@ static int tinyUGTXReady(uint port) {
 }
 
 static void tinyUGWriteChar(const char c) {
+	if (slot == (uint)-1)
+		return;
+
 	while (!tinyUGTXReady(slot)) {
 		/* spin */
 	}
@@ -75,6 +78,8 @@ static void tinyUGWriteChar(const char c) {
 }
 
 static void tinyUGWriteStr(const char *str) {
+	if (slot == (uint)-1)
+		return;
 	while (*str) {
 		tinyUGWriteChar(*str);
 		str++;
