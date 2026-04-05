@@ -17,8 +17,10 @@
 static void sysinfoMenuInit(struct menu *m);
 static void sysinfoMenuCleanup(struct menu *m);
 
-static struct menuEntry sysinfoMenuItems[] = {
-	{ .name = "Back", .selected = UI_UpLevel }
+static struct menuEntry sysinfoBackEntry = { .name = "Back", .selected = UI_UpLevel };
+
+static struct menuEntry *sysinfoMenuItems[] = {
+	&sysinfoBackEntry,
 };
 
 struct menu UI_SysInfoMenu = {

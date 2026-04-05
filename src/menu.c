@@ -48,6 +48,7 @@ struct configPartition {
 	struct menuEntry *entries[MAX_ENTRIES];
 	uint numEntries;
 	struct partition *part;
+	struct menuEntry *allocEntries;
 };
 static uint numParts = 0;
 static struct configPartition partitions[MAX_PARTITIONS * MAX_BDEV];
@@ -80,28 +81,23 @@ static void rootMenuRetToLdrCB(struct menuEntry *dummy) {
 static struct menuEntry rebootEntry = { .name = "Reboot", .selected = rootMenuRebootCB };
 static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMenuShutdownCB };
 static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
+static struct menuEntry sysInfoEntry = { .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } };
 
-static struct menuEntry rootMenuEntries[ROOT_MENU_ENTRIES_MAX] = {
-	{ .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } },
+static struct menuEntry *rootMenuEntries[ROOT_MENU_ENTRIES_MAX] = {
+	&sysInfoEntry,
 };
 
 static void rootMenuInit(struct menu *m) {
 	uint idx = 1;
 
-	if (H_PlatOps->reboot) {
-		memcpy(&rootMenuEntries[idx], &rebootEntry, sizeof(struct menuEntry));
-		idx++;
-	}
+	if (H_PlatOps->reboot)
+		rootMenuEntries[idx++] = &rebootEntry;
 
-	if (H_PlatOps->shutdown) {
-		memcpy(&rootMenuEntries[idx], &shutdownEntry, sizeof(struct menuEntry));
-		idx++;
-	}
+	if (H_PlatOps->shutdown)
+		rootMenuEntries[idx++] = &shutdownEntry;
 
-	if (H_PlatOps->exit) {
-		memcpy(&rootMenuEntries[idx], &retToLdrEntry, sizeof(struct menuEntry));
-		idx++;
-	}
+	if (H_PlatOps->exit)
+		rootMenuEntries[idx++] = &retToLdrEntry;
 
 	m->numEntries = idx;
 }
@@ -147,7 +143,7 @@ void UI_HandleInputs(void) {
 				selected--;
 		}
 		if (ev & INPUT_EV_SELECT) {
-			curMenu->entries[selected].selected(&curMenu->entries[selected]);
+			curMenu->entries[selected]->selected(curMenu->entries[selected]);
 			break;
 		}
 
@@ -249,7 +245,7 @@ void UI_Redraw(void) {
 			fctprintf(outputToDevice, (void *)odev,
 				"%s %d: %s\r\n",
 				selected == j ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ",
-				j, curMenu->entries[j].name
+				j, curMenu->entries[j]->name
 			);
 		}
 
@@ -322,7 +318,24 @@ void UI_SwitchCB(struct menuEntry *e) {
 
 void UI_AddEntry(struct menuEntry *e) {
 	hasChanged = true;
-	memcpy(&curMenu->entries[curMenu->numEntries++], e, sizeof(struct menuEntry));
+	curMenu->entries[curMenu->numEntries++] = e;
+}
+
+void UI_DelEntry(struct menuEntry *e) {
+	uint i;
+
+	for (i = 0; i < curMenu->numEntries; i++) {
+		if (curMenu->entries[i] == e)
+			break;
+	}
+
+	if (i == curMenu->numEntries)
+		return; /* not found */
+
+	if (i != curMenu->numEntries - 1)
+		memmove(&curMenu->entries[i], &curMenu->entries[i + 1], sizeof(struct menuEntry *) * (curMenu->numEntries - i - 1));
+
+	curMenu->numEntries--;
 }
 
 void UI_UpLevel(struct menuEntry *_dummy) {
@@ -391,18 +404,18 @@ void UI_AddPart(struct partition *part) {
 		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
 		partitions[numParts].part = part;
 		partitions[numParts].numEntries = (uint)num;
+		partitions[numParts].allocEntries = entries;
 		for (i = 0; i < (uint)num; i++) {
-			partitions[numParts].entries[i] = &curMenu->entries[curMenu->numEntries];
+			partitions[numParts].entries[i] = &entries[i];
 			UI_AddEntry(&entries[i]);
 		}
 		numParts++;
-		free(entries);
 		IRQ_Restore(irqs);
 	}
 }
 
 void UI_DelPart(struct partition *part) {
-	uint i, partToDel = 0;
+	uint i, partToDel = (uint)-1;
 	bool irqs = IRQ_DisableSave();
 
 	for (i = 0; i < numParts; i++) {
@@ -412,11 +425,18 @@ void UI_DelPart(struct partition *part) {
 		}
 	}
 
-	if (!partToDel) {
+	if (partToDel == (uint)-1) {
 		IRQ_Restore(irqs);
 		return;
 	}
 
+	for (i = 0; i < partitions[partToDel].numEntries; i++) {
+		log_printf("deleting entry %u of part %u\r\n", i, partToDel);
+		UI_DelEntry(partitions[partToDel].entries[i]);
+	}
+
+	free(partitions[partToDel].allocEntries);
 	memmove(&partitions[partToDel], &partitions[partToDel + 1], (numParts - partToDel - 1) * sizeof(struct configPartition));
+	numParts--;
 	IRQ_Restore(irqs);
 }
