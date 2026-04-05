@@ -315,9 +315,16 @@ void UI_SwitchCB(struct menuEntry *e) {
 	UI_Switch(m);
 }
 
-void UI_AddEntry(struct menu *menu, struct menuEntry *e) {
+void UI_AppendEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
 	menu->entries[menu->numEntries++] = e;
+}
+
+void UI_PrependEntry(struct menu *menu, struct menuEntry *e) {
+	hasChanged = true;
+	memmove(&menu->entries[1], &menu->entries[0], menu->numEntries * sizeof(struct menuEntry *));
+	menu->entries[0] = e;
+	menu->numEntries++;
 }
 
 void UI_DelEntry(struct menu *menu, struct menuEntry *e) {
@@ -389,8 +396,7 @@ void UI_LogPutchar(char *cptr) {
 
 void UI_AddPart(struct partition *part) {
 	bool irqs;
-	uint i;
-	int num;
+	int i, num;
 	struct menuEntry *entries;
 
 	num = C_Probe(&entries);
@@ -404,8 +410,8 @@ void UI_AddPart(struct partition *part) {
 		partitions[numParts].part = part;
 		partitions[numParts].numEntries = (uint)num;
 		partitions[numParts].entries = entries;
-		for (i = 0; i < (uint)num; i++)
-			UI_AddEntry(&rootMenu, &entries[i]);
+		for (i = num - 1; i >= 0; i--)
+			UI_PrependEntry(&rootMenu, &entries[i]);
 		numParts++;
 		IRQ_Restore(irqs);
 	}

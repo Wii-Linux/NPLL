@@ -58,7 +58,8 @@ extern void UI_HandleInputs(void);
 extern void UI_Redraw(void);
 extern void UI_Switch(struct menu *m);
 extern void UI_SwitchCB(struct menuEntry *e);
-extern void UI_AddEntry(struct menu *menu, struct menuEntry *e);
+extern void UI_AppendEntry(struct menu *menu, struct menuEntry *e);
+extern void UI_PrependEntry(struct menu *menu, struct menuEntry *e);
 extern void UI_DelEntry(struct menu *menu, struct menuEntry *e);
 extern void UI_LogPutchar(char *cptr);
 
