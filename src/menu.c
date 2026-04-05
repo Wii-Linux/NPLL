@@ -315,26 +315,26 @@ void UI_SwitchCB(struct menuEntry *e) {
 	UI_Switch(m);
 }
 
-void UI_AddEntry(struct menuEntry *e) {
+void UI_AddEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
-	curMenu->entries[curMenu->numEntries++] = e;
+	menu->entries[menu->numEntries++] = e;
 }
 
-void UI_DelEntry(struct menuEntry *e) {
+void UI_DelEntry(struct menu *menu, struct menuEntry *e) {
 	uint i;
 
-	for (i = 0; i < curMenu->numEntries; i++) {
-		if (curMenu->entries[i] == e)
+	for (i = 0; i < menu->numEntries; i++) {
+		if (menu->entries[i] == e)
 			break;
 	}
 
-	if (i == curMenu->numEntries)
+	if (i == menu->numEntries)
 		return; /* not found */
 
-	if (i != curMenu->numEntries - 1)
-		memmove(&curMenu->entries[i], &curMenu->entries[i + 1], sizeof(struct menuEntry *) * (curMenu->numEntries - i - 1));
+	if (i != menu->numEntries - 1)
+		memmove(&menu->entries[i], &menu->entries[i + 1], sizeof(struct menuEntry *) * (menu->numEntries - i - 1));
 
-	curMenu->numEntries--;
+	menu->numEntries--;
 }
 
 void UI_UpLevel(struct menuEntry *_dummy) {
@@ -405,7 +405,7 @@ void UI_AddPart(struct partition *part) {
 		partitions[numParts].numEntries = (uint)num;
 		partitions[numParts].entries = entries;
 		for (i = 0; i < (uint)num; i++)
-			UI_AddEntry(&entries[i]);
+			UI_AddEntry(&rootMenu, &entries[i]);
 		numParts++;
 		IRQ_Restore(irqs);
 	}
@@ -429,7 +429,7 @@ void UI_DelPart(struct partition *part) {
 
 	for (i = 0; i < partitions[partToDel].numEntries; i++) {
 		log_printf("deleting entry %u of part %u\r\n", i, partToDel);
-		UI_DelEntry(&partitions[partToDel].entries[i]);
+		UI_DelEntry(&rootMenu, &partitions[partToDel].entries[i]);
 	}
 
 	free(partitions[partToDel].entries);
