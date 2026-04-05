@@ -34,6 +34,7 @@
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
 int H_WiiBootIOS = -1;
+u64 H_WiiBootTitleID = 0;
 void *H_WiiMEM2Top = NULL;
 
 /* IOS9 is present from pre-launch sysmenu Wiis up to fully updated, even vWii */
@@ -113,8 +114,6 @@ static void armbootnow(void) {
 
 	sram = (vu32 *)(UNCACHED_BASE + 0x0d410000);
 	armbuf = (vu32 *)(MEM2_CACHED_BASE + 0x01000000);
-	IOS_Reset();
-	ES_Init();
 
 	/* copy it into MEM2 */
 	memcpy((void *)armbuf, __mini_armboot_bin_data, (uint)__mini_armboot_bin_size);
@@ -275,6 +274,7 @@ static struct platOps wiiPlatOps = {
 enum wiiInitState {
 	STATE_ANALYZE,
 	STATE_ANALYZE_IOS,
+	STATE_IOS_INIT,
 	STATE_IOS_PRIV_ESC,
 	STATE_IOS_ARMBOOTNOW,
 	STATE_HW_UNRESTRICT,
@@ -299,8 +299,9 @@ enum wiiInitState {
 #define SFLAG_CUR_MINI      BIT(4)
 #define SFLAG_RAN_DEVSHA    BIT(5)
 #define SFLAG_RAN_ABN       BIT(6)
-#define SFLAG_MINI_INIT     BIT(7)
-#define SFLAG_MINI_RELOADED BIT(8)
+#define SFLAG_IOS_INIT      BIT(7)
+#define SFLAG_MINI_INIT     BIT(8)
+#define SFLAG_MINI_RELOADED BIT(9)
 
 #define SET_SFLAG(flag, cond) { \
 	if ((cond)) \
@@ -412,21 +413,33 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			if (GET_SFLAG(SFLAG_RAN_ABN) && !GET_SFLAG(SFLAG_CUR_MINI))
 				panic("Wii: ARMBootNow failed");
 
-			H_WiiBootIOS = IOS_GetVersion();
-
 			/* determine where to go next */
+			if (!GET_SFLAG(SFLAG_IOS_INIT)) {
+				GOTO_STATE(STATE_IOS_INIT);
+				break;
+			}
 			/* IOS, no perms: -> STATE_IOS_PRIV_ESC */
-			if (!GET_SFLAG(SFLAG_AHBPROT_PERMS)) {
+			else if (GET_SFLAG(SFLAG_IOS_INIT) && !GET_SFLAG(SFLAG_AHBPROT_PERMS)) {
 				GOTO_STATE(STATE_IOS_PRIV_ESC);
 				break;
 			}
 			/* IOS, has perms: -> STATE_IOS_ARMBOOTNOW */
-			else if (GET_SFLAG(SFLAG_AHBPROT_PERMS) && !GET_SFLAG(SFLAG_RAN_ABN)) {
+			else if (GET_SFLAG(SFLAG_IOS_INIT) && GET_SFLAG(SFLAG_AHBPROT_PERMS) && !GET_SFLAG(SFLAG_RAN_ABN)) {
 				GOTO_STATE(STATE_IOS_ARMBOOTNOW);
 				break;
 			}
 			else
 				__builtin_unreachable(); /* impossible to reach due to the above guards */
+		}
+		case STATE_IOS_INIT: {
+			assert(!GET_SFLAG(SFLAG_CUR_MINI));
+
+			H_WiiBootIOS = IOS_GetVersion();
+			IOS_Reset();
+			ES_Init();
+			SET_SFLAG(SFLAG_IOS_INIT, true);
+			GOTO_STATE(STATE_ANALYZE_IOS);
+			break;
 		}
 		case STATE_IOS_PRIV_ESC: {
 			assert(!GET_SFLAG(SFLAG_CUR_MINI));

@@ -1,7 +1,7 @@
 /*
  * NPLL - Wii - IOS /dev/es
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 
@@ -16,7 +16,8 @@
 enum esIoctls {
 	ES_LAUNCH_TITLE = 0x8,
 	ES_GET_TIKVIEWS_COUNT = 0x12,
-	ES_GET_TIKVIEWS = 0x13
+	ES_GET_TIKVIEWS = 0x13,
+	ES_GET_TITLE_ID = 0x20
 };
 
 typedef struct {
@@ -31,6 +32,7 @@ extern int ES_Init(void);
 extern i32 ES_GetTikViewsCount(u64 title_id, u32 *num_views);
 extern i32 ES_GetTikViews(u64 title_id, tikview_t *tikviews, u32 num_views);
 extern i32 ES_LaunchTitle(u64 title_id, tikview_t *tikview);
+extern i32 ES_GetTitleID(u64 *title_id);
 
 #define TITLE_ID_IOS 0x100000000ull
 

@@ -1,11 +1,13 @@
 /*
  * NPLL - Console types
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _CONSOLE_H
 #define _CONSOLE_H
+
+#include <npll/types.h>
 
 enum consoleType {
 	CONSOLE_TYPE_GAMECUBE = 1,
@@ -60,6 +62,7 @@ extern enum gcnRev H_GCNRev;
 extern enum wiiRev H_WiiRev;
 extern int H_WiiIsvWii;
 extern int H_WiiBootIOS;
+extern u64 H_WiiBootTitleID;
 extern void *H_WiiMEM2Top;
 extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
