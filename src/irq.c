@@ -36,9 +36,14 @@ void IRQ_Init(void) {
 	/* ack all Flipper IRQs */
 	PI_INTSR = PI_INTSR;
 
-	if (H_ConsoleType == CONSOLE_TYPE_WII) {
-		/* unmask Hollywood IRQs in the Flipper PIC */
-		PI_INTMR |= PI_IRQDEV_HLWD;
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+		/* unmask the Reset Switch in the Flipper PIC */
+		PI_INTMR |= PI_IRQDEV_RSW;
+	}
+
+	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		/* unmask the Reset Switch as well as Hollywood IRQs in the Flipper PIC */
+		PI_INTMR |= PI_IRQDEV_RSW | PI_IRQDEV_HLWD;
 
 		/* mask and ack all Hollywood IRQs */
 		HW_PPCIRQMASK = 0;
@@ -82,39 +87,42 @@ static void IRQ_DoHandle(enum irqDev dev) {
 }
 
 void __attribute__((noreturn)) IRQ_Handle(void) {
-	u32 intsr;
+	u32 intsr, ppcirqflag, ppc0int1sts;
 
-	/* TODO: Handle Flipper PIC IRQs */
-
-	/* TODO: Handle other Hollywood PIC IRQs */
-	if (H_ConsoleType == CONSOLE_TYPE_WII) {
-		intsr = HW_PPCIRQFLAG;
-		if (intsr & HW_IRQDEV_GPIOB) {
+	intsr = PI_INTSR;
+	if (intsr & PI_IRQDEV_RSW) {
+		PI_INTSR = PI_IRQDEV_RSW;
+		IRQ_DoHandle(IRQDEV_RSW);
+	}
+	if (intsr & PI_IRQDEV_HLWD && H_ConsoleType == CONSOLE_TYPE_WII) {
+		ppcirqflag = HW_PPCIRQFLAG;
+		PI_INTSR = PI_IRQDEV_HLWD;
+		if (ppcirqflag & HW_IRQDEV_GPIOB) {
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
 		}
-		if (intsr & HW_IRQDEV_GPIO) {
+		if (ppcirqflag & HW_IRQDEV_GPIO) {
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIO;
 			IRQ_DoHandle(IRQDEV_GPIO);
 		}
-		if (intsr & HW_IRQDEV_SDHCI0) {
+		if (ppcirqflag & HW_IRQDEV_SDHCI0) {
 			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI0;
 			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
 	}
 
-	/* TODO: Handle other Latte PIC IRQs */
-	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
-		intsr = LT_PPC0INT1STS;
-		if (intsr & HW_IRQDEV_GPIOB) {
+	/* regardless of PI INTSR */
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		ppc0int1sts = LT_PPC0INT1STS;
+		if (ppc0int1sts & HW_IRQDEV_GPIOB) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
 		}
-		if (intsr & HW_IRQDEV_GPIO) {
+		if (ppc0int1sts & HW_IRQDEV_GPIO) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIO;
 			IRQ_DoHandle(IRQDEV_GPIO);
 		}
-		if (intsr & HW_IRQDEV_SDHCI0) {
+		if (ppc0int1sts & HW_IRQDEV_SDHCI0) {
 			LT_PPC0INT1STS = HW_IRQDEV_SDHCI0;
 			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
