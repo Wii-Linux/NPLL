@@ -82,6 +82,12 @@
 	__tmpSPRVal; \
 })
 
+#define mfmsr(rn) ({ \
+	u32 __tmpMSRVal; \
+	asm volatile("mfmsr %0" : "=r" (__tmpMSRVal)); \
+	__tmpMSRVal; \
+})
+
 #define mtspr(rn, v) asm volatile("mtspr " __stringifyResult(rn) ", %0" : : "r" (v))
 
 /* Somehow GCC generates garbage */
