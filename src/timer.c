@@ -21,6 +21,7 @@ struct repeatingEvent {
 	u32 periodUsecs;
 	void (*callback)(void *);
 	void *cbData;
+	bool active;
 };
 
 #define MAX_EVENTS 32
@@ -105,8 +106,13 @@ void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 	events[idx].cbData = cbData;
 
 	/* reprogram DEC if this is the first queued event */
-	if (idx == 0)
-		mtdec((u32)(events[0].fireTB - mftb()));
+	if (idx == 0) {
+		u64 now = mftb();
+		if (events[0].fireTB <= now)
+			mtdec(0);
+		else
+			mtdec((u32)(events[0].fireTB - now));
+	}
 
 	IRQ_Restore(irqs);
 }
@@ -115,8 +121,14 @@ static void repeatingEventCB(void *dat) {
 	struct repeatingEvent *repEv;
 	repEv = (struct repeatingEvent *)dat;
 
-	repEv->callback(repEv->cbData);
 	T_QueueEvent(repEv->periodUsecs, repeatingEventCB, dat);
+
+	if (repEv->active)
+		return;
+
+	repEv->active = true;
+	repEv->callback(repEv->cbData);
+	repEv->active = false;
 }
 
 void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData) {
@@ -141,15 +153,31 @@ void T_DECHandler(void) {
 
 		/* shift list forward */
 		memmove(&events[0], &events[1], sizeof(events) - sizeof(struct timedEvent));
+
+		/*
+		 * set DEC to the next callback if we have something else in the queue,
+		 * else set it to the max possible value (do this now instead of later
+		 * so that if the just-popped-out event takes too long we can still take
+		 * the DEC exception for the next one)
+		 */
+		if (events[0].callback) {
+			tb = mftb();
+			if (events[0].fireTB <= tb)
+				mtdec(0);
+			else
+				mtdec((u32)(events[0].fireTB - tb));
+		} else
+			mtdec(0xffffffff);
+
 		ev.callback(ev.cbData);
 	}
 
-	/*
-	 * set DEC to the next callback if we have something else in the queue,
-	 * else set it to the max possible value
-	 */
-	if (events[0].callback)
-		mtdec((u32)(events[0].fireTB - mftb()));
-	else
+	if (events[0].callback) {
+		tb = mftb();
+		if (events[0].fireTB <= tb)
+			mtdec(0);
+		else
+			mtdec((u32)(events[0].fireTB - tb));
+	} else
 		mtdec(0xffffffff);
 }

@@ -112,9 +112,12 @@ static struct menu rootMenu = {
 	.previous = NULL
 };
 
-static void uiRedrawWrapper(void *arg) {
+static void uiHandleInputsWrapper(void *arg) {
 	(void)arg;
 	UI_HandleInputs();
+}
+static void uiRedrawWrapper(void *arg) {
+	(void)arg;
 	UI_Redraw();
 }
 
@@ -122,6 +125,7 @@ void UI_Init(void) {
 	memset(logLines, 0, sizeof(logLines));
 	memset(partitions, 0, sizeof(partitions));
 	UI_Switch(&rootMenu);
+	T_QueueRepeatingEvent(10 * 1000, uiHandleInputsWrapper, NULL);
 	T_QueueRepeatingEvent(10 * 1000, uiRedrawWrapper, NULL);
 }
 
