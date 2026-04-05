@@ -79,14 +79,13 @@ enum MINI_Err MINI_ValidInfoHdr(void) {
 enum MINI_Err MINI_Init(void) {
 	u32 ppcmsg, infohdr_ptr;
 	struct ipc_request_mini req;
-	int ret;
 	struct infohdr *infohdr;
-	enum MINI_Err hdrerr;
+	enum MINI_Err ret;
 
 	/* intentionally does not check initialized so that it can be called again while reloading */
-	hdrerr = MINI_ValidInfoHdr();
-	if (hdrerr != MINI_OK)
-		return hdrerr;
+	ret = MINI_ValidInfoHdr();
+	if (ret != MINI_OK)
+		return ret;
 
 	/* set up our internal state */
 	memset(&state, 0, sizeof(state));
@@ -119,10 +118,15 @@ enum MINI_Err MINI_Init(void) {
 	initialized = true;
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_PING, 3, 1, 0);
 	log_printf(" * fast ping: %d\r\n", ret);
+	if (ret != MINI_OK)
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 3, 1, 0);
 	log_printf(" * slow ping: %d\r\n", ret);
+	if (ret != MINI_OK)
+		return ret;
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_GETVERS, 3, 1, 0);
 	log_printf(" * getvers: %d (version: 0x%08x)\r\n", ret, req.args[0]);
+	if (ret != MINI_OK)
+		return ret;
 
 	H_WiiMEM2Top = infohdr->mem2_boundary;
 

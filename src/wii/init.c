@@ -508,6 +508,10 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			assert(GET_SFLAG(SFLAG_CUR_MINI));
 			miniErr = MINI_Init();
 			if (miniErr != MINI_OK) {
+				if (miniErr == MINI_TIMEOUT) {
+					GOTO_STATE(STATE_ANALYZE);
+					break;
+				}
 				log_printf("MINI_Init failed with %u\r\n", miniErr);
 				panic("MINI_Init failed");
 			}
@@ -523,6 +527,9 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			memcpy((void *)armbuf, __mini_armboot_bin_data, (uint)__mini_armboot_bin_size);
 			dcache_flush((void *)armbuf, (uint)__mini_armboot_bin_size);
 
+			/* tell MINI to pretty please not reset us kthxbye */
+			MINI_BOOT_MAGIC_PTR = MINI_NO_RESET_MAGIC;
+
 			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
 			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
 			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf));
@@ -530,6 +537,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			SET_SFLAG(SFLAG_MINI_INIT, false);
 			SET_SFLAG(SFLAG_MINI_RELOADED, true);
+			SET_SFLAG(SFLAG_CUR_MINI, false);
 			GOTO_STATE(STATE_ANALYZE);
 			break;
 		}
