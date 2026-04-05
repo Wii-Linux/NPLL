@@ -255,6 +255,48 @@ void free(void *ptr) {
 	panic("free: no pool, unknown memory");
 }
 
+void M_PoolStats(enum pool_idx pool_idx, u32 *total, u32 *used, u32 *free_bytes, u32 *largest_alloc, u32 *largest_free) {
+	struct pool *pool;
+	struct block *block;
+	u32 pool_total, bottom_free, pending_free, max_alloc, blk_size;
+
+	if (__unlikely(pool_idx == POOL_ANY || pool_idx >= MAX_POOLS))
+		panic("M_PoolStats: invalid pool index");
+
+	pool = &pools[pool_idx];
+	if (__unlikely(memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
+		panic("M_PoolStats: corrupted pool metadata");
+	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
+		panic("M_PoolStats: nonexistent pool");
+
+	pool_total = (u32)pool->top - (u32)pool->bottom;
+	bottom_free = (u32)pool->cur_bottom - (u32)pool->bottom;
+	pending_free = 0;
+	max_alloc = 0;
+
+	/* walk all blocks from cur_bottom up to top */
+	block = (struct block *)pool->cur_bottom;
+	while ((void *)block < pool->top) {
+		if (__unlikely(memcmp(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE)))
+			panic("M_PoolStats: corrupted block metadata");
+
+		blk_size = block->size & ~BLOCK_SIZE_CAN_FREE_MASK;
+
+		if (_blockCanFree(block))
+			pending_free += sizeof(struct block) + blk_size;
+		else if (blk_size > max_alloc)
+			max_alloc = blk_size;
+
+		block = (struct block *)((u32)block + sizeof(struct block) + blk_size);
+	}
+
+	*total = pool_total;
+	*free_bytes = bottom_free + pending_free;
+	*used = pool_total - *free_bytes;
+	*largest_alloc = max_alloc;
+	*largest_free = bottom_free;
+}
+
 /* C stdlib malloc() implementation */
 void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size) {
 	return M_PoolAlloc(POOL_ANY, size, MIN_ALIGN);

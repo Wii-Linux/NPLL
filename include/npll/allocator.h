@@ -19,6 +19,8 @@ enum pool_idx {
 extern void M_Init(void);
 extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size, size_t align);
 
+extern void M_PoolStats(enum pool_idx pool, u32 *total, u32 *used, u32 *free_bytes, u32 *largest_alloc, u32 *largest_free);
+
 extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size);
 extern void free(void *ptr);
 

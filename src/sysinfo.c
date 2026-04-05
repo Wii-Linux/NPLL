@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/allocator.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +48,7 @@ static void sysinfoMenuInit(struct menu *m) {
 	char tmp[256];
 	char *name;
 	uint i, j;
+	u32 total, used, freeBytes, largestAlloc, largestFree;
 
 	/* allocate scratch space */
 	m->content = malloc(4096);
@@ -187,7 +189,16 @@ static void sysinfoMenuInit(struct menu *m) {
 	sprintf(tmp, "CPU PVR: 0x%08x (%s)\r\n", mfspr(PVR), pvrToName(mfspr(PVR)));
 	strcat(m->content, tmp);
 
-	/* step 6: memory (TODO) */
+	/* step 6: memory */
+	M_PoolStats(POOL_MEM1, &total, &used, &freeBytes, &largestAlloc, &largestFree);
+	sprintf(tmp, "MEM1: %uK total/%uK used/%uK free/%uK max alloc/%uK max free range\r\n", total / 1024, used / 1024, freeBytes / 1024, largestAlloc / 1024, largestFree / 1024);
+	strcat(m->content, tmp);
+	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE) {
+		M_PoolStats(POOL_MEM2, &total, &used, &freeBytes, &largestAlloc, &largestFree);
+		sprintf(tmp, "MEM2: %uK total/%uK used/%uK free/%uK max alloc/%uK max free range\r\n", total / 1024, used / 1024, freeBytes / 1024, largestAlloc / 1024, largestFree / 1024);
+		strcat(m->content, tmp);
+	}
+
 
 	/* step 7: report attached storage */
 	strcat(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
