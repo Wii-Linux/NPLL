@@ -34,6 +34,15 @@ struct menu UI_SysInfoMenu = {
 	.previous = NULL
 };
 
+static const char *pvrToName(u32 pvr) {
+	switch (pvr) {
+	case 0x00083410: return "Gekko";
+	case 0x00087200: return "Broadway";
+	/* TODO: Espresso? */
+	default: return "Unknown";
+	}
+}
+
 static void sysinfoMenuInit(struct menu *m) {
 	char tmp[256];
 	char *name;
@@ -175,7 +184,7 @@ static void sysinfoMenuInit(struct menu *m) {
 		strcat(m->content, "Boot method: linux-loader\r\n");
 
 	/* step 5: report CPU PVR */
-	sprintf(tmp, "CPU PVR: 0x%08x\r\n", mfspr(PVR));
+	sprintf(tmp, "CPU PVR: 0x%08x (%s)\r\n", mfspr(PVR), pvrToName(mfspr(PVR)));
 	strcat(m->content, tmp);
 
 	/* step 6: memory (TODO) */
@@ -187,9 +196,12 @@ static void sysinfoMenuInit(struct menu *m) {
 			B_Devices[i]->name, B_Devices[i]->size, B_Devices[i]->numPartitions);
 		strcat(m->content, tmp);
 		for (j = 0; j < B_Devices[i]->numPartitions; j++) {
-			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx\r\n",
+			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx%s%s%s\r\n",
 				FS_MountedPartition == B_Devices[i]->partitions[j] ? '*' : ' ',
-				j, B_Devices[i]->partitions[j]->size, B_Devices[i]->partitions[j]->offset);
+				j + 1, B_Devices[i]->partitions[j]->size, B_Devices[i]->partitions[j]->offset,
+				FS_MountedPartition == B_Devices[i]->partitions[j] ? " (" : "",
+				FS_MountedPartition == B_Devices[i]->partitions[j] ? FS_Mounted->name : "",
+				FS_MountedPartition == B_Devices[i]->partitions[j] ? ")" : "");
 			strcat(m->content, tmp);
 		}
 	}
