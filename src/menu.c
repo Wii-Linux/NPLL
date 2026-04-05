@@ -45,10 +45,9 @@ static uint curFooterLines;
 static struct menu *curMenu = NULL;
 
 struct configPartition {
-	struct menuEntry *entries[MAX_ENTRIES];
+	struct menuEntry *entries;
 	uint numEntries;
 	struct partition *part;
-	struct menuEntry *allocEntries;
 };
 static uint numParts = 0;
 static struct configPartition partitions[MAX_PARTITIONS * MAX_BDEV];
@@ -404,11 +403,9 @@ void UI_AddPart(struct partition *part) {
 		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
 		partitions[numParts].part = part;
 		partitions[numParts].numEntries = (uint)num;
-		partitions[numParts].allocEntries = entries;
-		for (i = 0; i < (uint)num; i++) {
-			partitions[numParts].entries[i] = &entries[i];
+		partitions[numParts].entries = entries;
+		for (i = 0; i < (uint)num; i++)
 			UI_AddEntry(&entries[i]);
-		}
 		numParts++;
 		IRQ_Restore(irqs);
 	}
@@ -432,10 +429,10 @@ void UI_DelPart(struct partition *part) {
 
 	for (i = 0; i < partitions[partToDel].numEntries; i++) {
 		log_printf("deleting entry %u of part %u\r\n", i, partToDel);
-		UI_DelEntry(partitions[partToDel].entries[i]);
+		UI_DelEntry(&partitions[partToDel].entries[i]);
 	}
 
-	free(partitions[partToDel].allocEntries);
+	free(partitions[partToDel].entries);
 	memmove(&partitions[partToDel], &partitions[partToDel + 1], (numParts - partToDel - 1) * sizeof(struct configPartition));
 	numParts--;
 	IRQ_Restore(irqs);
