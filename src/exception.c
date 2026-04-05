@@ -41,42 +41,52 @@ static void dump_stack_trace(u32 *sp) {
 	}
 }
 
+struct exceptionFrame {
+	u32 gpr[32];
+	u32 cr;
+	u32 xer;
+	u32 lr;
+	u32 ctr;
+	u32 srr0;
+	u32 srr1;
+	u32 dar;
+	u32 dsisr;
+};
 
-static void __attribute__((noreturn)) E_DecrementerHandler(void) {
-	T_DECHandler();
-	IRQ_Return();
-}
+static struct exceptionFrame exceptionFrames[8];
+static uint exceptionRecursionCount = 0;
 
 void __attribute__((noreturn)) E_Handler(int exception) {
-	u32 *x, sp;
+	u32 sp;
+	struct exceptionFrame *frame;
 	int i;
+
+	frame = (struct exceptionFrame *)physToCached(0x2000);
 
 	if (exception == 0x0500) {
 		IRQ_Handle();
 		__builtin_unreachable();
 	}
 	else if (exception == 0x0900) {
-		E_DecrementerHandler();
+		memcpy(&exceptionFrames[exceptionRecursionCount++], frame, sizeof(struct exceptionFrame));
+		IRQ_Enable();
+		T_DECHandler();
+		memcpy(frame, &exceptionFrames[--exceptionRecursionCount], sizeof(struct exceptionFrame));
+		IRQ_Return();
 		__builtin_unreachable();
 	}
 
 	printf("\r\nException %04x occurred!\r\n", exception);
 
-	x = (u32 *)physToCached(0x2000);
-	sp = x[1];
+	sp = frame->gpr[1];
 
 	printf("\r\n R0..R7    R8..R15  R16..R23  R24..R31\r\n");
-	for (i = 0; i < 8; i++) {
-		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[8], x[16], x[24]);
-		x++;
-	}
-	x = (u32 *)physToCached(0x2080);
+	for (i = 0; i < 8; i++)
+		printf("%08x  %08x  %08x  %08x\r\n", frame->gpr[0 + i], frame->gpr[8 + i], frame->gpr[16 + i], frame->gpr[24 + i]);
 
 	printf("\r\n CR/XER    LR/CTR  SRR0/SRR1 DAR/DSISR\r\n");
-	for (i = 0; i < 2; i++) {
-		printf("%08x  %08x  %08x  %08x\r\n", x[0], x[2], x[4], x[6]);
-		x++;
-	}
+	printf("%08x  %08x  %08x  %08x\r\n", frame->cr, frame->lr, frame->srr0, frame->dar);
+	printf("%08x  %08x  %08x  %08x\r\n", frame->xer, frame->ctr, frame->srr1, frame->dsisr);
 
 	dump_stack_trace((u32 *)sp);
 
