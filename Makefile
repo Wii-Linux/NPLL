@@ -81,7 +81,7 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -mcpu=750 -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-pic -fno-pie -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # -O3 is just too buggy and unstable :(
 CFLAGS  += -O2 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits

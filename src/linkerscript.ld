@@ -132,6 +132,13 @@ SECTIONS
 	/DISCARD/ : {
 		*(.eh_frame)
 		*(.eh_frame_hdr)
+		*(.interp)
+		*(.dynamic)
+		*(.dynsym)
+		*(.dynstr)
+		*(.gnu.hash)
+		*(.got)
+		*(.got2)
 	}
 }
 
