@@ -170,6 +170,7 @@ static void armbootnow(void) {
 }
 
 static __attribute__((noreturn)) void wiiShutdown(void) {
+	MINI_BOOT_MAGIC_PTR = 0;
 	HW_GPIO_OWNER |= GPIO_SHUTDOWN;
 	HW_GPIO_DIR |= GPIO_SHUTDOWN;
 	HW_GPIOB_OUT |= GPIO_SHUTDOWN;
@@ -178,6 +179,7 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 }
 
 static __attribute__((noreturn)) void wiiReboot(void) {
+	MINI_BOOT_MAGIC_PTR = 0;
 	/* try a HW_RESETS reset */
 	HW_RESETS |= RESETS_RSTBINB;
 	udelay(1000 * 35);
@@ -194,6 +196,7 @@ static __attribute__((noreturn)) void wiiReboot(void) {
 static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	int i;
 	(void)str;
+	MINI_BOOT_MAGIC_PTR = 0;
 
 	/* can't hurt to try... */
 	HW_GPIO_OWNER = 0xffffffff;
@@ -612,6 +615,8 @@ out:
 		panic("AHBPROT not enabled at end of H_InitWii");
 	if (!testMEM2())
 		panic("MEM2 not fully accessible at end of H_InitWii");
+
+	MINI_BOOT_MAGIC_PTR = 0;
 
 	/* kick off the real init */
 	I_InitCommon();
