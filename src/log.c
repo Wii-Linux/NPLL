@@ -16,13 +16,13 @@
 enum logMethod L_Method = LOG_METHOD_ALL_ODEV;
 
 /* TODO: really ensure that there's nothing here we're clobbering */
-#define memlogStart (char *)0x817f0000
+#define memlogStart (char *)0x817c0000
 static char *memlogNext = memlogStart;
-static u32 maxSize = 0x00010000;
+static u32 maxSize = 0x00040000;
 static bool outOfSpace = false;
 
 static void memlogWriteChar(const char c) {
-	if ((u32)memlogNext >= ((u32)memlogNext + maxSize)) {
+	if ((u32)memlogNext >= ((u32)memlogStart + maxSize)) {
 		if (outOfSpace) /* prevent recursion */
 			return;
 		outOfSpace = true;

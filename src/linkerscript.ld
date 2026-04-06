@@ -17,9 +17,9 @@ MEMORY {
 	 */
 
 	LOWPHYS (rwx): ORIGIN = 0x00004000, LENGTH = 0x016fc000 /* physical MEM1, the load address of our ELF */
-	HIPHYS (rwx): ORIGIN = 0x01700000, LENGTH = 0x00100000 /* physical MEM1, the load address of our relocated code+data */
+	HIPHYS (rwx): ORIGIN = 0x01700000, LENGTH = 0x000c0000 /* physical MEM1, the load address of our relocated code+data */
 	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x016fc000 /* virtual runtime addresses after BAT setup */
-	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x00100000 /* virtual runtime address after relocation */
+	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x000c0000 /* virtual runtime address after relocation */
 }
 
 
