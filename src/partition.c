@@ -26,7 +26,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 	uint i, count = 0;
 	int extIdx;
 	ssize_t ret;
-	u64 firstExtOff, extendedOff = 0;
+	u64 firstExtOff = 0, extendedOff = 0;
 
 	mbr = (struct mbr *)_mbr;
 
