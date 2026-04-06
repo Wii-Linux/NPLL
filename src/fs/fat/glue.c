@@ -109,7 +109,7 @@ extern struct partition *partitions[FF_VOLUMES];
 extern const char *VolumeStr[FF_VOLUMES];
 static FATFS fatfsObj;
 static FIL openFiles[MAX_FILES];
-#define VALIDATE_FD(ret) if (fd < 0 || fd > MAX_FILES || !openFiles[fd].obj.fs) { return ret; }
+#define VALIDATE_FD(ret) if (fd < 0 || fd >= MAX_FILES || !openFiles[fd].obj.fs) { return ret; }
 static int allocateFd(void) {
 	int i;
 
