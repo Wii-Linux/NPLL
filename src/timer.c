@@ -4,6 +4,7 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
+#include <assert.h>
 #include <stdbool.h>
 #include <string.h>
 #include <npll/console.h>
@@ -94,6 +95,7 @@ void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 
 	max = latestQueuedEvent();
 	idx = eventIdxForTB(fireTB);
+	assert_msg(idx != MAX_EVENTS, "T_QueueEvent: events overflow");
 
 	/* shift queue forward to make room */
 	if (max != -1) /* don't shift nothing */
@@ -120,6 +122,7 @@ static void repeatingEventCB(void *dat) {
 }
 
 void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData) {
+	assert_msg(numRepeatingEvents != MAX_EVENTS, "T_QueueRepeatingEvent: repeatingEvents overflow");
 	repeatingEvents[numRepeatingEvents].periodUsecs = periodUsecs;
 	repeatingEvents[numRepeatingEvents].callback = callback;
 	repeatingEvents[numRepeatingEvents].cbData = cbData;
