@@ -174,6 +174,8 @@ enum MINI_Err MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	if (!initialized)
 		return MINI_NOT_INIT;
 
+	assert(num_args <= 6);
+
 	if (inqueue_full()) {
 		log_puts("in queue full, this might be bad...");
 		while (inqueue_full()) {
