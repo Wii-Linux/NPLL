@@ -602,7 +602,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 out:
 
 	/* ASCII 'STUBHAXX' */
-	if ((*(vu64 *)(MEM1_UNCACHED_BASE + 0x1804)) == 0x5354554248415858ULL) {
+	if ((*(vu64 *)(MEM1_UNCACHED_BASE + 0x1804)) == 0x5354554248415858ULL && !GET_SFLAG(SFLAG_ORIG_MINI)) {
 		log_puts("Detected HBC-complatible reload stub");
 		H_PlatOps->exit = wiiExit;
 	}
