@@ -317,11 +317,13 @@ void UI_SwitchCB(struct menuEntry *e) {
 
 void UI_AppendEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
+	assert(menu->numEntries < ROOT_MENU_ENTRIES_MAX);
 	menu->entries[menu->numEntries++] = e;
 }
 
 void UI_PrependEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
+	assert(menu->numEntries < ROOT_MENU_ENTRIES_MAX);
 	memmove(&menu->entries[1], &menu->entries[0], menu->numEntries * sizeof(struct menuEntry *));
 	menu->entries[0] = e;
 	menu->numEntries++;
