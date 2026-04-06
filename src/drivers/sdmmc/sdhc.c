@@ -305,10 +305,26 @@ UNUSED static void print_sdhc_regs(struct sdhc *host)
 
 static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cmd *cmd)
 {
+	const uintptr_t sdhc_dma_boundary = 512u * 1024u;
+	const uintptr_t sdhc_dma_boundary_mask = sdhc_dma_boundary - 1u;
+	uintptr_t boundary_off;
+	size_t data_len;
+
 	if (cmd->data == NULL) {
 		return DMA_MODE_NONE;
 	}
 	if (cmd->data->pbuf == 0) {
+		return DMA_MODE_NONE;
+	}
+	data_len = (size_t)cmd->data->block_size * (size_t)cmd->data->blocks;
+	boundary_off = cmd->data->pbuf & sdhc_dma_boundary_mask;
+	if (boundary_off + data_len > sdhc_dma_boundary) {
+		/*
+		 * Hollywood SDMA gets flaky when a transfer crosses the programmed
+		 * 512 KiB boundary. That makes success depend on the exact buffer
+		 * address, which is why unrelated codegen/layout changes can flip
+		 * CMD17/CMD18 between working and timing out.
+		 */
 		return DMA_MODE_NONE;
 	}
 	/* Currently only SDMA supported */
@@ -348,7 +364,7 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		   | ERR_INT_STATUS_CCE   | ERR_INT_STATUS_CTOE);
 	writel((u32)val16 << 16, host->base + INT_STATUS);
 
-	val16 = INT_STATUS_CINS  | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
+	val16 = INT_STATUS_ERR | INT_STATUS_CINS | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
 	if (get_dma_mode(host, cmd) == DMA_MODE_NONE) {
 		val16 |= INT_STATUS_BRR | INT_STATUS_BWR;
 	} else {
@@ -397,11 +413,18 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	writel(cmd->arg, host->base + CMD_ARG);
 
 	if (cmd->data) {
-		/* Set data timeout to maximum valid value for SDHCI v1.00 */
-		val8 = readb(host->base + TIMEOUT_CTRL);
-		val8 &= (u8)~TIMEOUT_CTRL_DTOCV_MASK;
-		val8 |= 0xE;
-		writeb(val8, host->base + TIMEOUT_CTRL);
+		/*
+		 * Do not rewrite TIMEOUT_CTRL here.
+		 *
+		 * On Hollywood, TIMEOUT_CTRL (0x2e) shares a 32-bit word with
+		 * CLOCK_CTRL (0x2c) and SW_RESET (0x2f). Our byte-write helper
+		 * performs a 32-bit read-modify-write of that whole word, and
+		 * doing that immediately before every data command appears to be
+		 * able to wedge the data path depending on timing.
+		 *
+		 * The timeout value is already established by clock/setup code,
+		 * so leave this register block alone on the fast path.
+		 */
 
 		val32 = (cmd->data->block_size & BLK_ATT_BLKSIZE_MASK);
 		val32 |= (0x7u << 12); /* set Host DMA Buffer Boundary to 7 to prevent DINT */
@@ -435,6 +458,20 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		}
 		/* Record the number of blocks to be sent */
 		host->blocks_remaining = cmd->data->blocks;
+
+		/*
+		 * Make sure the data path programming has actually landed before
+		 * we launch the command. Hollywood appears to be timing-sensitive
+		 * here: with unlucky timing it can enter a stuck read-active/data-
+		 * active state without ever raising CC/TC/ERR, and serial output
+		 * changes the odds by perturbing timing.
+		 */
+		(void)readl(host->base + BLK_ATT);
+		if (get_dma_mode(host, cmd) != DMA_MODE_NONE) {
+			(void)readl(host->base + DS_ADDR);
+		}
+		sync(); barrier();
+		udelay(50);
 	}
 
 	/* The command should be MSB and the first two bits should be '00' */
@@ -751,7 +788,15 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 			/* Poll for DINT (SDMA boundary) to keep the DMA moving */
 			sdhc_handle_irq(sdio, 0);
 			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
+				u32 status32 = readl(host->base + INT_STATUS);
+				u32 pstate = readl(host->base + PRES_STATE);
+				u32 blk_att = readl(host->base + BLK_ATT);
+				u32 ds_addr = readl(host->base + DS_ADDR);
+				u32 cmd_xfr = readl(host->base + CMD_XFR_TYP);
 				ZF_LOGE("timeout waiting for command completion");
+				ZF_LOGE("timeout state: CMD%d INT=0x%08x PRES=0x%08x", cmd->index, status32, pstate);
+				ZF_LOGE("BLK_ATT=0x%08x DS_ADDR=0x%08x CMD_XFR=0x%08x",
+					blk_att, ds_addr, cmd_xfr);
 				ZF_LOGD("doing sw reset of DAT+CMD due to command timeout");
 				val8 = readb(host->base + SW_RESET);
 				val8 |= SW_RESET_RSTC | SW_RESET_RSTD;
@@ -983,7 +1028,7 @@ static int sdhc_reset(sdio_host_dev_t *sdio)
 	writew(val16, host->base + ERR_INT_STATUS_EN);
 	writew(val16, host->base + ERR_INT_SIGNAL_EN);
 
-	val16 = INT_STATUS_CINS  | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
+	val16 = INT_STATUS_ERR | INT_STATUS_CINS | INT_STATUS_TC | INT_STATUS_CRM | INT_STATUS_CC;
 	writew(val16, host->base + INT_STATUS_EN);
 	writew(val16, host->base + INT_SIGNAL_EN);
 
