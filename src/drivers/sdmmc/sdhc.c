@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <npll/allocator.h>
 #include <npll/cache.h>
+#include <npll/irq.h>
 #include <npll/drivers/sdio.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
@@ -711,6 +712,7 @@ static int sdhc_is_voltage_compatible(sdio_host_dev_t *sdio, int mv)
 static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb, void *token)
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
+	bool irqs, wait_irqs = false;
 	int ret;
 	u64 tb;
 	u8 val8;
@@ -720,6 +722,9 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 	cmd->next = NULL;
 	cmd->cb = cb;
 	cmd->token = token;
+
+	irqs = IRQ_DisableSave();
+
 	/* Append to list */
 	*host->cmd_list_tail = cmd;
 	host->cmd_list_tail = &cmd->next;
@@ -730,12 +735,16 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		if (ret) {
 			host->cmd_list_head = NULL;
 			host->cmd_list_tail = &host->cmd_list_head;
+			IRQ_Restore(irqs);
 			return ret;
 		}
 	}
 
+	IRQ_Restore(irqs);
+
 	/* finalise the transacton */
 	if (cb == NULL) {
+		wait_irqs = IRQ_DisableSave();
 		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
@@ -753,11 +762,13 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 						ZF_LOGE("timeout waiting on software reset of DAT+CMD");
 						host->cmd_list_head = NULL;
 						host->cmd_list_tail = &host->cmd_list_head;
+						IRQ_Restore(wait_irqs);
 						return -1;
 					}
 				}
 				host->cmd_list_head = NULL;
 				host->cmd_list_tail = &host->cmd_list_head;
+				IRQ_Restore(wait_irqs);
 				return -1;
 			}
 		}
@@ -771,11 +782,14 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 			while (readb(host->base + SW_RESET) & (SW_RESET_RSTC | SW_RESET_RSTD)) {
 				if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
 					ZF_LOGE("timeout waiting on software reset of DAT+CMD");
+					IRQ_Restore(wait_irqs);
 					return -1;
 				}
 			}
+			IRQ_Restore(wait_irqs);
 			return cmd->complete;
 		} else {
+			IRQ_Restore(wait_irqs);
 			return 0;
 		}
 	} else {

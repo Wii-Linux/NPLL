@@ -19,6 +19,7 @@
 static REGISTER_DRIVER(gpioDrv);
 
 static u32 prevIn = 0;
+static const u32 gpioIrqMask = GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN;
 
 static void gpioIRQHandler(enum irqDev dev) {
 	u32 in, mask, set, clearred;
@@ -82,6 +83,7 @@ static void gpioIRQHandler(enum irqDev dev) {
 
 static void gpioInit(void) {
 	u32 dir, out;
+	bool irqs;
 #if 0
 	log_printf(
 "=== GPIO REGISTER DUMP ===\r\n\
@@ -122,17 +124,17 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	prevIn = HW_GPIOB_IN;
 
 	/* register our IRQ handler */
-	IRQ_Disable();
+	irqs = IRQ_DisableSave();
 	IRQ_RegisterHandler(IRQDEV_GPIOB, gpioIRQHandler);
 	IRQ_RegisterHandler(IRQDEV_GPIO, gpioIRQHandler);
 
 	/* set up the interrupts properly */
 	HW_GPIOB_INTLVL = ~prevIn;
-	HW_GPIOB_INTMASK = 0xffffffff;
+	HW_GPIOB_INTMASK = gpioIrqMask;
 
 	/* ack all existing interrupts */
 	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
-	IRQ_Enable();
+	IRQ_Restore(irqs);
 
 	/* we're all good */
 	gpioDrv.state = DRIVER_STATE_READY;

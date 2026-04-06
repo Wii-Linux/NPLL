@@ -519,6 +519,8 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		}
 		case STATE_MINI_INIT: {
 			assert(GET_SFLAG(SFLAG_CUR_MINI));
+			if (GET_SFLAG(SFLAG_ORIG_MINI))
+				udelay(250 * 1000); /* FIXME: HACK to wait for MINI to actually fully boot first */
 			miniErr = MINI_Init();
 			if (miniErr != MINI_OK) {
 				if (miniErr == MINI_TIMEOUT) {
@@ -546,7 +548,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
 			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
 			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf));
-			udelay(250 * 1000); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
+			udelay(500 * 1000); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
 
 			SET_SFLAG(SFLAG_MINI_INIT, false);
 			SET_SFLAG(SFLAG_MINI_RELOADED, true);

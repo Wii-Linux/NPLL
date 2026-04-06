@@ -26,6 +26,7 @@
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/irq.h>
 #include <npll/timer.h>
 #include <npll/video.h>
 #include <npll/log.h>
@@ -460,20 +461,20 @@ static u32 make_yuv(rgb c1, rgb c2) {
 static void clear_fb(rgb fill_rgb) {
 	u32 *fb = (u32 *)xfb;
 	u32 fill_yuv = make_yuv(fill_rgb, fill_rgb);
+	uint i;
 
-	while ((void *)fb - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) < 0) {
-		*fb = fill_yuv;
-		fb++;
-	}
+	for (i = 0; i < (XFB_WIDTH * XFB_HEIGHT) / 2; i++)
+		fb[i] = fill_yuv;
+
 	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
 }
 
 static void clear_fb_rgb(rgb fill_rgb) {
 	u32 *fb = rgbFb;
-	while ((void *)fb - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) < 0) {
-		*fb = fill_rgb.as_u32;
-		fb++;
-	}
+	uint i;
+
+	for (i = 0; i < XFB_WIDTH * XFB_HEIGHT; i++)
+		fb[i] = fill_rgb.as_u32;
 }
 
 static struct videoInfo viVidInfo;
@@ -481,18 +482,15 @@ static struct videoInfo viVidInfo;
 static void viFlush(void) {
 	u32 *dest, *src;
 	rgb rgb1, rgb2;
+	uint i;
 
 	src  = rgbFb;
 	dest = (u32 *)xfb;
-	while ((void *)src - (((void *)rgbFb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u32))) < 0 &&
-	       (void *)dest - (((void *)xfb) + (XFB_HEIGHT * XFB_WIDTH * sizeof(u16))) < 0) {
-		rgb1 = (rgb)*src;
-		src++;
-		rgb2 = (rgb)*src;
-		src++;
+	for (i = 0; i < (XFB_WIDTH * XFB_HEIGHT) / 2; i++) {
+		rgb1 = (rgb)src[i * 2];
+		rgb2 = (rgb)src[(i * 2) + 1];
 
-		*dest = make_yuv(rgb1, rgb2);
-		dest++;
+		dest[i] = make_yuv(rgb1, rgb2);
 	}
 	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
 }

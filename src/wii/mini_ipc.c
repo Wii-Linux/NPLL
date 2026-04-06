@@ -116,14 +116,14 @@ enum MINI_Err MINI_Init(void) {
 
 	log_puts("running trivial tests:");
 	initialized = true;
-	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_PING, 3, 1, 0);
+	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_PING, 6, 3, 0);
 	log_printf(" * fast ping: %d\r\n", ret);
 	if (ret != MINI_OK)
-	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 3, 1, 0);
+	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 6, 3, 0);
 	log_printf(" * slow ping: %d\r\n", ret);
 	if (ret != MINI_OK)
 		return ret;
-	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_GETVERS, 3, 1, 0);
+	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_GETVERS, 6, 3, 0);
 	log_printf(" * getvers: %d (version: 0x%08x)\r\n", ret, req.args[0]);
 	if (ret != MINI_OK)
 		return ret;
