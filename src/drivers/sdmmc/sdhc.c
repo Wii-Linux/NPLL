@@ -787,6 +787,7 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		while (!cmd->complete) {
 			/* Poll for DINT (SDMA boundary) to keep the DMA moving */
 			sdhc_handle_irq(sdio, 0);
+			udelay(20);
 			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
 				u32 status32 = readl(host->base + INT_STATUS);
 				u32 pstate = readl(host->base + PRES_STATE);
