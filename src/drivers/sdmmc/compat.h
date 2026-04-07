@@ -11,7 +11,11 @@
 #define _INTERNAL_SDMMC_COMPAT_H
 
 #define UNUSED __attribute__((unused))
+#if 0
 #define ZF_LOGD(...) _log_printf("sdhc: debug: " __VA_ARGS__); _log_puts("");
+#else
+#define ZF_LOGD(...) (void)0
+#endif
 #define ZF_LOGE(...) _log_printf("sdhc: error: " __VA_ARGS__); _log_puts("");
 
 #endif /* _INTERNAL_SDMMC_COMPAT_H */
