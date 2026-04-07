@@ -8,6 +8,21 @@
 .global __argv
 .extern init
 
+# these shouldn't need to be marked as global but some toolchains break w/o it
+.global setupBATs
+.global clearBSS
+.global _bssLoop
+.global clearSBSS
+.global _sbssLoop
+.global setupStack
+.global relocate
+.global _copyLoop
+.global _copyDone
+.global _flushDcacheLoop
+.global _flushDcacheDone
+.global _invalidateIcacheLoop
+.global _invalidateIcacheDone
+.global setupSDA
 #define __ASSEMBLY__
 #include <npll/cpu.h>
 # NOTE: Reminder that "bit [n]" follows the official PowerPC naming scheme throughout this code  - reversed compared to how one may think about them.  "bit 0 is set" = 0x80000000.  "bit 31 is set" = 0x00000001.
