@@ -161,10 +161,10 @@ static void putsDev(const struct outputDevice *odev, const char *str) {
 }
 
 static void drawLine(const struct outputDevice *odev) {
-	uint i;
+	int i;
 
 	/* some of our output devices can benefit from bulk transfers */
-	for (i = odev->columns; i > 0; i -= 4) {
+	for (i = (int)odev->columns; i > 0; i -= 4) {
 		if (i >= 4)
 			odev->writeStr("====");
 		else if (i == 3)
@@ -177,7 +177,8 @@ static void drawLine(const struct outputDevice *odev) {
 }
 
 static void drawLogs(const struct outputDevice *odev) {
-	uint i, j, maxLen;
+	uint i, maxLen;
+	int j;
 	bool cutOff;
 
 	for (i = 0; i < LOG_LINES; i++) {
@@ -185,7 +186,7 @@ static void drawLogs(const struct outputDevice *odev) {
 
 		if (!logLines[i].done) {
 			/* some of our output devices can benefit from bulk transfers */
-			for (j = odev->columns; j > 0; j -= 4) {
+			for (j = (int)odev->columns; j > 0; j -= 4) {
 				if (j >= 4)
 					odev->writeStr("    ");
 				else if (j == 3)
@@ -207,7 +208,7 @@ static void drawLogs(const struct outputDevice *odev) {
 		else
 			maxLen = logLines[i].len;
 
-		for (j = 0; j < maxLen; j++)
+		for (j = 0; (uint)j < maxLen; j++)
 			odev->writeChar(logLines[i].start[j]);
 
 		if (cutOff)
