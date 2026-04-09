@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <npll/drivers.h>
+#include <npll/irq.h>
 #include <npll/output.h>
 #include <npll/regs.h>
 #include <npll/latte/ipc.h>
@@ -14,6 +15,7 @@ static REGISTER_DRIVER(drcDrv);
 
 static void drcWriteChar(char c) {
 	u32 msg;
+	bool irqs = IRQ_DisableSave();
 	msg = LATTE_IPC_CMD_PRINT | (c << 16);
 
 	/* linux-loader sits on the "legacy" Hollywood IPC block */
@@ -22,10 +24,14 @@ static void drcWriteChar(char c) {
 
 	/* spin until Starbuck processes our message */
 	while (HW_IPC_PPCCTRL & HW_IPC_PPCCTRL_X1);
+
+	IRQ_Restore(irqs);
 }
 
 static void drcWriteStr(const char *str) {
-	u32 msg, tmp, len = strlen(str);
+	u32 msg, tmp, len;
+	bool irqs = IRQ_DisableSave();
+	len = strlen(str);
 
 	/* linux-loader IPC can write 3 characters at a time */
 	while (len) {
@@ -60,6 +66,7 @@ static void drcWriteStr(const char *str) {
 		len -= tmp;
 		str += tmp;
 	}
+	IRQ_Restore(irqs);
 }
 
 static const struct outputDevice outDev = {
