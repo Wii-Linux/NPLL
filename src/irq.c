@@ -30,15 +30,12 @@ bool IRQ_DisableSave(void) {
 }
 
 void IRQ_Init(void) {
-	/* mask all Flipper IRQs */
-	PI_INTMR = 0;
+	if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
+		/* mask all Flipper IRQs */
+		PI_INTMR = 0;
 
-	/* ack all Flipper IRQs */
-	PI_INTSR = PI_INTSR;
-
-	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		/* unmask the Reset Switch in the Flipper PIC */
-		PI_INTMR |= PI_IRQDEV_RSW;
+		/* ack all Flipper IRQs */
+		PI_INTSR = PI_INTSR;
 	}
 
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
@@ -70,11 +67,22 @@ void IRQ_Init(void) {
 		LT_PPC2INT1STS = LT_PPC2INT1STS;
 		LT_PPC2INT2STS = LT_PPC2INT2STS;
 
-		/* unmask Latte IRQs in the Flipper PIC */
-		PI_INTMR |= PI_IRQDEV_LATTE;
+		/* mask and ack all IRQs in the Latte PI */
+		LATTE_PI_INTMR = 0;
+		LATTE_PI_INTMR0 = 0;
+		LATTE_PI_INTMR1 = 0;
+		LATTE_PI_INTMR2 = 0;
+		LATTE_PI_INTSR = LATTE_PI_INTSR;
+		LATTE_PI_INTSR0 = LATTE_PI_INTSR0;
+		LATTE_PI_INTSR1 = LATTE_PI_INTSR1;
+		LATTE_PI_INTSR2 = LATTE_PI_INTSR2;
 
 		/* unmask GPIO and SDHCI0 */
 		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
+
+		/* unmask Latte IRQs in the Latte PI */
+		LATTE_PI_INTMR |= PI_IRQDEV_LATTE;
+		LATTE_PI_INTMR0 |= PI_IRQDEV_LATTE;
 	}
 
 	/* clear all handlers */
@@ -89,12 +97,14 @@ static void IRQ_DoHandle(enum irqDev dev) {
 void __attribute__((noreturn)) IRQ_Handle(void) {
 	u32 intsr, ppcirqflag, ppc0int1sts;
 
-	intsr = PI_INTSR;
-	if (intsr & PI_IRQDEV_RSW) {
+	if (H_ConsoleType != CONSOLE_TYPE_WII_U)
+		intsr = PI_INTSR;
+
+	if (H_ConsoleType == CONSOLE_TYPE_WII && intsr & PI_IRQDEV_RSW) {
 		PI_INTSR = PI_IRQDEV_RSW;
 		IRQ_DoHandle(IRQDEV_RSW);
 	}
-	if (intsr & PI_IRQDEV_HLWD && H_ConsoleType == CONSOLE_TYPE_WII) {
+	if (H_ConsoleType == CONSOLE_TYPE_WII && intsr & PI_IRQDEV_HLWD) {
 		ppcirqflag = HW_PPCIRQFLAG;
 		PI_INTSR = PI_IRQDEV_HLWD;
 		if (ppcirqflag & HW_IRQDEV_GPIOB) {
@@ -111,9 +121,13 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		}
 	}
 
-	/* regardless of PI INTSR */
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		intsr = LATTE_PI_INTSR;
+		if (!(intsr & PI_IRQDEV_LATTE))
+			IRQ_Return();
+
 		ppc0int1sts = LT_PPC0INT1STS;
+		PI_INTSR = PI_IRQDEV_LATTE;
 		if (ppc0int1sts & HW_IRQDEV_GPIOB) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
@@ -126,6 +140,8 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 			LT_PPC0INT1STS = HW_IRQDEV_SDHCI0;
 			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
+
+		LATTE_PI_INTSR = PI_IRQDEV_LATTE;
 	}
 
 	IRQ_Return();

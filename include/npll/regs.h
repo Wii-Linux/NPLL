@@ -38,6 +38,16 @@
 #  define PI_IRQDEV_LATTE        BIT(24)
 #define PI_RESET             _FLIPPER_PI_REG(0x24)
 
+/* the weird Latte PI that got stuffed into the base of the Flipper reg space, where the GX CP used to be */
+#define LATTE_PI_INTSR       _FLIPPER_REG(0x00)
+#define LATTE_PI_INTMR       _FLIPPER_REG(0x04)
+#define LATTE_PI_INTSR0      _FLIPPER_REG(0x78)
+#define LATTE_PI_INTMR0      _FLIPPER_REG(0x7c)
+#define LATTE_PI_INTSR1      _FLIPPER_REG(0x80)
+#define LATTE_PI_INTMR1      _FLIPPER_REG(0x84)
+#define LATTE_PI_INTSR2      _FLIPPER_REG(0x88)
+#define LATTE_PI_INTMR2      _FLIPPER_REG(0x8c)
+
 /*
  * The chipid register is _weird_, super undocumented.
  * This is the best I could come up with regarding it's format:
