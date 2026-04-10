@@ -38,7 +38,7 @@ void IRQ_Init(void) {
 		PI_INTSR = PI_INTSR;
 	}
 
-	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		/* unmask the Reset Switch as well as Hollywood IRQs in the Flipper PIC */
 		PI_INTMR |= PI_IRQDEV_RSW | PI_IRQDEV_HLWD;
 
@@ -50,7 +50,7 @@ void IRQ_Init(void) {
 		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
 	}
 
-	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		/* mask and ack all Latte IRQs */
 		LT_PPC0INT1EN = 0;
 		LT_PPC0INT2EN = 0;
