@@ -203,6 +203,11 @@ static inline int host_set_operational(struct mmc_card *card)
 	return sdio_set_operational(card->sdio);
 }
 
+static inline int host_set_bus_width(struct mmc_card *card, u32 width)
+{
+	return sdio_set_bus_width(card->sdio, width);
+}
+
 
 
 

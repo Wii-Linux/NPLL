@@ -1129,6 +1129,28 @@ static u32 sdhc_get_present_state_register(sdio_host_dev_t *sdio)
 	return readl(sdio_get_sdhc(sdio)->base + PRES_STATE);
 }
 
+static int sdhc_set_bus_width(sdio_host_dev_t *sdio, u32 width)
+{
+	sdhc_dev_t host = sdio_get_sdhc(sdio);
+	u8 val;
+
+	if (width != 1 && width != 4) {
+		ZF_LOGE("unsupported SD bus width: %u", width);
+		return -1;
+	}
+
+	val = readb(host->base + PROT_CTRL);
+	if (width == 4) {
+		val |= MMC_MODE_4BIT;
+	} else {
+		val &= (u8)~MMC_MODE_4BIT;
+	}
+	writeb(val, host->base + PROT_CTRL);
+	(void)readb(host->base + PROT_CTRL);
+
+	return 0;
+}
+
 static int sdhc_set_operational(struct sdio_host_dev *sdio)
 {
 	/*
@@ -1166,6 +1188,7 @@ int sdhc_init(void *iobase, const int *irq_table, int nirqs, sdio_host_dev_t *de
 	dev->is_voltage_compatible = &sdhc_is_voltage_compatible;
 	dev->reset = &sdhc_reset;
 	dev->set_operational = &sdhc_set_operational;
+	dev->set_bus_width = &sdhc_set_bus_width;
 	dev->get_present_state = &sdhc_get_present_state_register;
 	dev->priv = sdhc;
 	/* Clear IRQs */

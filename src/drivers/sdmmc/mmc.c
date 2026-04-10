@@ -246,19 +246,31 @@ static int mmc_card_registry(mmc_card_t card)
 
 	/**
 	 * The default bus width of the card after power up or GO_IDLE (CMD0) is
-	 * 1 bit. Keep it there for now: switching to 4-bit mode currently makes
-	 * Hollywood SDHC data commands wedge in read-active/data-active state
-	 * with no completion or error interrupt.
+	 * 1 bit. Switch the card first, then flip the host-side bus-width bit
+	 * only after the card accepted ACMD6.
 	 */
-#if 0
 	cmd.index = MMC_APP_CMD;
 	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	host_send_command(card, &cmd, NULL, NULL);
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret) {
+		ZF_LOGE("failed to prefix bus-width switch with APP_CMD: %d", ret);
+		return ret;
+	}
+
 	cmd.index = SD_SET_BUS_WIDTH;
 	cmd.arg = MMC_MODE_4BIT;
-	host_send_command(card, &cmd, NULL, NULL);
-#endif
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret) {
+		ZF_LOGE("failed to switch card to 4-bit bus width: %d", ret);
+		return ret;
+	}
+
+	ret = host_set_bus_width(card, 4);
+	if (ret) {
+		ZF_LOGE("failed to switch host to 4-bit bus width: %d", ret);
+		return ret;
+	}
 
 	/* Set read/write block length for byte addressed standard capacity cards */
 	if (!card->high_capacity) {
