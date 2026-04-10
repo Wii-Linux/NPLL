@@ -15,6 +15,7 @@
 #define assert_msg(cond, msg) __assume(cond)
 #define assert_unreachable() __builtin_unreachable()
 #else
+#include <stdio.h>
 #define assert(cond) assert_msg(cond, "Assertion " __stringify(cond) " failed")
 #define assert_msg(cond, msg) if (!(cond)) { panic(msg); }
 #define assert_unreachable() { \
