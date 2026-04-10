@@ -244,34 +244,6 @@ static int mmc_card_registry(mmc_card_t card)
 	cmd.rsp_type = MMC_RSP_TYPE_R1b;
 	host_send_command(card, &cmd, NULL, NULL);
 
-	/**
-	 * The default bus width of the card after power up or GO_IDLE (CMD0) is
-	 * 1 bit. Switch the card first, then flip the host-side bus-width bit
-	 * only after the card accepted ACMD6.
-	 */
-	cmd.index = MMC_APP_CMD;
-	cmd.arg = (u32)card->raw_rca << 16;
-	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	ret = host_send_command(card, &cmd, NULL, NULL);
-	if (ret) {
-		ZF_LOGE("failed to prefix bus-width switch with APP_CMD: %d", ret);
-		return ret;
-	}
-
-	cmd.index = SD_SET_BUS_WIDTH;
-	cmd.arg = MMC_MODE_4BIT;
-	ret = host_send_command(card, &cmd, NULL, NULL);
-	if (ret) {
-		ZF_LOGE("failed to switch card to 4-bit bus width: %d", ret);
-		return ret;
-	}
-
-	ret = host_set_bus_width(card, 4);
-	if (ret) {
-		ZF_LOGE("failed to switch host to 4-bit bus width: %d", ret);
-		return ret;
-	}
-
 	/* Set read/write block length for byte addressed standard capacity cards */
 	if (!card->high_capacity) {
 		cmd.index = MMC_SET_BLOCKLEN;
@@ -407,6 +379,7 @@ static void mmc_blockop_completion_cb(struct sdio_host_dev *sdio, int stat, stru
 int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 {
 	mmc_card_t mmc;
+	struct mmc_cmd cmd = {.data = NULL};
 
 	/* Allocate the mmc card structure */
 	mmc = (mmc_card_t)malloc(sizeof(*mmc));
@@ -442,6 +415,47 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 	/* Switch host controller to operational settings */
 	if (host_set_operational(mmc)) {
 		ZF_LOGE("Failed to switch the host controller to the operational mode");
+		free(mmc);
+		return -1;
+	}
+	/*
+	 * Keep both host and card in 1-bit mode through the operational clock
+	 * transition. Only once the new clock is established do we ask the card
+	 * to switch width, then finally flip the host-side width bit.
+	 */
+	cmd.index = MMC_APP_CMD;
+	cmd.arg = (u32)mmc->raw_rca << 16;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGE("Failed to prefix bus-width switch with APP_CMD");
+		free(mmc);
+		return -1;
+	}
+	cmd.index = SD_SET_BUS_WIDTH;
+	cmd.arg = MMC_MODE_4BIT;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGE("Failed to switch card to 4-bit bus width");
+		free(mmc);
+		return -1;
+	}
+	/*
+	 * Give the card a moment to settle after ACMD6 before we flip the
+	 * host-side width bit. The 4-bit path is timing-sensitive on
+	 * Hollywood, and rushing this transition appears to hurt reliability.
+	 */
+	udelay(1000);
+	if (host_set_bus_width(mmc, 4)) {
+		ZF_LOGE("Failed to switch the host controller to 4-bit mode");
+		free(mmc);
+		return -1;
+	}
+	udelay(1000);
+	cmd.index = MMC_SEND_STATUS;
+	cmd.arg = (u32)mmc->raw_rca << 16;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGE("4-bit mode validation via SEND_STATUS failed");
 		free(mmc);
 		return -1;
 	}

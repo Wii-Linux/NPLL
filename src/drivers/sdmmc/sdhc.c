@@ -154,48 +154,51 @@
 
 #define SDHC_DELAY 5
 #define SDHC_USE_SDMA 1
+#define SDHC_SLOW_4BIT_TEST 1
 
 static inline void writel(u32 v, volatile void *a) {
-	udelay(SDHC_DELAY);
 	sync(); barrier();
 	*(vu32*)a = v;
 	sync(); barrier();
+	udelay(SDHC_DELAY);
 }
 
 static inline void writew(u16 v, volatile void *a) {
-	u32 addr, tmp, shift;
+	uintptr_t addr;
+	u32 tmp, shift;
+	volatile void *base;
 
-	addr = (u32)a;
-	shift = (addr & 0x2u) * 8u;
-	addr &= ~0x3u;
-	a = (volatile void *)addr;
+	addr = (uintptr_t)a;
+	base = (volatile void *)(addr & ~0x3u);
+	shift = (u32)((addr & 0x2u) * 8u);
 
-	udelay(SDHC_DELAY);
 	sync(); barrier();
-	tmp = *(vu32*)(a);
+	tmp = *(vu32*)base;
 	tmp &= ~(0xffffu << shift);
 	tmp |= (v << shift);
-	writel(tmp, a);
+	*(vu32*)base = tmp;
 	sync(); barrier();
+	udelay(SDHC_DELAY);
 
 	return ;
 }
 
 static inline void writeb(u8 v, volatile void *a) {
-	u32 addr, tmp, shift;
+	uintptr_t addr;
+	u32 tmp, shift;
+	volatile void *base;
 
-	addr = (u32)a;
-	shift = (addr & 0x3u) * 8u;
-	addr &= ~0x3u;
-	a = (volatile void *)addr;
+	addr = (uintptr_t)a;
+	base = (volatile void *)(addr & ~0x3u);
+	shift = (u32)((addr & 0x3u) * 8u);
 
-	udelay(SDHC_DELAY);
 	sync(); barrier();
-	tmp = *(vu32*)(a);
+	tmp = *(vu32*)base;
 	tmp &= ~(0xffu << shift);
 	tmp |= (v << shift);
-	writel(tmp, a);
+	*(vu32*)base = tmp;
 	sync(); barrier();
+	udelay(SDHC_DELAY);
 
 	return ;
 }
@@ -212,33 +215,27 @@ static inline u32 readl(volatile void *a) {
 }
 
 static inline u16 readw(volatile void *a) {
-	u32 addr, tmp, shift;
+	uintptr_t addr;
+	u16 ret;
 
-	udelay(SDHC_DELAY);
-	addr = (u32)a;
-	shift = (addr & 0x2u) * 8u;
-	addr &= ~0x3u;
-	a = (volatile void *)addr;
+	addr = ((uintptr_t)a) ^ 0x2u;
 	sync(); barrier();
-	tmp = *(vu32*)(a);
+	ret = *(vu16*)addr;
 	sync(); barrier();
 
-	return (u16)(tmp >> shift);
+	return ret;
 }
 
 static inline u8 readb(volatile void *a) {
-	u32 addr, tmp, shift;
+	uintptr_t addr;
+	u8 ret;
 
-	udelay(SDHC_DELAY);
-	addr = (u32)a;
-	shift = (addr & 0x3u) * 8u;
-	addr &= ~0x3u;
-	a = (volatile void *)addr;
+	addr = ((uintptr_t)a) ^ 0x3u;
 	sync(); barrier();
-	tmp = *(vu32*)(a);
+	ret = *(vu8*)addr;
 	sync(); barrier();
 
-	return (u8)(tmp >> shift);
+	return ret;
 }
 
 enum dma_mode {
@@ -1006,8 +1003,16 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		rslt = sdhc_set_clock_div(base_addr, DIV_16, PRESCALER_32, SDCLK_TIMES_2_POW_14);
 		break;
 	case CLOCK_OPERATIONAL:
-		/* Divide the base clock by 8 */
-		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_27);
+		/*
+		 * Keep the 4-bit test at a very conservative clock so we can
+		 * separate "4-bit sequencing is broken" from "4-bit only fails
+		 * once the bus is fast enough to expose timing/signal issues".
+		 */
+#if SDHC_SLOW_4BIT_TEST
+		rslt = sdhc_set_clock_div(base_addr, DIV_16, PRESCALER_32, SDCLK_TIMES_2_POW_27);
+#else
+		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_4, SDCLK_TIMES_2_POW_27);
+#endif
 		break;
 	default:
 		ZF_LOGE("Unsupported clock mode setting");
@@ -1147,6 +1152,8 @@ static int sdhc_set_bus_width(sdio_host_dev_t *sdio, u32 width)
 	}
 	writeb(val, host->base + PROT_CTRL);
 	(void)readb(host->base + PROT_CTRL);
+	sync(); barrier();
+	udelay(50);
 
 	return 0;
 }
