@@ -246,9 +246,11 @@ static int mmc_card_registry(mmc_card_t card)
 
 	/**
 	 * The default bus width of the card after power up or GO_IDLE (CMD0) is
-	 * 1 bit. As the HostController is initialzed to 4-bit bus width,
-	 * the card also needs to switch to 4-bit mode.
+	 * 1 bit. Keep it there for now: switching to 4-bit mode currently makes
+	 * Hollywood SDHC data commands wedge in read-active/data-active state
+	 * with no completion or error interrupt.
 	 */
+#if 0
 	cmd.index = MMC_APP_CMD;
 	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1;
@@ -256,6 +258,7 @@ static int mmc_card_registry(mmc_card_t card)
 	cmd.index = SD_SET_BUS_WIDTH;
 	cmd.arg = MMC_MODE_4BIT;
 	host_send_command(card, &cmd, NULL, NULL);
+#endif
 
 	/* Set read/write block length for byte addressed standard capacity cards */
 	if (!card->high_capacity) {

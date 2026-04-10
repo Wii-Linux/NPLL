@@ -153,6 +153,8 @@
 #define WTMK_LVL_RD_WML_SHF     0         //Read  Watermark Level
 
 #define SDHC_DELAY 5
+#define SDHC_USE_SDMA 1
+
 static inline void writel(u32 v, volatile void *a) {
 	udelay(SDHC_DELAY);
 	sync(); barrier();
@@ -305,6 +307,10 @@ UNUSED static void print_sdhc_regs(struct sdhc *host)
 
 static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cmd *cmd)
 {
+#if !SDHC_USE_SDMA
+	(void)cmd;
+	return DMA_MODE_NONE;
+#else
 	const uintptr_t sdhc_dma_boundary = 512u * 1024u;
 	const uintptr_t sdhc_dma_boundary_mask = sdhc_dma_boundary - 1u;
 	uintptr_t boundary_off;
@@ -329,6 +335,7 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 	}
 	/* Currently only SDMA supported */
 	return DMA_MODE_SDMA;
+#endif
 }
 
 static inline int UNUSED cap_sdma_supported(struct sdhc *host)
@@ -918,7 +925,7 @@ writeback:
 /* Set the clock divider and timeout */
 static int sdhc_set_clock_div(
 	volatile void *base_addr,
-	divisor dvs_div,
+	divisor dvs_div UNUSED,
 	sdclk_frequency_select sdclks_div,
 	data_timeout_counter_val dtocv)
 {
@@ -926,24 +933,45 @@ static int sdhc_set_clock_div(
 #if 0 /* not supported on sdhciv1 */
 	if (readl(base_addr + PRES_STATE) & SDHC_PRES_STATE_SDSTB) {
 #endif
+		u64 tb;
 		u8 val8;
 		u16 val16 = readw(base_addr + CLOCK_CTRL);
 
-		/* DDR mode is not supported on SDHCI v1.00 (Hollywood/Latte),
-		 * so always use the SDR clock divisor path. */
+		/*
+		 * Stop SDCLK before changing the divider. Hollywood is standard
+		 * SDHCI v1.00 here: the divider lives in bits 15:8. The DVS
+		 * field used by some uSDHC/i.MX layouts is reserved on this
+		 * controller and must stay clear.
+		 */
+		val16 &= (u16)~CLK_CTRL_CLK_CARD_EN;
+		writew(val16, base_addr + CLOCK_CTRL);
+		(void)readw(base_addr + CLOCK_CTRL);
+
 		val16 &= (u16)~(CLK_CTRL_SDCLKS_MASK << CLK_CTRL_SDCLKS_SHF);
 		val16 |= (u16)((uint)sdclks_div << CLK_CTRL_SDCLKS_SHF);
 		val16 &= (u16)~(CLK_CTRL_DVS_MASK << CLK_CTRL_DVS_SHF);
-		val16 |= (u16)((uint)dvs_div << CLK_CTRL_DVS_SHF);
+		val16 |= CLK_CTRL_CLK_INT_EN;
 
 		/* Write out the Clock Control register */
 		writew(val16, base_addr + CLOCK_CTRL);
+		tb = mftb();
+		do {
+			val16 = readw(base_addr + CLOCK_CTRL);
+			if (T_HasElapsed(tb, SDHC_INIT_TIMEOUT_US)) {
+				ZF_LOGE("clock never stabilized after divider change");
+				return -1;
+			}
+		} while (!(val16 & CLK_CTRL_CLK_INT_STABLE));
 
 		/* Set data timeout value */
 		val8 = readb(base_addr + TIMEOUT_CTRL);
 		val8 &= (u8)~TIMEOUT_CTRL_DTOCV_MASK;
 		val8 |= (u8)((uint)dtocv << TIMEOUT_CTRL_DTOCV_SHF);
 		writeb(val8, base_addr + TIMEOUT_CTRL);
+
+		val16 = readw(base_addr + CLOCK_CTRL);
+		val16 |= CLK_CTRL_CLK_CARD_EN;
+		writew(val16, base_addr + CLOCK_CTRL);
 #if 0
 	} else {
 		ZF_LOGE("The clock is unstable, unable to change it!");
@@ -1043,9 +1071,9 @@ static int sdhc_reset(sdio_host_dev_t *sdio)
 
 	/* TODO: Select Voltage Level */
 
-	/* Set bus width */
+	/* Keep the host in the card's default 1-bit mode for now. */
 	val = readl(host->base + PROT_CTRL);
-	val |= MMC_MODE_4BIT;
+	val &= (u32)~MMC_MODE_4BIT;
 	writel(val, host->base + PROT_CTRL);
 
 	/* Wait until the Command and Data Lines are ready. */
