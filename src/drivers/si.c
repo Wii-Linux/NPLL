@@ -195,6 +195,15 @@ enum si_device_type {
 #define N64_STICK_MIN_THRESH 32
 #define N64_STICK_MAX_THRES 224
 
+/*
+ * GCN Keyboard Direct Report Scancodes
+ */
+#define GCN_KBD_SCANCODE_LEFT 0x5c
+#define GCN_KBD_SCANCODE_DOWN 0x5d
+#define GCN_KBD_SCANCODE_UP 0x5e
+#define GCN_KBD_SCANCODE_RIGHT 0x5f
+#define GCN_KBD_SCANCODE_ENTER 0x61
+
 struct gcn_pad_state {
 	u16 buttons;
 	u8 lstickX;
@@ -212,14 +221,18 @@ struct n64_pad_state {
 	u64 lastTB;
 };
 
+struct gcn_kbd_state {
+	u8 keys[3];
+};
+
 struct si_device_state {
 	u16 id;
 	enum si_device_type type;
 	union {
 		struct gcn_pad_state gcn_pad;
 		struct n64_pad_state n64_pad;
-		#if 0 /* for whenever I actually implement these */
 		struct gcn_kbd_state gcn_kbd;
+		#if 0 /* for whenever I actually implement these */
 		struct n64_kbd_state n64_kbd;
 		struct gba_state gba;
 		#endif
@@ -474,6 +487,10 @@ static void checkConnected(void) {
 			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT_GCN, 0x03, 0x00);
 			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
 		}
+		else if (devices[i].type == SI_DEVICE_TYPE_GCN_KBD) {
+			regs->chan[i].outbuf = SI_MKOUTBUF(JOYBUS_CMD_DIRECT_GCN_KB, 0x00, 0x00);
+			poll |= (1 << (SI_POLL_EN_SHIFT + (3 - i)));
+		}
 	}
 
 	regs->poll = poll;
@@ -540,6 +557,64 @@ static void probeGCNPad(uint chan) {
 	devices[chan].gcn_pad.cstickY = cstickY;
 	devices[chan].gcn_pad.ltrig = ltrig;
 	devices[chan].gcn_pad.rtrig = rtrig;
+}
+
+static inline bool keyInArr(u8 key, u8 *arr) {
+	uint i;
+	for (i = 0; i < 3; i++) {
+		if (arr[i] == key)
+			return true;
+	}
+
+	return false;
+}
+static void probeGCNKbd(uint chan) {
+	u32 inbufh, inbufl;
+	u8 keys[3], pressed[3];
+	uint i, numPressed = 0;
+
+	inbufh = regs->chan[chan].inbufh; /* error status */
+	inbufl = regs->chan[chan].inbufl; /* keys */
+	(void)inbufh;
+	keys[0] = (u8)(inbufl >> 24);
+	keys[1] = (u8)(inbufl >> 16);
+	keys[2] = (u8)(inbufl >> 8);
+
+	/* determine which keys were pressed */
+	for (i = 0; i < 3; i++) {
+		if (!keyInArr(keys[i], devices[chan].gcn_kbd.keys))
+			pressed[numPressed++] = keys[i];
+	}
+
+	/* actually handle pressed keys */
+	for (i = 0; i < numPressed; i++) {
+		switch (pressed[i]) {
+		case GCN_KBD_SCANCODE_UP: {
+			IN_NewEvent(INPUT_EV_UP);
+			break;
+		}
+		case GCN_KBD_SCANCODE_DOWN: {
+			IN_NewEvent(INPUT_EV_DOWN);
+			break;
+		}
+		case GCN_KBD_SCANCODE_LEFT: {
+			IN_NewEvent(INPUT_EV_LEFT);
+			break;
+		}
+		case GCN_KBD_SCANCODE_RIGHT: {
+			IN_NewEvent(INPUT_EV_RIGHT);
+			break;
+		}
+		case GCN_KBD_SCANCODE_ENTER: {
+			IN_NewEvent(INPUT_EV_SELECT);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
+	memcpy(devices[chan].gcn_kbd.keys, keys, sizeof(keys));
 }
 
 static void probeN64Pad(uint chan) {
@@ -648,6 +723,10 @@ static void siCallback(void) {
 		switch (devices[i].type) {
 		case SI_DEVICE_TYPE_GCN_CONTROLLER: {
 			probeGCNPad(i);
+			break;
+		}
+		case SI_DEVICE_TYPE_GCN_KBD: {
+			probeGCNKbd(i);
 			break;
 		}
 		case SI_DEVICE_TYPE_N64_MOUSE:
