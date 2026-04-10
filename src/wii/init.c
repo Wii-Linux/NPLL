@@ -89,6 +89,7 @@ static void armbootnow(void) {
 	/* put them in low MEM1 */
 	tikview_t tikviews[4] ALIGN(32);
 	int i, trampoline_off, iosVer;
+	uint retries = 10;
 	u32 num_tikviews ALIGN(32);
 	u64 titleID;
 	iosVer = IOS_GetVersion();
@@ -155,16 +156,44 @@ static void armbootnow(void) {
 
 	/* ES stuff so we can reload */
 	log_puts("Reloading...");
-	if (ES_GetTikViewsCount(titleID, &num_tikviews))
-		panic("ES_GetTikViewsCount failed");
-	log_printf("Number of tikviews for IOS%d: %d\r\n", iosVer, num_tikviews);
-	if (ES_GetTikViews(titleID, tikviews, num_tikviews))
-		panic("ES_GetTikViews failed");
-	log_puts("Got tikviews, launching...");
+	while (retries) {
+		retries--;
+		udelay(20 * 1000);
 
-	/* actually kick off the reload */
-	/* we don't check if this fails because it *will* time out... */
-	ES_LaunchTitle(titleID, &tikviews[0]);
+		if (ES_GetTikViewsCount(titleID, &num_tikviews)) {
+			if (!retries)
+				panic("ES_GetTikViewsCount failed");
+			else {
+				IOS_Reset();
+				ES_Init();
+				continue;
+			}
+		}
+		log_printf("Number of tikviews for IOS%d: %d\r\n", iosVer, num_tikviews);
+		if (ES_GetTikViews(titleID, tikviews, num_tikviews)) {
+			if (!retries)
+				panic("ES_GetTikViews failed");
+			else {
+				IOS_Reset();
+				ES_Init();
+				continue;
+			}
+		}
+		log_puts("Got tikviews, launching...");
+
+		/* actually kick off the reload */
+		if (ES_LaunchTitle(titleID, &tikviews[0]) != -1) {
+			if (!retries)
+				panic("ES_LaunchTitle failed with none-timeout error");
+			else {
+				IOS_Reset();
+				ES_Init();
+				continue;
+			}
+		}
+		break;
+	}
+
 
 	log_puts("IOS should now be replaced with MINI");
 }
