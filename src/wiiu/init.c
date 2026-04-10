@@ -56,6 +56,8 @@ static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 	wiiuDebugStr("PANIC: ");
 	wiiuDebugStr(str);
 
+	udelay(10 * 1000 * 1000);
+
 	wiiuReboot();
 }
 
