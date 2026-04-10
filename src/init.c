@@ -115,7 +115,9 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	B_Init();
 	FS_Init();
 	UI_Init();
+	#ifndef DEBUG_ONLY_LOGS
 	L_Method = LOG_METHOD_MENU_WINDOW;
+	#endif
 	D_Init();
 	IRQ_Enable();
 	_log_puts("Driver initialization done, entering mainLoop");

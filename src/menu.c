@@ -115,7 +115,9 @@ static struct menu rootMenu = {
 static void uiRedrawWrapper(void *arg) {
 	(void)arg;
 	UI_HandleInputs();
+	#ifndef DEBUG_NO_MENU
 	UI_Redraw();
+	#endif
 }
 
 void UI_Init(void) {
