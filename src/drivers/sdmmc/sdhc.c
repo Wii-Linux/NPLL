@@ -1019,7 +1019,7 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		 * once the bus is fast enough to expose timing/signal issues".
 		 */
 #if SDHC_SLOW_4BIT_TEST
-		rslt = sdhc_set_clock_div(base_addr, DIV_16, PRESCALER_32, SDCLK_TIMES_2_POW_27);
+		rslt = sdhc_set_clock_div(base_addr, DIV_8, PRESCALER_8, SDCLK_TIMES_2_POW_27);
 #else
 		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_4, SDCLK_TIMES_2_POW_27);
 #endif
