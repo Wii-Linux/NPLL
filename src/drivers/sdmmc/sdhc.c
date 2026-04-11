@@ -216,26 +216,32 @@ static inline u32 readl(volatile void *a) {
 
 static inline u16 readw(volatile void *a) {
 	uintptr_t addr;
-	u16 ret;
+	u32 tmp, shift;
 
-	addr = ((uintptr_t)a) ^ 0x2u;
+	udelay(SDHC_DELAY);
+	addr = (uintptr_t)a;
+	shift = (u32)((addr & 0x2u) * 8u);
+	addr &= ~0x3u;
 	sync(); barrier();
-	ret = *(vu16*)addr;
+	tmp = *(vu32*)addr;
 	sync(); barrier();
 
-	return ret;
+	return (u16)(tmp >> shift);
 }
 
 static inline u8 readb(volatile void *a) {
 	uintptr_t addr;
-	u8 ret;
+	u32 tmp, shift;
 
-	addr = ((uintptr_t)a) ^ 0x3u;
+	udelay(SDHC_DELAY);
+	addr = (uintptr_t)a;
+	shift = (u32)((addr & 0x3u) * 8u);
+	addr &= ~0x3u;
 	sync(); barrier();
-	ret = *(vu8*)addr;
+	tmp = *(vu32*)addr;
 	sync(); barrier();
 
-	return ret;
+	return (u8)(tmp >> shift);
 }
 
 enum dma_mode {
