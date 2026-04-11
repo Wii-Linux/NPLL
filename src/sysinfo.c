@@ -4,11 +4,11 @@
  * Copyright (C) 2026 Techflash
  */
 
-#include "npll/allocator.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <npll/allocator.h>
 #include <npll/block.h>
 #include <npll/console.h>
 #include <npll/cpu.h>
@@ -39,7 +39,7 @@ static const char *pvrToName(u32 pvr) {
 	switch (pvr) {
 	case 0x00083410: return "Gekko";
 	case 0x00087200: return "Broadway";
-	/* TODO: Espresso? */
+	case 0x70010201: return "Espresso";
 	default: return "Unknown";
 	}
 }
