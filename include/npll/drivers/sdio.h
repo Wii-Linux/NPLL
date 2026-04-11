@@ -16,11 +16,15 @@
 
 
 /* for Hollywood/Latte main SDHC */
-/* TODO: add one for the SDIO wifi and Wii U emmc at one point? */
 #define SDHC0_ADDR (void *)0xcd070000
-#define SDHC0_SIZE  0x1000
+#define SDHC1_ADDR (void *)0xcd080000
+#define SDHC2_ADDR (void *)0xcd100000
+#define SDHC3_ADDR (void *)0xcd110000
 enum sdio_id {
 	SDHC0,
+	SDHC1,
+	SDHC2,
+	SDHC3,
 	NSDHC,
 	SDHC_DEFAULT = SDHC0
 };

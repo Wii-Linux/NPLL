@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <npll/allocator.h>
+#include <npll/cache.h>
 #include <npll/timer.h>
 #include "compat.h"
 
@@ -114,7 +115,7 @@ static int mmc_decode_csd(mmc_card_t mmc_card, struct csd *csd)
 		csd->read_bl_len = (u8)CSD_BITS(80,  4);
 		csd->tran_speed  = (u8)CSD_BITS(96,  8);
 	} else {
-		ZF_LOGE("Unknown CSD version!");
+		ZF_LOGE("Unknown CSD version (%u)!", csd->structure);
 		return -1;
 	}
 
@@ -184,6 +185,31 @@ static void mmc_completion_token_destroy(struct mmc_completion_token *t)
 	free(t);
 }
 
+static int mmc_read_ext_csd(mmc_card_t card, u8 *ext_csd)
+{
+	struct mmc_cmd cmd = {.data = NULL};
+	int ret;
+
+	if (card == NULL || ext_csd == NULL) {
+		return -1;
+	}
+
+	memset(ext_csd, 0, 512);
+
+	cmd.index = MMC_SEND_EXT_CSD;
+	cmd.arg = 0;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	ret = mmc_cmd_add_data(&cmd, ext_csd, (uintptr_t)virtToPhys(ext_csd), 0, 512, 1);
+	if (ret) {
+		return ret;
+	}
+
+	ret = host_send_command(card, &cmd, NULL, NULL);
+
+	free(cmd.data);
+	return ret;
+}
+
 /**
  * MMC/SD/SDIO card registry.
  */
@@ -215,17 +241,36 @@ static int mmc_card_registry(mmc_card_t card)
 
 	/* Retrieve RCA number. */
 	cmd.index = MMC_SEND_RELATIVE_ADDR;
-	cmd.arg = 0;
-	cmd.rsp_type = MMC_RSP_TYPE_R6;
-	host_send_command(card, &cmd, NULL, NULL);
-	card->raw_rca = (u16)(cmd.response[0] >> 16);
+	if (card->type == CARD_TYPE_MMC) {
+		/*
+		 * MMC uses CMD3 as SET_RELATIVE_ADDR: the host assigns the RCA
+		 * and the card responds with R1, not SD's R6 published RCA flow.
+		 */
+		card->raw_rca = 1;
+		cmd.arg = (u32)card->raw_rca << 16;
+		cmd.rsp_type = MMC_RSP_TYPE_R1;
+		ret = host_send_command(card, &cmd, NULL, NULL);
+	} else {
+		cmd.arg = 0;
+		cmd.rsp_type = MMC_RSP_TYPE_R6;
+		ret = host_send_command(card, &cmd, NULL, NULL);
+		card->raw_rca = (u16)(cmd.response[0] >> 16);
+	}
+	if (ret) {
+		ZF_LOGE("Failed to assign/read RCA");
+		return -1;
+	}
 	ZF_LOGD("New Card RCA: %x", card->raw_rca);
 
 	/* Read CSD, Status */
 	cmd.index = MMC_SEND_CSD;
 	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R2;
-	host_send_command(card, &cmd, NULL, NULL);
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret) {
+		ZF_LOGE("Failed to read CSD");
+		return -1;
+	}
 
 	/* Left shift the response by 8. Consult SDHC manual. */
 	cmd.response[3] = ((cmd.response[3] << 8) | (cmd.response[2] >> 24));
@@ -235,14 +280,23 @@ static int mmc_card_registry(mmc_card_t card)
 	memcpy(card->raw_csd, cmd.response, sizeof(card->raw_csd));
 
 	cmd.index = MMC_SEND_STATUS;
+	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	host_send_command(card, &cmd, NULL, NULL);
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret) {
+		ZF_LOGE("Failed to read card status");
+		return -1;
+	}
 
 	/* Select the card */
 	cmd.index = MMC_SELECT_CARD;
 	cmd.arg = (u32)card->raw_rca << 16;
 	cmd.rsp_type = MMC_RSP_TYPE_R1b;
-	host_send_command(card, &cmd, NULL, NULL);
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret) {
+		ZF_LOGE("Failed to select card");
+		return -1;
+	}
 
 	/* Set read/write block length for byte addressed standard capacity cards */
 	if (!card->high_capacity) {
@@ -312,9 +366,10 @@ static int mmc_voltage_validation(mmc_card_t card)
 			cmd.arg = 0;
 			cmd.rsp_type = MMC_RSP_TYPE_R1;
 			host_send_command(card, &cmd, NULL, NULL);
+			cmd.index = SD_SD_APP_OP_COND;
+		} else {
+			cmd.index = MMC_SEND_OP_COND;
 		}
-
-		cmd.index = SD_SD_APP_OP_COND;
 		cmd.arg = voltage;
 		cmd.rsp_type = MMC_RSP_TYPE_R3;
 		host_send_command(card, &cmd, NULL, NULL);
@@ -418,46 +473,53 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 		free(mmc);
 		return -1;
 	}
+
 	/*
 	 * Keep both host and card in 1-bit mode through the operational clock
-	 * transition. Only once the new clock is established do we ask the card
-	 * to switch width, then finally flip the host-side width bit.
+	 * transition. Only the SD path is known-good for 4-bit mode today.
+	 *
+	 * eMMC currently reaches the first real data command (CMD8/EXT_CSD)
+	 * with the command line healthy but the data path wedged, which strongly
+	 * suggests the MMC bus-width switch still needs more work. Keep MMC in
+	 * 1-bit mode for now so capacity probing and block I/O can proceed.
 	 */
-	cmd.index = MMC_APP_CMD;
-	cmd.arg = (u32)mmc->raw_rca << 16;
-	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	if (host_send_command(mmc, &cmd, NULL, NULL)) {
-		ZF_LOGE("Failed to prefix bus-width switch with APP_CMD");
-		free(mmc);
-		return -1;
-	}
-	cmd.index = SD_SET_BUS_WIDTH;
-	cmd.arg = MMC_MODE_4BIT;
-	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	if (host_send_command(mmc, &cmd, NULL, NULL)) {
-		ZF_LOGE("Failed to switch card to 4-bit bus width");
-		free(mmc);
-		return -1;
-	}
-	/*
-	 * Give the card a moment to settle after ACMD6 before we flip the
-	 * host-side width bit. The 4-bit path is timing-sensitive on
-	 * Hollywood, and rushing this transition appears to hurt reliability.
-	 */
-	udelay(1000);
-	if (host_set_bus_width(mmc, 4)) {
-		ZF_LOGE("Failed to switch the host controller to 4-bit mode");
-		free(mmc);
-		return -1;
-	}
-	udelay(1000);
-	cmd.index = MMC_SEND_STATUS;
-	cmd.arg = (u32)mmc->raw_rca << 16;
-	cmd.rsp_type = MMC_RSP_TYPE_R1;
-	if (host_send_command(mmc, &cmd, NULL, NULL)) {
-		ZF_LOGE("4-bit mode validation via SEND_STATUS failed");
-		free(mmc);
-		return -1;
+	if (mmc->type == CARD_TYPE_SD) {
+		cmd.index = MMC_APP_CMD;
+		cmd.arg = (u32)mmc->raw_rca << 16;
+		cmd.rsp_type = MMC_RSP_TYPE_R1;
+		if (host_send_command(mmc, &cmd, NULL, NULL)) {
+			ZF_LOGE("Failed to prefix bus-width switch with APP_CMD");
+			free(mmc);
+			return -1;
+		}
+		cmd.index = SD_SET_BUS_WIDTH;
+		cmd.arg = MMC_MODE_4BIT;
+		cmd.rsp_type = MMC_RSP_TYPE_R1;
+		if (host_send_command(mmc, &cmd, NULL, NULL)) {
+			ZF_LOGE("Failed to switch card to 4-bit bus width");
+			free(mmc);
+			return -1;
+		}
+		/*
+		 * Give the card a moment to settle after ACMD6 before we flip the
+		 * host-side width bit. The 4-bit path is timing-sensitive on
+		 * Hollywood, and rushing this transition appears to hurt reliability.
+		 */
+		udelay(1000);
+		if (host_set_bus_width(mmc, 4)) {
+			ZF_LOGE("Failed to switch the host controller to 4-bit mode");
+			free(mmc);
+			return -1;
+		}
+		udelay(1000);
+		cmd.index = MMC_SEND_STATUS;
+		cmd.arg = (u32)mmc->raw_rca << 16;
+		cmd.rsp_type = MMC_RSP_TYPE_R1;
+		if (host_send_command(mmc, &cmd, NULL, NULL)) {
+			ZF_LOGE("4-bit mode validation via SEND_STATUS failed");
+			free(mmc);
+			return -1;
+		}
 	}
 
 	*mmc_card = mmc;
@@ -612,6 +674,28 @@ long long mmc_card_capacity(mmc_card_t mmc_card)
 {
 	int ret;
 	struct csd csd;
+
+	if (mmc_card->type == CARD_TYPE_MMC && mmc_card->high_capacity) {
+		u8 ALIGN(32) ext_csd[512];
+		u32 sectors;
+
+		ret = mmc_read_ext_csd(mmc_card, ext_csd);
+		if (ret) {
+			ZF_LOGE("Failed to read EXT_CSD for MMC capacity");
+			return -1;
+		}
+
+		sectors = (u32)ext_csd[212]
+			| ((u32)ext_csd[213] << 8)
+			| ((u32)ext_csd[214] << 16)
+			| ((u32)ext_csd[215] << 24);
+		if (sectors == 0) {
+			ZF_LOGE("MMC EXT_CSD returned zero sector count");
+			return -1;
+		}
+
+		return (long long)sectors * 512;
+	}
 
 	ret = mmc_decode_csd(mmc_card, &csd);
 	if (ret) {

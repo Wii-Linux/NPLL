@@ -322,6 +322,9 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 	if (cmd->data == NULL) {
 		return DMA_MODE_NONE;
 	}
+	if (cmd->index == MMC_SEND_EXT_CSD) {
+		return DMA_MODE_NONE;
+	}
 	if (cmd->data->pbuf == 0) {
 		return DMA_MODE_NONE;
 	}
@@ -452,7 +455,8 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 			mix_ctrl |= MIX_CTRL_MSBSEL;
 		}
 		if (cmd->index == MMC_READ_SINGLE_BLOCK
-		    || cmd->index == MMC_READ_MULTIPLE_BLOCK) {
+		    || cmd->index == MMC_READ_MULTIPLE_BLOCK
+		    || cmd->index == MMC_SEND_EXT_CSD) {
 			mix_ctrl |= MIX_CTRL_DTDSEL;
 		}
 		if (cmd->data->blocks > 1) {
