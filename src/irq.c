@@ -46,8 +46,8 @@ void IRQ_Init(void) {
 		HW_PPCIRQMASK = 0;
 		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
 
-		/* unmask GPIO and SDHCI0 */
-		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
+		/* unmask GPIO and SDHCIs */
+		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0 | HW_IRQDEV_SDHCI1;
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -77,8 +77,9 @@ void IRQ_Init(void) {
 		LATTE_PI_INTSR1 = LATTE_PI_INTSR1;
 		LATTE_PI_INTSR2 = LATTE_PI_INTSR2;
 
-		/* unmask GPIO and SDHCI0 */
-		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0;
+		/* unmask GPIO and SDHCIs */
+		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0 | HW_IRQDEV_SDHCI1;
+		LT_PPC0INT2EN |= LT_IRQDEV_SDHCI2 | LT_IRQDEV_SDHCI3;
 
 		/* unmask Latte IRQs in the Latte PI */
 		LATTE_PI_INTMR |= PI_IRQDEV_LATTE;
@@ -95,7 +96,7 @@ static void IRQ_DoHandle(enum irqDev dev) {
 }
 
 void __attribute__((noreturn)) IRQ_Handle(void) {
-	u32 intsr, ppcirqflag, ppc0int1sts;
+	u32 intsr, ppcirqflag, ppc0intsts;
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII_U)
 		intsr = PI_INTSR;
@@ -119,6 +120,10 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI0;
 			IRQ_DoHandle(IRQDEV_SDHCI0);
 		}
+		if (ppcirqflag & HW_IRQDEV_SDHCI1) {
+			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI1;
+			IRQ_DoHandle(IRQDEV_SDHCI1);
+		}
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -126,19 +131,33 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		if (!(intsr & PI_IRQDEV_LATTE))
 			IRQ_Return();
 
-		ppc0int1sts = LT_PPC0INT1STS;
+		ppc0intsts = LT_PPC0INT1STS;
 		PI_INTSR = PI_IRQDEV_LATTE;
-		if (ppc0int1sts & HW_IRQDEV_GPIOB) {
+		if (ppc0intsts & HW_IRQDEV_GPIOB) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
 		}
-		if (ppc0int1sts & HW_IRQDEV_GPIO) {
+		if (ppc0intsts & HW_IRQDEV_GPIO) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIO;
 			IRQ_DoHandle(IRQDEV_GPIO);
 		}
-		if (ppc0int1sts & HW_IRQDEV_SDHCI0) {
+		if (ppc0intsts & HW_IRQDEV_SDHCI0) {
 			LT_PPC0INT1STS = HW_IRQDEV_SDHCI0;
 			IRQ_DoHandle(IRQDEV_SDHCI0);
+		}
+		if (ppc0intsts & HW_IRQDEV_SDHCI1) {
+			LT_PPC0INT1STS = HW_IRQDEV_SDHCI1;
+			IRQ_DoHandle(IRQDEV_SDHCI1);
+		}
+
+		ppc0intsts = LT_PPC0INT2STS;
+		if (ppc0intsts & LT_IRQDEV_SDHCI2) {
+			LT_PPC1INT2STS = LT_IRQDEV_SDHCI2;
+			IRQ_DoHandle(IRQDEV_SDHCI2);
+		}
+		if (ppc0intsts & LT_IRQDEV_SDHCI3) {
+			LT_PPC1INT2STS = LT_IRQDEV_SDHCI3;
+			IRQ_DoHandle(IRQDEV_SDHCI3);
 		}
 
 		LATTE_PI_INTSR = PI_IRQDEV_LATTE;

@@ -127,6 +127,9 @@
 #define LT_PPC2INT1EN  _LATTE_REG(0x68)
 #define LT_PPC2INT2EN  _LATTE_REG(0x6c)
 
+#  define LT_IRQDEV_SDHCI2       BIT(0)
+#  define LT_IRQDEV_SDHCI3       BIT(1)
+
 #define LT_CHIPREVID   _LATTE_REG(0x1a0)
 #define LT_PIMCOMPAT   _LATTE_REG(0x1b0)
 
