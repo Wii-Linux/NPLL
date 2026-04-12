@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <npll/irq.h>
+#include <npll/menu.h>
 #include <npll/output.h>
 #include <npll/panic.h>
 
@@ -36,6 +37,7 @@ void O_AddDevice(const struct outputDevice *dev) {
 	irqs = IRQ_DisableSave();
 	O_Devices[O_NumDevices++] = dev;
 	IRQ_Restore(irqs);
+	UI_Invalidate();
 
 	if (deviceNum == 0) /* added debug */
 		deviceNum++;
@@ -67,4 +69,5 @@ void O_RemoveDevice(const struct outputDevice *dev) {
 	O_Devices[MAX_DEV - 1] = NULL;
 	O_NumDevices--;
 	IRQ_Restore(irqs);
+	UI_Invalidate();
 }

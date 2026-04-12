@@ -20,6 +20,7 @@ struct menuEntry {
 struct menu {
 	struct menuEntry **entries;
 	uint numEntries;
+	uint entryCapacity;
 	char *header;
 	char *content;
 	char *footer;
@@ -56,12 +57,12 @@ DPad: navigate between options; A button: select an option"
 extern void UI_Init(void);
 extern void UI_HandleInputs(void);
 extern void UI_Redraw(void);
+extern void UI_Invalidate(void);
 extern void UI_Switch(struct menu *m);
 extern void UI_SwitchCB(struct menuEntry *e);
 extern void UI_AppendEntry(struct menu *menu, struct menuEntry *e);
 extern void UI_PrependEntry(struct menu *menu, struct menuEntry *e);
 extern void UI_DelEntry(struct menu *menu, struct menuEntry *e);
-extern void UI_LogPutchar(char *cptr);
 
 /* has dummy param so that it can be used directly as a .selected() */
 extern void UI_UpLevel(struct menuEntry *_dummy);

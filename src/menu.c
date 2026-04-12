@@ -27,20 +27,14 @@
 #include <npll/utils.h>
 #include <npll/video.h>
 
-#define LOG_LINES 5
-/* FIXME: make this dynamic */
-#define ROOT_MENU_ENTRIES_MAX 20
+#define MENU_LOG_LINES_MAX 12
+#define MENU_LOG_LINES_MIN 5
+#define MENU_ENTRY_GROWTH_MIN 8
+#define MENU_ENTRY_CAPACITY_OWNED BIT(31)
 
 static bool hasChanged = true;
 static uint selected = 0;
-struct logLine {
-	const char *start;
-	uint len;
-	bool done;
-};
-
-static struct logLine logLines[LOG_LINES];
-static uint logLineIdx = 0;
+static uint bodyScroll = 0;
 static uint curFooterLines;
 static struct menu *curMenu = NULL;
 
@@ -82,7 +76,7 @@ static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMe
 static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
 static struct menuEntry sysInfoEntry = { .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } };
 
-static struct menuEntry *rootMenuEntries[ROOT_MENU_ENTRIES_MAX] = {
+static struct menuEntry *rootMenuEntries[4] = {
 	&sysInfoEntry,
 };
 
@@ -90,20 +84,21 @@ static void rootMenuInit(struct menu *m) {
 	uint idx = 1;
 
 	if (H_PlatOps->reboot)
-		rootMenuEntries[idx++] = &rebootEntry;
+		m->entries[idx++] = &rebootEntry;
 
 	if (H_PlatOps->shutdown)
-		rootMenuEntries[idx++] = &shutdownEntry;
+		m->entries[idx++] = &shutdownEntry;
 
 	if (H_PlatOps->exit)
-		rootMenuEntries[idx++] = &retToLdrEntry;
+		m->entries[idx++] = &retToLdrEntry;
 
 	m->numEntries = idx;
 }
 
 static struct menu rootMenu = {
 	.entries = rootMenuEntries,
-	.numEntries = 2,
+	.numEntries = 1,
+	.entryCapacity = sizeof(rootMenuEntries) / sizeof(struct menuEntry *),
 	.header = "NPLL - Main Menu",
 	.footer = FOOTER_CONTROLS,
 	.init = rootMenuInit,
@@ -121,35 +116,9 @@ static void uiRedrawWrapper(void *arg) {
 }
 
 void UI_Init(void) {
-	memset(logLines, 0, sizeof(logLines));
 	memset(partitions, 0, sizeof(partitions));
 	UI_Switch(&rootMenu);
 	T_QueueRepeatingEvent(10 * 1000, uiRedrawWrapper, NULL);
-}
-
-void UI_HandleInputs(void) {
-	inputEvent_t ev;
-
-	assert(curMenu);
-
-	ev = IN_ConsumeEvent();
-	while (ev) {
-		hasChanged = true;
-		if (ev & INPUT_EV_DOWN) {
-			if (selected < (curMenu->numEntries - 1))
-				selected++;
-		}
-		if (ev & INPUT_EV_UP) {
-			if (selected > 0)
-				selected--;
-		}
-		if (ev & INPUT_EV_SELECT) {
-			curMenu->entries[selected]->selected(curMenu->entries[selected]);
-			break;
-		}
-
-		ev = IN_ConsumeEvent();
-	}
 }
 
 static void outputToDevice(char c, void *arg) {
@@ -160,6 +129,169 @@ static void outputToDevice(char c, void *arg) {
 static void putsDev(const struct outputDevice *odev, const char *str) {
 	odev->writeStr(str);
 	odev->writeStr("\r\n");
+}
+
+static uint countTextLines(const char *str) {
+	uint lines = 1;
+
+	if (!str || !*str)
+		return 0;
+
+	while (*str) {
+		if (*str == '\n' && str[1] != '\0')
+			lines++;
+		str++;
+	}
+
+	return lines;
+}
+
+static uint menuEntryCapacity(const struct menu *menu) {
+	return menu->entryCapacity & ~MENU_ENTRY_CAPACITY_OWNED;
+}
+
+static bool menuOwnsEntries(const struct menu *menu) {
+	return !!(menu->entryCapacity & MENU_ENTRY_CAPACITY_OWNED);
+}
+
+static uint menuContentLines(const struct menu *menu) {
+	return countTextLines(menu->content);
+}
+
+static uint menuEntryBaseLine(const struct menu *menu) {
+	uint contentLines = menuContentLines(menu);
+
+	return contentLines + (contentLines ? 1 : 0);
+}
+
+static uint menuBodyLines(const struct menu *menu) {
+	return menuEntryBaseLine(menu) + menu->numEntries;
+}
+
+static uint headerLines(const struct menu *menu) {
+	return countTextLines(menu->header);
+}
+
+static uint logHeightForRows(uint rows, uint footerLines, uint headerLineCount) {
+	uint logHeight = rows / 4;
+	uint reservedTop;
+	uint reservedBottom;
+
+	if (logHeight < MENU_LOG_LINES_MIN)
+		logHeight = MENU_LOG_LINES_MIN;
+	if (logHeight > MENU_LOG_LINES_MAX)
+		logHeight = MENU_LOG_LINES_MAX;
+
+	reservedTop = headerLineCount + 2;
+	reservedBottom = (curMenu && curMenu->footer) ? (3 + footerLines + logHeight) : (2 + logHeight);
+
+	while (logHeight > 0 && reservedTop + reservedBottom >= rows) {
+		logHeight--;
+		reservedBottom--;
+	}
+
+	return logHeight;
+}
+
+static uint bodyHeightForRows(uint rows, uint footerLines, uint headerLineCount) {
+	uint logHeight = logHeightForRows(rows, footerLines, headerLineCount);
+	uint reservedTop = headerLineCount + 2;
+	uint reservedBottom = (curMenu && curMenu->footer) ? (3 + footerLines + logHeight) : (2 + logHeight);
+
+	if (rows <= reservedTop + reservedBottom)
+		return 1;
+
+	return rows - reservedTop - reservedBottom;
+}
+
+static uint currentBodyHeightForDevice(const struct outputDevice *odev) {
+	return bodyHeightForRows(odev->rows, curFooterLines, headerLines(curMenu));
+}
+
+static uint canonicalBodyHeight(void) {
+	uint i, minHeight = (uint)-1;
+
+	if (!curMenu || !O_NumDevices)
+		return 1;
+
+	for (i = 0; i < O_NumDevices; i++) {
+		uint height = currentBodyHeightForDevice(O_Devices[i]);
+
+		if (height < minHeight)
+			minHeight = height;
+	}
+
+	return minHeight == (uint)-1 ? 1 : minHeight;
+}
+
+static void clampScrollToBody(uint bodyHeight) {
+	uint bodyLines;
+	uint maxScroll;
+
+	assert(curMenu);
+
+	bodyLines = menuBodyLines(curMenu);
+	if (bodyLines <= bodyHeight)
+		maxScroll = 0;
+	else
+		maxScroll = bodyLines - bodyHeight;
+
+	if (bodyScroll > maxScroll)
+		bodyScroll = maxScroll;
+}
+
+static void ensureSelectionVisible(uint bodyHeight) {
+	uint selectedLine;
+
+	assert(curMenu);
+
+	selectedLine = menuEntryBaseLine(curMenu) + selected;
+	if (selectedLine < bodyScroll)
+		bodyScroll = selectedLine;
+	else if (selectedLine >= bodyScroll + bodyHeight)
+		bodyScroll = selectedLine - bodyHeight + 1;
+
+	clampScrollToBody(bodyHeight);
+}
+
+static void normalizeMenuState(void) {
+	assert(curMenu);
+	assert(curMenu->numEntries);
+
+	if (selected >= curMenu->numEntries)
+		selected = curMenu->numEntries - 1;
+
+	clampScrollToBody(canonicalBodyHeight());
+}
+
+static void drawTextLine(const struct outputDevice *odev, const char *text, uint targetLine) {
+	uint currentLine = 0;
+
+	while (text && *text) {
+		if (currentLine == targetLine) {
+			if (*text != '\r' && *text != '\n')
+				odev->writeChar(*text);
+		}
+
+		if (*text == '\n') {
+			if (currentLine == targetLine)
+				break;
+
+			currentLine++;
+		}
+
+		text++;
+	}
+
+	odev->writeStr("\r\n");
+}
+
+static void drawEntryLine(const struct outputDevice *odev, uint entryIdx) {
+	fctprintf(outputToDevice, (void *)odev,
+		"%s %d: %s\r\n",
+		selected == entryIdx ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ",
+		entryIdx, curMenu->entries[entryIdx]->name
+	);
 }
 
 static void drawLine(const struct outputDevice *odev) {
@@ -178,15 +310,75 @@ static void drawLine(const struct outputDevice *odev) {
 	}
 }
 
-static void drawLogs(const struct outputDevice *odev) {
-	uint i, maxLen;
+static void drawBodySeparator(const struct outputDevice *odev, uint bodyHeight) {
+	char indicator[32];
+	uint bodyLines, hiddenAbove, hiddenBelow, indicatorLen, lineLen;
+	int i;
+
+	bodyLines = menuBodyLines(curMenu);
+	hiddenAbove = bodyScroll;
+	if (bodyScroll + bodyHeight >= bodyLines)
+		hiddenBelow = 0;
+	else
+		hiddenBelow = bodyLines - (bodyScroll + bodyHeight);
+
+	if (!hiddenAbove && !hiddenBelow) {
+		drawLine(odev);
+		return;
+	}
+
+	indicatorLen = (uint)snprintf(indicator, sizeof(indicator), " ^ %u lines, v %u lines ", hiddenAbove, hiddenBelow);
+	if (indicatorLen >= odev->columns) {
+		drawLine(odev);
+		return;
+	}
+
+	lineLen = odev->columns - indicatorLen;
+	for (i = 0; i < (int)(lineLen / 2); i++)
+		odev->writeChar('=');
+	odev->writeStr(indicator);
+	for (i = 0; i < (int)(lineLen - (lineLen / 2)); i++)
+		odev->writeChar('=');
+}
+
+static void drawLogs(const struct outputDevice *odev, uint logHeight) {
+	const char *memlogStart, *memlogEnd, *lineStart, *lineEnd, *cur, *lineStarts[MENU_LOG_LINES_MAX];
+	uint lineLens[MENU_LOG_LINES_MAX], curLine = 0, totalLines, firstLine, idx, i, maxLen;
 	int j;
 	bool cutOff;
 
-	for (i = 0; i < LOG_LINES; i++) {
-		cutOff = false;
+	assert(logHeight <= MENU_LOG_LINES_MAX);
 
-		if (!logLines[i].done) {
+	L_GetMemlogBounds(&memlogStart, &memlogEnd);
+	memset(lineStarts, 0, sizeof(lineStarts));
+	memset(lineLens, 0, sizeof(lineLens));
+
+	lineStart = memlogStart;
+	cur = memlogStart;
+	while (cur < memlogEnd) {
+		if (*cur == '\n') {
+			lineEnd = cur;
+			idx = curLine % MENU_LOG_LINES_MAX;
+
+			if (lineEnd > lineStart && lineEnd[-1] == '\r')
+				lineEnd--;
+
+			lineStarts[idx] = lineStart;
+			lineLens[idx] = (uint)(lineEnd - lineStart);
+			curLine++;
+			lineStart = cur + 1;
+		}
+		cur++;
+	}
+
+	totalLines = curLine;
+	if (totalLines > logHeight)
+		firstLine = totalLines - logHeight;
+	else
+		firstLine = 0;
+
+	for (i = 0; i < logHeight; i++) {
+		if (firstLine + i >= totalLines) {
 			/* some of our output devices can benefit from bulk transfers */
 			for (j = (int)odev->columns; j > 0; j -= 4) {
 				if (j >= 4)
@@ -203,15 +395,15 @@ static void drawLogs(const struct outputDevice *odev) {
 		}
 
 		/* is it big enough to fit on 1 line? */
-		if (logLines[i].len > odev->columns) {
-			maxLen = odev->columns - 3;
+		cutOff = false;
+		maxLen = lineLens[(firstLine + i) % MENU_LOG_LINES_MAX];
+		if (maxLen > odev->columns) {
+			maxLen = odev->columns > 3 ? odev->columns - 3 : 0;
 			cutOff = true;
 		}
-		else
-			maxLen = logLines[i].len;
 
 		for (j = 0; (uint)j < maxLen; j++)
-			odev->writeChar(logLines[i].start[j]);
+			odev->writeChar(lineStarts[(firstLine + i) % MENU_LOG_LINES_MAX][j]);
 
 		if (cutOff)
 			odev->writeStr("...");
@@ -220,58 +412,148 @@ static void drawLogs(const struct outputDevice *odev) {
 	}
 }
 
+static void drawBody(const struct outputDevice *odev, uint bodyHeight) {
+	uint i;
+	uint contentLines = menuContentLines(curMenu);
+	uint entryBase = menuEntryBaseLine(curMenu);
+	uint bodyLines = menuBodyLines(curMenu);
+
+	for (i = 0; i < bodyHeight; i++) {
+		uint bodyLine = bodyScroll + i;
+
+		if (bodyLine >= bodyLines) {
+			odev->writeStr("\r\n");
+			continue;
+		}
+
+		if (bodyLine < contentLines) {
+			drawTextLine(odev, curMenu->content, bodyLine);
+			continue;
+		}
+
+		if (contentLines && bodyLine == contentLines) {
+			odev->writeStr("\r\n");
+			continue;
+		}
+
+		drawEntryLine(odev, bodyLine - entryBase);
+	}
+}
+
+static void ensureMenuEntryCapacity(struct menu *menu, uint needed) {
+	struct menuEntry **entries;
+	uint newCapacity;
+
+	if (menuEntryCapacity(menu) >= needed)
+		return;
+
+	newCapacity = menuEntryCapacity(menu) ? menuEntryCapacity(menu) : MENU_ENTRY_GROWTH_MIN;
+	while (newCapacity < needed)
+		newCapacity *= 2;
+
+	entries = malloc(sizeof(struct menuEntry *) * newCapacity);
+	memcpy(entries, menu->entries, sizeof(struct menuEntry *) * menu->numEntries);
+	if (menuOwnsEntries(menu))
+		free(menu->entries);
+
+	menu->entries = entries;
+	menu->entryCapacity = newCapacity | MENU_ENTRY_CAPACITY_OWNED;
+}
+
+void UI_Invalidate(void) {
+	hasChanged = true;
+}
+
+void UI_HandleInputs(void) {
+	inputEvent_t ev;
+	uint bodyHeight;
+	uint firstEntryLine;
+
+	assert(curMenu);
+
+	ev = IN_ConsumeEvent();
+	while (ev) {
+		hasChanged = true;
+		bodyHeight = canonicalBodyHeight();
+		firstEntryLine = menuEntryBaseLine(curMenu) + selected;
+
+		if (ev & INPUT_EV_DOWN) {
+			if (firstEntryLine >= bodyScroll + bodyHeight) {
+				bodyScroll++;
+				clampScrollToBody(bodyHeight);
+			}
+			else if (selected < (curMenu->numEntries - 1)) {
+				selected++;
+				ensureSelectionVisible(bodyHeight);
+			}
+		}
+		if (ev & INPUT_EV_UP) {
+			if (selected == 0 && bodyScroll > 0) {
+				bodyScroll--;
+			}
+			else if (selected > 0) {
+				selected--;
+				ensureSelectionVisible(bodyHeight);
+			}
+		}
+		if (ev & INPUT_EV_SELECT) {
+			curMenu->entries[selected]->selected(curMenu->entries[selected]);
+			break;
+		}
+
+		ev = IN_ConsumeEvent();
+	}
+}
+
 
 void UI_Redraw(void) {
-	uint i, j;
+	uint i;
 	const struct outputDevice *odev;
+	uint bodyHeight;
+	uint logHeight;
+	uint headerLineCount;
+	uint logRow;
 
 	if (__likely(!hasChanged))
 		return;
 
+	normalizeMenuState();
+	headerLineCount = headerLines(curMenu);
+
 	for (i = 0; i < O_NumDevices; i++) {
 		odev = O_Devices[i];
+		bodyHeight = currentBodyHeightForDevice(odev);
+		logHeight = logHeightForRows(odev->rows, curFooterLines, headerLineCount);
 
 		odev->writeStr("\x1b[1;1H\x1b[2J");
 		if (curMenu->header)
 			putsDev(odev, curMenu->header);
 
-		drawLine(odev);
+		drawBodySeparator(odev, bodyHeight);
 		odev->writeStr("\r\n");
-
-		if (curMenu->content) {
-			putsDev(odev, curMenu->content);
-			putsDev(odev, "");
-		}
-
-		for (j = 0; j < curMenu->numEntries; j++) {
-			fctprintf(outputToDevice, (void *)odev,
-				"%s %d: %s\r\n",
-				selected == j ? "\x1b[0m\x1b[31m\x1b[47m *" : "\x1b[0m  ",
-				j, curMenu->entries[j]->name
-			);
-		}
+		drawBody(odev, bodyHeight);
 
 		odev->writeStr("\x1b[0m");
+		logRow = odev->rows - (curMenu->footer ? (3 + curFooterLines + logHeight) : (2 + logHeight));
 
 		if (curMenu->footer) {
-			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", odev->rows - curFooterLines - 3 - LOG_LINES);
+			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", logRow);
 			drawLine(odev);
 			odev->writeStr("\r\n");
-			drawLogs(odev);
+			drawLogs(odev, logHeight);
 			drawLine(odev);
 			odev->writeStr("\r\n");
 			odev->writeStr(curMenu->footer);
 		}
 		else {
-			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", odev->rows - 2 - LOG_LINES);
+			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", logRow);
 			drawLine(odev);
 			odev->writeStr("\r\n");
-			drawLogs(odev);
+			drawLogs(odev, logHeight);
 		}
-
-
-		hasChanged = false;
 	}
+
+	hasChanged = false;
 }
 
 void UI_Switch(struct menu *m) {
@@ -279,10 +561,9 @@ void UI_Switch(struct menu *m) {
 	char *s;
 
 	selected = 0;
+	bodyScroll = 0;
 	hasChanged = true;
-	logLineIdx = 0;
 	curFooterLines = 0;
-	memset(logLines, 0, sizeof(logLines));
 
 	if (curMenu && curMenu->cleanup)
 		curMenu->cleanup(curMenu);
@@ -320,13 +601,13 @@ void UI_SwitchCB(struct menuEntry *e) {
 
 void UI_AppendEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
-	assert(menu->numEntries < ROOT_MENU_ENTRIES_MAX);
+	ensureMenuEntryCapacity(menu, menu->numEntries + 1);
 	menu->entries[menu->numEntries++] = e;
 }
 
 void UI_PrependEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
-	assert(menu->numEntries < ROOT_MENU_ENTRIES_MAX);
+	ensureMenuEntryCapacity(menu, menu->numEntries + 1);
 	memmove(&menu->entries[1], &menu->entries[0], menu->numEntries * sizeof(struct menuEntry *));
 	menu->entries[0] = e;
 	menu->numEntries++;
@@ -347,6 +628,8 @@ void UI_DelEntry(struct menu *menu, struct menuEntry *e) {
 		memmove(&menu->entries[i], &menu->entries[i + 1], sizeof(struct menuEntry *) * (menu->numEntries - i - 1));
 
 	menu->numEntries--;
+	if (menu == curMenu && menu->numEntries)
+		normalizeMenuState();
 }
 
 void UI_UpLevel(struct menuEntry *_dummy) {
@@ -365,38 +648,7 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 
 	assert(prev);
 	curMenu = prev;
-}
-
-void UI_LogPutchar(char *cptr) {
-	if (*cptr == '\r')
-		return; /* we'll get the \n next */
-
-	if (*cptr == '\n' && !logLines[logLineIdx].done && logLines[logLineIdx].start) {
-		if (logLineIdx >= LOG_LINES) {
-			printf("bogus logLineIdx: %u\r\n", logLineIdx);
-			panic("bogus logLineIdx");
-		}
-
-		logLines[logLineIdx++].done = true;
-		hasChanged = true;
-		return;
-	}
-
-	if (logLineIdx >= LOG_LINES) {
-		memmove(&logLines[0], &logLines[1], (LOG_LINES - 1) * sizeof(struct logLine));
-		memset(&logLines[LOG_LINES - 1], 0, sizeof(struct logLine));
-		logLineIdx--;
-		hasChanged = true;
-	}
-	if (logLineIdx >= LOG_LINES) {
-		printf("bogus logLineIdx: %u\r\n", logLineIdx);
-		panic("bogus logLineIdx");
-	}
-
-	if (!logLines[logLineIdx].start)
-		logLines[logLineIdx].start = cptr;
-
-	logLines[logLineIdx].len++;
+	normalizeMenuState();
 }
 
 void UI_AddPart(struct partition *part) {

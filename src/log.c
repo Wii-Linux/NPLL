@@ -21,6 +21,13 @@ static char *memlogNext = memlogStart;
 static u32 maxSize = 0x00040000;
 static bool outOfSpace = false;
 
+void L_GetMemlogBounds(const char **start, const char **end) {
+	if (start)
+		*start = memlogStart;
+	if (end)
+		*end = memlogNext;
+}
+
 static void memlogWriteChar(const char c) {
 	if ((u32)memlogNext >= ((u32)memlogStart + maxSize)) {
 		if (outOfSpace) /* prevent recursion */
@@ -48,12 +55,12 @@ void _log_puts(const char *str) {
 	case LOG_METHOD_MENU_WINDOW: {
 		while (*str) {
 			memlogWriteChar(*str++);
-			UI_LogPutchar(memlogNext - 1);
+			if (memlogNext[-1] == '\n')
+				UI_Invalidate();
 		}
 		memlogWriteChar('\r');
-		UI_LogPutchar(memlogNext - 1);
 		memlogWriteChar('\n');
-		UI_LogPutchar(memlogNext - 1);
+		UI_Invalidate();
 		break;
 	}
 	case LOG_METHOD_NONE: {
@@ -81,7 +88,8 @@ static void menuWindowOut(char c, void *dummy) {
 	(void)dummy;
 
 	memlogWriteChar(c);
-	UI_LogPutchar(memlogNext - 1);
+	if (c == '\n')
+		UI_Invalidate();
 }
 
 static void noneOut(char c, void *dummy) {

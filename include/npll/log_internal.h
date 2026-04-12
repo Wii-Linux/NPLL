@@ -15,6 +15,7 @@ enum logMethod {
 
 extern enum logMethod L_Method;
 extern void L_Init(void);
+extern void L_GetMemlogBounds(const char **start, const char **end);
 
 extern void _log_puts(const char *str);
 extern void _log_printf(const char *fmt, ...);

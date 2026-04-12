@@ -46,21 +46,30 @@ static void selectedCB(struct menuEntry *entry) {
 	log_printf("ELF_LoadFile failed: %d\r\n", ret);
 }
 
+static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint numEntries, uint needed) {
+	struct menuEntry *newEntries;
+	uint newCapacity;
+
+	if (*capacity >= needed)
+		return;
+
+	newCapacity = *capacity ? *capacity : 8;
+	while (newCapacity < needed)
+		newCapacity *= 2;
+
+	newEntries = malloc(sizeof(struct menuEntry) * newCapacity);
+	if (*entries) {
+		memcpy(newEntries, *entries, sizeof(struct menuEntry) * numEntries);
+		free(*entries);
+	}
+
+	*entries = newEntries;
+	*capacity = newCapacity;
+}
+
 #define FINALIZE_ENTRY() \
 	if (titleCur != 0 && pathCur != 0) {								\
-		/*											\
-		 * FIXME: this is really inefficient...							\
-		 * if our allocator design allowed for it, it would be much more			\
-		 * proper to just `realloc` it...							\
-		 */											\
-		if (numEntries == 0)									\
-			entries = malloc(sizeof(struct menuEntry));					\
-		else {											\
-			entriesBak = entries;								\
-			entries = malloc(sizeof(struct menuEntry) * (uint)(numEntries + 1));		\
-			memcpy(entries, entriesBak, sizeof(struct menuEntry) * (uint)numEntries);	\
-			free(entriesBak);								\
-		}											\
+		ensureEntryCapacity(&entries, &entryCapacity, (uint)numEntries, (uint)numEntries + 1);	\
 		memset(&entries[numEntries], 0, sizeof(struct menuEntry));				\
 		strcpy(entries[numEntries].name, entryTitle);						\
 		entries[numEntries].selected = selectedCB;						\
@@ -84,9 +93,10 @@ static void selectedCB(struct menuEntry *entry) {
  */
 int C_Probe(struct menuEntry **entriesOut) {
 	int fd, size, ret, lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
+	uint entryCapacity = 0;
 	char *file, *curLine, *cur, *end, entryTitle[64], entryPath[128];
 	bool skipToEndOfLine = false, isInEntry = false, isInTitle = false, isInPath = false;
-	struct menuEntry *entries = NULL, *entriesBak;
+	struct menuEntry *entries = NULL;
 
 	fd = FS_Open("gumboot/gumboot.lst");
 	if (fd < 0) {
@@ -248,5 +258,6 @@ int C_Probe(struct menuEntry **entriesOut) {
 	else
 		*entriesOut = NULL;
 
+	free(file);
 	return numEntries;
 }

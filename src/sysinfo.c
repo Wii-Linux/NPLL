@@ -29,6 +29,7 @@ struct menu UI_SysInfoMenu = {
 	.footer = FOOTER_CONTROLS,
 	.entries = sysinfoMenuItems,
 	.numEntries = 1,
+	.entryCapacity = sizeof(sysinfoMenuItems) / sizeof(sysinfoMenuItems[0]),
 	.init = sysinfoMenuInit,
 	.cleanup = sysinfoMenuCleanup,
 	.destroy = NULL,
