@@ -57,6 +57,7 @@
 #define MSR_EE BIT(31 - 16)
 #define MSR_PR BIT(31 - 17)
 #define MSR_FP BIT(31 - 18)
+#define MSR_ME BIT(31 - 19)
 #define MSR_IR BIT(31 - 26)
 #define MSR_DR BIT(31 - 27)
 
@@ -99,17 +100,18 @@
 	__tmpSPRVal; \
 })
 
-#define mfmsr(rn) ({ \
+#define mfmsr() ({ \
 	u32 __tmpMSRVal; \
 	asm volatile("mfmsr %0" : "=r" (__tmpMSRVal)); \
 	__tmpMSRVal; \
 })
+#define mtmsr(v) asm volatile("mtmsr %0" : : "r" (v))
 
 #define mtspr(rn, v) asm volatile("mtspr " __stringifyResult(rn) ", %0" : : "r" (v))
 
 /* Somehow GCC generates garbage */
 __attribute__((optimize("no-jump-tables")))
-static inline void setbat(int idx, int typeMask, u32 batu, u32 batl) {
+static inline void setbat(uint idx, uint typeMask, u32 batu, u32 batl) {
 	switch (idx) {
 	case 0:
 	case 1: {
