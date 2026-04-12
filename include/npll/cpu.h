@@ -47,28 +47,45 @@
 #define DBAT7L 575
 
 #define HID0   1008
+#define HID1   1009
+#define HID2   920
 #define HID4   1011
 #define DABR   1013
 
 
 /* MSR values */
-#define MSR_EE (1 << (31 - 16))
-#define MSR_PR (1 << (31 - 17))
-#define MSR_FP (1 << (31 - 18))
-#define MSR_IR (1 << (31 - 26))
-#define MSR_DR (1 << (31 - 27))
+#define MSR_EE BIT(31 - 16)
+#define MSR_PR BIT(31 - 17)
+#define MSR_FP BIT(31 - 18)
+#define MSR_IR BIT(31 - 26)
+#define MSR_DR BIT(31 - 27)
 
 /* HID0 values */
-#define HID0_ICE  (1 << (31 - 16))
-#define HID0_DCE  (1 << (31 - 17))
-#define HID0_ICFI (1 << (31 - 20))
-#define HID0_DCFI (1 << (31 - 21))
+#define HID0_DPM  BIT(31 - 11)
+#define HID0_NHR  BIT(31 - 15)
+#define HID0_ICE  BIT(31 - 16)
+#define HID0_DCE  BIT(31 - 17)
+#define HID0_ICFI BIT(31 - 20)
+#define HID0_DCFI BIT(31 - 21)
+#define HID0_SPD  BIT(31 - 22)
+#define HID0_DCFA BIT(31 - 25)
+#define HID0_BTIC BIT(31 - 26)
+#define HID0_BHT  BIT(31 - 29)
+
+/* HID2 values */
+#define HID2_LSQE BIT(31 - 0)
+#define HID2_WPE  BIT(31 - 1)
+#define HID2_PSE  BIT(31 - 2)
 
 /* HID4 values */
-#define HID4_SBE (1 << (31 - 6))
+#define HID4_SBE     BIT(31 - 6)
+#define HID4_ST0     BIT(31 - 7) /* PS1_CTL on 750CL */
+#define HID4_LPE     BIT(31 - 8) /* Reserved on 750CL */
+#define HID4_L2_CCFI BIT(31 - 11)
+#define HID4_PS2_CTL BIT(31 - 12) /* Reserved on Broadway, but on 750CL it's PS2_CTL */
 
-#define SETBAT_TYPE_DATA (1 << 0)
-#define SETBAT_TYPE_INST (1 << 1)
+#define SETBAT_TYPE_DATA BIT(0)
+#define SETBAT_TYPE_INST BIT(1)
 #define SETBAT_TYPE_BOTH (SETBAT_TYPE_DATA | SETBAT_TYPE_INST)
 
 #ifndef __ASSEMBLY__
