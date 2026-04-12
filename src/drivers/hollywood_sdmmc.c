@@ -186,7 +186,7 @@ static void sdmmcCB(void) {
 
 	checkConnected = false;
 
-	if (sdmmcDrv.state == DRIVER_STATE_NO_HARDWARE && !sdmmcRegistered[0]) {
+	if (!sdmmcRegistered[0]) {
 		/* check for a card */
 		pstate = sdio_get_present_state(&sdioDev[0]);
 		if (!(pstate & SDHC_PRES_STATE_CINST))
@@ -204,7 +204,7 @@ static void sdmmcCB(void) {
 		sdmmcRegisterBlock(&sdmmcBdev[0], bdevNames[0]);
 		sdmmcRegistered[0] = true;
 	}
-	else if (sdmmcRegistered[0]) {
+	else {
 		/* check for card removed */
 		pstate = sdio_get_present_state(&sdioDev[0]);
 		if (pstate & SDHC_PRES_STATE_CINST)
