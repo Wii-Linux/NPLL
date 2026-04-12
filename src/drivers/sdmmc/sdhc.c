@@ -154,7 +154,7 @@
 
 #define SDHC_DELAY 5
 #define SDHC_USE_SDMA 1
-#define SDHC_SLOW_4BIT_TEST 1
+#define SDHC_SLOW_4BIT_TEST 0
 
 static inline void writel(u32 v, volatile void *a) {
 	sync(); barrier();

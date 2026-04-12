@@ -474,6 +474,7 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 		return -1;
 	}
 
+	#if 0
 	/*
 	 * Keep both host and card in 1-bit mode through the operational clock
 	 * transition. Only the SD path is known-good for 4-bit mode today.
@@ -521,6 +522,7 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 			return -1;
 		}
 	}
+	#endif
 
 	*mmc_card = mmc;
 	assert(mmc);
