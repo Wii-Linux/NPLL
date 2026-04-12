@@ -21,6 +21,7 @@
 #include <npll/irq.h>
 #include <npll/cache.h>
 #include <npll/tiny_usbgecko.h>
+#include <npll/hollywood/ehci.h>
 #include <npll/hollywood/gpio.h>
 #include <npll/hollywood/ohci.h>
 #include <npll/log.h>
@@ -618,6 +619,17 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			OHCI_HC_INTERRUPT_DISABLE(1) = 0xffffffff;
 			OHCI_HC_INTERRUPT_STATUS(0) = OHCI_HC_INTERRUPT_STATUS(0);
 			OHCI_HC_INTERRUPT_STATUS(1) = OHCI_HC_INTERRUPT_STATUS(1);
+
+
+			tb = mftb();
+			EHCI_USBCMD(0) &= ~EHCI_USBCMD_RS;
+			while (!(EHCI_USBSTS(0) & EHCI_USBSTS_HCHALTED)) {
+				if (T_HasElapsed(tb, 10 * 1000))
+					panic("EHCI halt timed out");
+			}
+			EHCI_USBCMD(0) |= EHCI_USBCMD_HCRESET;
+			EHCI_USBINTR(0) = 0;
+			EHCI_USBSTS(0) = EHCI_USBSTS(0);
 			GOTO_STATE(STATE_READY);
 			break;
 		}
