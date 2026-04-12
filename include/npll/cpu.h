@@ -7,6 +7,10 @@
 #ifndef _CPU_H
 #define _CPU_H
 
+#ifdef __ASSEMBLY__
+#define BIT(nr) (1u << (nr))
+#endif
+
 /* SPR Numbers */
 #define PVR    287
 
