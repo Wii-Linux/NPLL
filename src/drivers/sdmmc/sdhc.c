@@ -6,23 +6,20 @@
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
  *
  * SPDX-License-Identifier: BSD-2-Clause
- *
- * SDHCI byte-swapping access code derived from Linux drivers/mmc/host/sdhci-pltfm.h:
- * Copyright 2010 MontaVista Software, LLC.
  */
-
-#include "sdhc.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <npll/allocator.h>
 #include <npll/cache.h>
-#include <npll/irq.h>
 #include <npll/drivers/sdio.h>
+#include <npll/irq.h>
+#include <npll/revle.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include "mmc.h"
+#include "sdhc.h"
 #include "compat.h"
 
 
@@ -157,92 +154,23 @@
 #define SDHC_SLOW_4BIT_TEST 0
 
 static inline void writel(u32 v, volatile void *a) {
-	sync(); barrier();
-	*(vu32*)a = v;
-	sync(); barrier();
+	revLEwritel(a, v);
 	udelay(SDHC_DELAY);
 }
 
 static inline void writew(u16 v, volatile void *a) {
-	uintptr_t addr;
-	u32 tmp, shift;
-	volatile void *base;
-
-	addr = (uintptr_t)a;
-	base = (volatile void *)(addr & ~0x3u);
-	shift = (u32)((addr & 0x2u) * 8u);
-
-	sync(); barrier();
-	tmp = *(vu32*)base;
-	tmp &= ~(0xffffu << shift);
-	tmp |= (v << shift);
-	*(vu32*)base = tmp;
-	sync(); barrier();
+	revLEwritew(a, v);
 	udelay(SDHC_DELAY);
-
-	return ;
 }
 
 static inline void writeb(u8 v, volatile void *a) {
-	uintptr_t addr;
-	u32 tmp, shift;
-	volatile void *base;
-
-	addr = (uintptr_t)a;
-	base = (volatile void *)(addr & ~0x3u);
-	shift = (u32)((addr & 0x3u) * 8u);
-
-	sync(); barrier();
-	tmp = *(vu32*)base;
-	tmp &= ~(0xffu << shift);
-	tmp |= (v << shift);
-	*(vu32*)base = tmp;
-	sync(); barrier();
+	revLEwriteb(a, v);
 	udelay(SDHC_DELAY);
-
-	return ;
 }
 
-static inline u32 readl(volatile void *a) {
-	u32 ret;
-
-	udelay(SDHC_DELAY);
-	sync(); barrier();
-	ret = *(vu32*)(a);
-	sync(); barrier();
-
-	return ret;
-}
-
-static inline u16 readw(volatile void *a) {
-	uintptr_t addr;
-	u32 tmp, shift;
-
-	udelay(SDHC_DELAY);
-	addr = (uintptr_t)a;
-	shift = (u32)((addr & 0x2u) * 8u);
-	addr &= ~0x3u;
-	sync(); barrier();
-	tmp = *(vu32*)addr;
-	sync(); barrier();
-
-	return (u16)(tmp >> shift);
-}
-
-static inline u8 readb(volatile void *a) {
-	uintptr_t addr;
-	u32 tmp, shift;
-
-	udelay(SDHC_DELAY);
-	addr = (uintptr_t)a;
-	shift = (u32)((addr & 0x3u) * 8u);
-	addr &= ~0x3u;
-	sync(); barrier();
-	tmp = *(vu32*)addr;
-	sync(); barrier();
-
-	return (u8)(tmp >> shift);
-}
+#define readl(a) revLEreadl(a)
+#define readw(a) revLEreadw(a)
+#define readb(a) revLEreadb(a)
 
 enum dma_mode {
 	DMA_MODE_NONE = 0,
