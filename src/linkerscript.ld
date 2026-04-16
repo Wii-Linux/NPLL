@@ -16,14 +16,17 @@ MEMORY {
 	 * don't like putting us at 0x0.
 	 */
 
+	BS1PHYS (rwx): ORIGIN = 0x00003400, LENGTH = 0x00000c00 /* physical MEM1, BS1 */
 	LOWPHYS (rwx): ORIGIN = 0x00004000, LENGTH = 0x016fc000 /* physical MEM1, the load address of our ELF */
 	HIPHYS (rwx): ORIGIN = 0x01700000, LENGTH = 0x000c0000 /* physical MEM1, the load address of our relocated code+data */
+	BS1VIRT (rwx): ORIGIN = 0x80003400, LENGTH = 0x00000c00 /* physical MEM1, BS1 */
 	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x016fc000 /* virtual runtime addresses after BAT setup */
 	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x000c0000 /* virtual runtime address after relocation */
 }
 
 
 PHDRS {
+	bs1  PT_LOAD FLAGS(5);
 	init PT_LOAD FLAGS(5);
 	text PT_LOAD FLAGS(5);
 	data PT_LOAD FLAGS(6);
@@ -31,10 +34,18 @@ PHDRS {
 }
 
 /* keep track of current LMA */
-_lma = ORIGIN(LOWPHYS);
+_lma = ORIGIN(BS1PHYS);
 
 SECTIONS
 {
+	/* start linker VMA at the virtual address where the BS1 stub will run */
+	. = ORIGIN(BS1VIRT);
+	.bs1 : AT(_lma) {
+		KEEP(*(.bs1 .bs1*))
+		. = ALIGN(32);
+	} > BS1VIRT :bs1
+
+	_lma = ORIGIN(LOWPHYS);
 	/* start linker VMA at the virtual address where init code will run */
 	. = ORIGIN(LOWVIRT);
 	.init : AT(_lma) {
