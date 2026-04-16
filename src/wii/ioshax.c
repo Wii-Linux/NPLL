@@ -43,7 +43,7 @@ static u32 arm_payload[] = {
 
 int IOS_DevShaExploit(void) {
 	// check if we already have permissions
-	if (HW_AHBPROT & AHBPROT_PPCKERN)
+	if (HW_AHBPROT == 0xffffffff)
 		return 0;
 
 	IOS_Reset();
@@ -75,7 +75,7 @@ int IOS_DevShaExploit(void) {
 	IOS_Ioctlv(fd, 0, 1, 2, vec);
 	log_printf("returned from trigger\r\n");
 	udelay(250 * 1000);
-	if (HW_AHBPROT & AHBPROT_PPCKERN)
+	if (HW_AHBPROT == 0xffffffff)
 		return 0;
 	else
 		return 1;
