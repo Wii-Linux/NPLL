@@ -249,6 +249,7 @@ static void ipc_cleanup_request(void) {
 void IOS_Reset(void) {
 	int i;
 
+#if 0
 	log_printf("Flushing IPC transactions");
 	for (i = 0; i < 10; i++) {
 		ipc_cleanup_request();
@@ -257,6 +258,10 @@ void IOS_Reset(void) {
 		_log_printf(".");
 	}
 	_log_puts(" Done.");
+#endif
+
+	HW_IPC_PPCCTRL = 0x38;
+
 
 	log_printf("Closing file descriptors");
 	for (i = 0; i < 32; i++) {
