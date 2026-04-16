@@ -52,8 +52,8 @@ void O_DebugInit(void) {
 	initialized = true;
 
 	O_AddDevice(&outDev);
-	debugConWriteStr("H_PlatOps Debug Console initialized\n");
-	debugConWriteStr("Leaving O_DebugInit\n");
+	debugConWriteStr("H_PlatOps Debug Console initialized\r\n");
+	debugConWriteStr("Leaving O_DebugInit\r\n");
 }
 
 void O_DebugCleanup(void) {
