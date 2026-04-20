@@ -442,20 +442,31 @@ typedef union {
 } rgb;
 
 static u32 make_yuv(rgb c1, rgb c2) {
-  int y1, cb1, cr1, y2, cb2, cr2, cb, cr;
+	int y1, y2, cb, cr, r1, g1, b1, r2, g2, b2, r, g, b;
 
-  y1 = (299 * c1.as_xrgb.r + 587 * c1.as_xrgb.g  + 114 * c1.as_xrgb.b) / 1000;
-  cb1 = (-16874 * c1.as_xrgb.r  - 33126 * c1.as_xrgb.g + 50000 * c1.as_xrgb.b + 12800000) / 100000;
-  cr1 = (50000 * c1.as_xrgb.r  - 41869 * c1.as_xrgb.g - 8131 * c1.as_xrgb.b + 12800000) / 100000;
+	/* unpack them */
+	r1 = c1.as_xrgb.r;
+	g1 = c1.as_xrgb.g;
+	b1 = c1.as_xrgb.b;
+	r2 = c2.as_xrgb.r;
+	g2 = c2.as_xrgb.g;
+	b2 = c2.as_xrgb.b;
 
-  y2 = (299 * c2.as_xrgb.r  + 587 * c2.as_xrgb.g + 114 * c2.as_xrgb.b) / 1000;
-  cb2 = (-16874 * c2.as_xrgb.r  - 33126 * c2.as_xrgb.g + 50000 * c2.as_xrgb.b + 12800000) / 100000;
-  cr2 = (50000 * c2.as_xrgb.r  - 41869 * c2.as_xrgb.g - 8131 * c2.as_xrgb.b + 12800000) / 100000;
+	/* calculate split luminance */
+	y1 = ((77 * r1) + (150 * g1) +  (29 * b1)) / 256;
+	y2 = ((77 * r2) + (150 * g2) +  (29 * b2)) / 256;
 
-  cb = (cb1 + cb2) >> 1;
-  cr = (cr1 + cr2) >> 1;
+	/* get average for the color */
+	r = (r1 + r2) / 2;
+	g = (g1 + g2) / 2;
+	b = (b1 + b2) / 2;
 
-  return ((u32)y1 << 24) | ((u32)cb << 16) | ((u32)y2 << 8) | (u32)cr;
+	/* calculate color */
+	cb = (((-44 * r) - (87  * g) + (131 * b)) / 256) + 128;
+	cr = (((131 * r) - (110 * g) - (21  * b)) / 256) + 128;
+
+	/* pack into YUYV */
+	return ((u32)y1 << 24) | ((u32)cb << 16) | ((u32)y2 << 8) | (u32)cr;
 }
 
 static void clear_fb(rgb fill_rgb) {
