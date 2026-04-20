@@ -86,7 +86,7 @@ CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -ggdb3 -nostdinc -ffreestanding
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
 # -O3 is just too buggy and unstable :(
-CFLAGS  += -O2 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
+CFLAGS  += -O3 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 
 SOURCE  := bs1.S entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c
