@@ -360,6 +360,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	enum MINI_Err miniErr;
 	const char *stateStr, *prevStateStr;
 	u16 stateFlags;
+	uint waitMiniRetries = 5;
 
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
@@ -441,10 +442,18 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			assert(!GET_SFLAG(SFLAG_CUR_MINI));
 
 			/* prevent infinite loops */
-			if (GET_SFLAG(SFLAG_RAN_DEVSHA) && !GET_SFLAG(SFLAG_AHBPROT_PERMS))
+			if (GET_SFLAG(SFLAG_RAN_DEVSHA) && !GET_SFLAG(SFLAG_RAN_ABN) && !GET_SFLAG(SFLAG_AHBPROT_PERMS))
 				panic("Wii: IOS /dev/sha exploit failed");
-			if (GET_SFLAG(SFLAG_RAN_ABN) && !GET_SFLAG(SFLAG_CUR_MINI))
-				panic("Wii: ARMBootNow failed");
+			if (GET_SFLAG(SFLAG_RAN_ABN) && !GET_SFLAG(SFLAG_CUR_MINI)) {
+				if (!waitMiniRetries)
+					panic("Wii: ARMBootNow failed");
+
+				/* loading MINI can be slow in some cases (e.g. Ironic emulator), give it a few retries */
+				waitMiniRetries--;
+				udelay(10 * 1000);
+				GOTO_STATE(STATE_ANALYZE);
+				break;
+			}
 
 			/* determine where to go next */
 			if (!GET_SFLAG(SFLAG_IOS_INIT)) {
