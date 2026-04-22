@@ -19,7 +19,6 @@ enum logMethod L_Method = LOG_METHOD_ALL_ODEV;
 #define memlogStart (char *)0x817c0000
 static char *memlogNext = memlogStart;
 static u32 maxSize = 0x00040000;
-static bool outOfSpace = false;
 
 void L_GetMemlogBounds(const char **start, const char **end) {
 	if (start)
@@ -29,11 +28,22 @@ void L_GetMemlogBounds(const char **start, const char **end) {
 }
 
 static void memlogWriteChar(const char c) {
+	char *removeEnd;
+	u32 remaining;
+
 	if ((u32)memlogNext >= ((u32)memlogStart + maxSize)) {
-		if (outOfSpace) /* prevent recursion */
-			return;
-		outOfSpace = true;
-		panic("memlog is out of space");
+		removeEnd = memlogStart;
+
+		while (removeEnd < memlogNext && *removeEnd != '\n')
+			removeEnd++;
+		if (removeEnd < memlogNext)
+			removeEnd++;
+		else
+			removeEnd = memlogStart + 1;
+
+		remaining = (u32)(memlogNext - removeEnd);
+		memmove(memlogStart, removeEnd, remaining);
+		memlogNext = memlogStart + remaining;
 	}
 	*memlogNext = c;
 	memlogNext++;
