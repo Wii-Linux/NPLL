@@ -34,5 +34,7 @@ static inline void IRQ_Restore(bool enabled) {
 		IRQ_Enable();
 	/* already disabled, no need */
 }
+extern void IRQ_Mask(enum irqDev dev);
+extern void IRQ_Unmask(enum irqDev dev);
 
 #endif /* _IRQ_H */

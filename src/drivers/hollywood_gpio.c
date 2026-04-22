@@ -126,7 +126,9 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 	/* register our IRQ handler */
 	irqs = IRQ_DisableSave();
 	IRQ_RegisterHandler(IRQDEV_GPIOB, gpioIRQHandler);
+	IRQ_Unmask(IRQDEV_GPIOB);
 	IRQ_RegisterHandler(IRQDEV_GPIO, gpioIRQHandler);
+	IRQ_Unmask(IRQDEV_GPIO);
 
 	/* set up the interrupts properly */
 	HW_GPIOB_INTLVL = ~prevIn;

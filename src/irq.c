@@ -14,6 +14,68 @@
 
 static irqHandler_t IRQ_Handlers[IRQDEV_MAX];
 
+struct irqDevInfo {
+	vu32 *flipperReg;
+	vu32 *hollywoodReg;
+	vu32 *latteReg;
+	u32 flipperMask;
+	u32 hollywoodMask;
+	u32 latteMask;
+};
+
+static struct irqDevInfo irqDevInfo[IRQDEV_MAX] = {
+	/* GPIOB */
+	{ NULL, &HW_PPCIRQMASK, &LT_PPC0INT1EN, 0, HW_IRQDEV_GPIOB, HW_IRQDEV_GPIOB },
+	/* GPIO */
+	{ NULL, &HW_PPCIRQMASK, &LT_PPC0INT1EN, 0, HW_IRQDEV_GPIO, HW_IRQDEV_GPIO },
+	/* SDHCI0 */
+	{ NULL, &HW_PPCIRQMASK, &LT_PPC0INT1EN, 0, HW_IRQDEV_SDHCI0, HW_IRQDEV_SDHCI0 },
+	/* SDHCI1 */
+	{ NULL, &HW_PPCIRQMASK, &LT_PPC0INT1EN, 0, HW_IRQDEV_SDHCI1, HW_IRQDEV_SDHCI1 },
+	/* SDHCI2 */
+	{ NULL, NULL, &LT_PPC0INT2EN, 0, 0, LT_IRQDEV_SDHCI2 },
+	/* SDHCI3 */
+	{ NULL, NULL, &LT_PPC0INT2EN, 0, 0, LT_IRQDEV_SDHCI3 },
+	/* RSW */
+	{ &PI_INTMR, &PI_INTMR, NULL, PI_IRQDEV_RSW, PI_IRQDEV_RSW, 0 },
+};
+
+static void getIrqDevInfo(enum irqDev dev, vu32 **reg, u32 *mask) {
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+		*reg = irqDevInfo[dev].flipperReg;
+		*mask = irqDevInfo[dev].flipperMask;
+	}
+	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		*reg = irqDevInfo[dev].hollywoodReg;
+		*mask = irqDevInfo[dev].hollywoodMask;
+	}
+	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		*reg = irqDevInfo[dev].latteReg;
+		*mask = irqDevInfo[dev].latteMask;
+	}
+	else
+		__builtin_unreachable();
+}
+
+void IRQ_Mask(enum irqDev dev) {
+	vu32 *reg;
+	u32 mask;
+	getIrqDevInfo(dev, &reg, &mask);
+
+	if (reg)
+		*reg &= ~mask;
+}
+
+void IRQ_Unmask(enum irqDev dev) {
+	vu32 *reg;
+	u32 mask;
+	getIrqDevInfo(dev, &reg, &mask);
+
+	if (reg)
+		*reg |= mask;
+}
+
+
 bool IRQ_DisableSave(void) {
 	u32 msr;
 	bool ret;
@@ -39,15 +101,12 @@ void IRQ_Init(void) {
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII) {
-		/* unmask the Reset Switch as well as Hollywood IRQs in the Flipper PIC */
-		PI_INTMR |= PI_IRQDEV_RSW | PI_IRQDEV_HLWD;
+		/* unmask Hollywood IRQs in the Flipper PIC */
+		PI_INTMR |= PI_IRQDEV_HLWD;
 
 		/* mask and ack all Hollywood IRQs */
 		HW_PPCIRQMASK = 0;
 		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
-
-		/* unmask GPIO and SDHCIs */
-		HW_PPCIRQMASK |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0 | HW_IRQDEV_SDHCI1;
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -76,10 +135,6 @@ void IRQ_Init(void) {
 		LATTE_PI_INTSR0 = LATTE_PI_INTSR0;
 		LATTE_PI_INTSR1 = LATTE_PI_INTSR1;
 		LATTE_PI_INTSR2 = LATTE_PI_INTSR2;
-
-		/* unmask GPIO and SDHCIs */
-		LT_PPC0INT1EN |= HW_IRQDEV_GPIOB | HW_IRQDEV_GPIO | HW_IRQDEV_SDHCI0 | HW_IRQDEV_SDHCI1;
-		LT_PPC0INT2EN |= LT_IRQDEV_SDHCI2 | LT_IRQDEV_SDHCI3;
 
 		/* unmask Latte IRQs in the Latte PI */
 		LATTE_PI_INTMR |= PI_IRQDEV_LATTE;

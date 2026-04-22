@@ -83,6 +83,7 @@ static void rswIRQHandler(enum irqDev dev) {
 static void rswInit(void) {
 	/* register our IRQ handler */
 	IRQ_RegisterHandler(IRQDEV_RSW, rswIRQHandler);
+	IRQ_Unmask(IRQDEV_RSW);
 
 	/* we're all good */
 	rswDrv.state = DRIVER_STATE_READY;

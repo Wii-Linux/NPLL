@@ -297,13 +297,22 @@ static void sdmmcInit(void) {
 		sdmmcRegisterBlock(&sdmmcBdev[sdhcToBdevIdx[i]], bdevNames[sdhcToBdevIdx[i]]);
 		sdmmcRegistered[sdhcToBdevIdx[i]] = true;
 	}
+
+	IRQ_Unmask(IRQDEV_SDHCI0);
+	IRQ_Unmask(IRQDEV_SDHCI1);
+	IRQ_Unmask(IRQDEV_SDHCI2);
+	IRQ_Unmask(IRQDEV_SDHCI3);
 }
 
 static void sdmmcCleanup(void) {
+	IRQ_Mask(IRQDEV_SDHCI0);
 	sdio_reset(&sdioDev[0]);
+	IRQ_Mask(IRQDEV_SDHCI1);
 	sdio_reset(&sdioDev[1]);
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		IRQ_Mask(IRQDEV_SDHCI2);
 		sdio_reset(&sdioDev[2]);
+		IRQ_Mask(IRQDEV_SDHCI3);
 		sdio_reset(&sdioDev[3]);
 	}
 
