@@ -229,6 +229,7 @@ int IOS_IoctlvReboot(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_t 
 	return _ios_ioctlv(fd, cmd, in_count, out_count, vec, 1);
 }
 
+#if 0
 // Cleanup any old state.
 
 static void ipc_cleanup_reply(void) {
@@ -245,6 +246,7 @@ static void ipc_cleanup_request(void) {
 	if ((HW_IPC_PPCCTRL & 0x22) == 0x22)
 		ipc_bell(2);
 }
+#endif
 
 void IOS_Reset(void) {
 	int i;

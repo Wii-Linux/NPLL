@@ -228,7 +228,7 @@ static inline sdhc_dev_t sdio_get_sdhc(sdio_host_dev_t *sdio)
 }
 
 /** Print uSDHC registers. */
-UNUSED static void print_sdhc_regs(struct sdhc *host)
+UNUSED static void print_sdhc_regs(struct sdhc *host UNUSED)
 {
 	int i;
 	for (i = DS_ADDR; i <= HOST_VERSION; i += 0x4) {

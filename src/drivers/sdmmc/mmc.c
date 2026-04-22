@@ -434,7 +434,9 @@ static void mmc_blockop_completion_cb(struct sdio_host_dev *sdio, int stat, stru
 int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 {
 	mmc_card_t mmc;
+	#if 0
 	struct mmc_cmd cmd = {.data = NULL};
+	#endif
 
 	/* Allocate the mmc card structure */
 	mmc = (mmc_card_t)malloc(sizeof(*mmc));

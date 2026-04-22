@@ -70,7 +70,6 @@ void CPU_L2Disable(void) {
 }
 
 void CPU_Init(void) {
-	u32 l2cr, scratch;
 	log_puts("hid");
 	/* clean up the CPU state (mainly trying to repair crap libogc does), doesn't really have anywhere better to go */
 	/* DPM/NHR on, BHT/BTIC/DCFA/SPD off */
