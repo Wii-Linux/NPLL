@@ -32,6 +32,12 @@ ELF_DoEntry:
 	ori r7, r7, (0xffff & ~(HID0_ICE | HID0_DCE))
 	and r6, r6, r7
 	mtspr HID0, r6
+	sync
+	isync
+	ori r6, r6, (HID0_ICFI | HID0_DCFI)
+	mtspr HID0, r6
+	sync
+	isync
 
 	# set up MSR
 	lis r7, 0xffff
