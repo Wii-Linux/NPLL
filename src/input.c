@@ -41,7 +41,9 @@ inputEvent_t IN_ConsumeEvent(void) {
 void IN_NewEvent(inputEvent_t ev) {
 	bool irqs;
 
-	assert(queuePos < MAX_INPUT_EVENT); /* somebody's producing too fast, or somebody's consuming too slow */
+	/* somebody's producing too fast, or somebody's consuming too slow */
+	if (queuePos >= MAX_INPUT_EVENT)
+		return; /* drop it */
 
 	irqs = IRQ_DisableSave();
 	queue[queuePos++] = ev;
