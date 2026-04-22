@@ -55,6 +55,7 @@
 #define HID2   920
 #define HID4   1011
 #define DABR   1013
+#define L2CR   1017
 
 
 /* MSR values */
@@ -88,6 +89,11 @@
 #define HID4_LPE     BIT(31 - 8) /* Reserved on 750CL */
 #define HID4_L2_CCFI BIT(31 - 11)
 #define HID4_PS2_CTL BIT(31 - 12) /* Reserved on Broadway, but on 750CL it's PS2_CTL */
+
+/* L2CR values */
+#define L2CR_L2E     BIT(31 - 0)
+#define L2CR_L2I     BIT(31 - 10)
+#define L2CR_L2IP    BIT(31 - 31)
 
 #define SETBAT_TYPE_DATA BIT(0)
 #define SETBAT_TYPE_INST BIT(1)
@@ -196,6 +202,11 @@ static inline void setbat(uint idx, uint typeMask, u32 batu, u32 batl) {
 	}
 	asm volatile ("isync; sync");
 }
+
+extern void CPU_Init(void);
+extern void CPU_L2Disable(void);
+extern void CPU_L2Enable(void);
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _CPU_H */

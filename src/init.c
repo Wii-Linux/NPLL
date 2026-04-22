@@ -4,10 +4,10 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include "npll/cpu.h"
 #include <npll/allocator.h>
 #include <npll/block.h>
 #include <npll/console.h>
+#include <npll/cpu.h>
 #include <npll/drivers.h>
 #include <npll/exceptions.h>
 #include <npll/fs.h>
@@ -68,6 +68,7 @@ void __attribute__((noreturn)) init(void) {
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		_log_puts("Detected hardware: Nintendo GameCube");
 		T_Init();
+		CPU_Init();
 		H_InitGameCube();
 		__builtin_unreachable();
 	}
@@ -85,6 +86,7 @@ void __attribute__((noreturn)) init(void) {
 		_log_puts("Detected hardware: Nintendo Wii");
 detectedWii:
 		T_Init();
+		CPU_Init();
 		H_InitWii();
 		__builtin_unreachable();
 	}
@@ -96,6 +98,7 @@ detectedWii:
 		H_ConsoleType = CONSOLE_TYPE_WII_U;
 		H_WiiURev = lt_chiprevid;
 		T_Init();
+		CPU_Init();
 		H_InitWiiU();
 		__builtin_unreachable();
 	}
@@ -110,14 +113,6 @@ detectedWii:
 void __attribute__((noreturn)) I_InitCommon(void) {
 	TRACE();
 	O_DebugInit();
-	/* clean up the CPU state (mainly trying to repair crap libogc does), doesn't really have anywhere better to go */
-	/* DPM/NHR on, BHT/BTIC/DCFA/SPD off */
-	mtspr(HID0, (mfspr(HID0) & ~(HID0_BHT | HID0_BTIC | HID0_DCFA | HID0_SPD)) | HID0_DPM | HID0_NHR);
-	/* we don't care about Paired Singles nor the Write Gather Pipe right now, sorry */
-	mtspr(HID2, mfspr(HID2) & ~(HID2_LSQE | HID2_PSE | HID2_WPE));
-	mtspr(HID4, mfspr(HID4) & ~(HID4_ST0 | HID4_L2_CCFI | HID4_LPE | HID4_PS2_CTL));
-	mtmsr(mfmsr() & ~MSR_ME);
-
 	E_Init();
 	IRQ_Init();
 	M_Init();

@@ -74,7 +74,7 @@ static inline void dcache_flush_icache_invalidate(const void *p, u32 len) {
 }
 
 
-#define sync() asm volatile("sync" ::: "memory")
+#define sync() asm volatile("sync; isync" ::: "memory")
 #define barrier() asm volatile ("" ::: "memory")
 
 #endif /* _CACHE_H */

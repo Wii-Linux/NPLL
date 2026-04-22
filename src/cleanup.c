@@ -5,6 +5,7 @@
  */
 
 #include <npll/block.h>
+#include <npll/cpu.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/fs.h>
@@ -49,6 +50,12 @@ void H_PrepareForExecEntry(void) {
 
 	/* disable IRQs */
 	IRQ_Disable();
+
+	/*
+	 * disable the L2 cache, Linux has some problems with it...
+	 * newer builds can re-enable it post-init if possible
+	 */
+	CPU_L2Disable();
 
 	/* mask and ack all IRQs */
 	switch (H_ConsoleType) {
