@@ -15,7 +15,6 @@
 
 enum logMethod L_Method = LOG_METHOD_ALL_ODEV;
 
-/* TODO: really ensure that there's nothing here we're clobbering */
 #define memlogStart (char *)0x817c0000
 static char *memlogNext = memlogStart;
 static u32 maxSize = 0x00040000;
