@@ -49,24 +49,18 @@ static struct configPartition partitions[MAX_PARTITIONS * MAX_BDEV];
 static void rootMenuRebootCB(struct menuEntry *dummy) {
 	(void)dummy;
 	assert(H_PlatOps->reboot);
-
-	/* TODO: clean up */
 	H_PlatOps->reboot();
 }
 
 static void rootMenuShutdownCB(struct menuEntry *dummy) {
 	(void)dummy;
 	assert(H_PlatOps->shutdown);
-
-	/* TODO: clean up */
 	H_PlatOps->shutdown();
 }
 
 static void rootMenuRetToLdrCB(struct menuEntry *dummy) {
 	(void)dummy;
 	assert(H_PlatOps->exit);
-
-	/* TODO: clean up */
 	H_PlatOps->exit();
 }
 
