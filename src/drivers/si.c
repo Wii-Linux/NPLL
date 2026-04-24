@@ -471,7 +471,8 @@ static void checkConnected(void) {
 	}
 
 	/*
-	 * Set up polling for all GCN controllers, don't send anything to other devices (yet)
+	 * Set up polling for all GCN controllers/keyboards, don't send anything to other
+	 * devices (yet)...
 	 * For N64 controllers, we can't possibly use hardware polling, since it has a fixed
 	 * transfer size which is incompatible with N64 controllers.  So, those are handled separately.
 	 * TODO: figure out how to get input from the other devices?
