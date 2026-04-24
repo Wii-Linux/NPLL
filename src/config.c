@@ -88,11 +88,10 @@ static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint
 /*
  * TODO: update to proper NPLL-specific format once
  * I make one....
- *
- * FIXME: should probably bounds check the title and path
  */
 int C_Probe(struct menuEntry **entriesOut) {
-	int fd, size, ret, lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
+	int fd, ret, size;
+	uint lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
 	uint entryCapacity = 0;
 	char *file, *curLine, *cur, *end, entryTitle[64], entryPath[128];
 	bool skipToEndOfLine = false, isInEntry = false, isInTitle = false, isInPath = false;
@@ -145,10 +144,14 @@ int C_Probe(struct menuEntry **entriesOut) {
 			goto cont;
 		}
 		else if (isInTitle) { /* consume title */
+			if (titleCur >= sizeof(entryTitle))
+				goto cont;
 			entryTitle[titleCur++] = *cur;
 			goto cont;
 		}
 		else if (isInPath) { /* consume path */
+			if (pathCur >= sizeof(entryPath))
+				goto cont;
 			entryPath[pathCur++] = *cur;
 			goto cont;
 		}
