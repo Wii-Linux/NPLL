@@ -82,13 +82,8 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 		 * Unlikely, but depending on the config,
 		 * we *might* just be able to set it and pray.
 		 * Might as well try...
-		 *
-		 * TODO: Use IOS exploits to set it?
-		 * Would need to implement an IPC stack, and
-		 * it assumes that we even *have* IOS...
 		 */
 		HW_AHBPROT = 0xfffffff;
-		udelay(1000 * 10); /* give it a sec to stick */
 		if (HW_AHBPROT != 0xffffffff)
 			wiiuPanic("Can't turn on AHBPROT, cannot continue."); /* well crap */
 	}
