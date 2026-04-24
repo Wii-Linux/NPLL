@@ -168,7 +168,7 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	}
 
 	memset(bdev, 0, sizeof(*bdev));
-	bdev->name = (char *)name; /* FIXME: also work for Wii U eMMC, which is on (iirc) sdhci3 */
+	bdev->name = (char *)name;
 	bdev->size = (u64)capacity;
 	bdev->blockSize = (u32)mmc_block_size(bdevToMMC(bdev));
 	bdev->drvData = mmcDev;
