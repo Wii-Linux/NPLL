@@ -5,6 +5,7 @@
  */
 
 #define MODULE "cfg"
+#include <stdlib.h>
 #include <string.h>
 #include <npll/allocator.h>
 #include <npll/elf.h>
@@ -89,13 +90,16 @@ static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint
  * TODO: update to proper NPLL-specific format once
  * I make one....
  */
-int C_Probe(struct menuEntry **entriesOut) {
+int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 	int fd, ret, size;
 	uint lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
 	uint entryCapacity = 0;
 	char *file, *curLine, *cur, *end, entryTitle[64], entryPath[128];
 	bool skipToEndOfLine = false, isInEntry = false, isInTitle = false, isInPath = false;
 	struct menuEntry *entries = NULL;
+
+	*timeoutOut = -1;
+	*defaultOut = 0;
 
 	fd = FS_Open("gumboot/gumboot.lst");
 	if (fd < 0) {
@@ -171,7 +175,13 @@ int C_Probe(struct menuEntry **entriesOut) {
 			continue;
 		}
 		else if (!isInEntry && !memcmp(curLine, "timeout ", 8)) {
-			log_puts("skipping unsupported directive \"timeout\"");
+			*timeoutOut = (int)strtol(curLine + 8, NULL, 10);
+			skipToEndOfLine = true;
+			cur += 8;
+			continue;
+		}
+		else if (!isInEntry && !memcmp(curLine, "default ", 8)) {
+			*defaultOut = (uint)strtoul(curLine + 8, NULL, 10);
 			skipToEndOfLine = true;
 			cur += 8;
 			continue;

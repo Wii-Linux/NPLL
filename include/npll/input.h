@@ -20,5 +20,6 @@ typedef u32 inputEvent_t;
 extern void IN_Init(void);
 extern inputEvent_t IN_ConsumeEvent(void);
 extern void IN_NewEvent(inputEvent_t ev);
+extern bool IN_HasReceivedInput(void);
 
 #endif /* _INPUT_H */

@@ -37,6 +37,10 @@ static uint selected = 0;
 static uint bodyScroll = 0;
 static uint curFooterLines;
 static struct menu *curMenu = NULL;
+static bool autobootActive = false;
+static bool autobootCanceled = false;
+static uint autobootTimeout = 0;
+static char autobootText[32];
 
 struct configPartition {
 	struct menuEntry *entries;
@@ -101,6 +105,35 @@ static struct menu rootMenu = {
 	.previous = NULL
 };
 
+static void updateAutobootContent(void) {
+	snprintf(autobootText, sizeof(autobootText), "Autobooting in %u second%s",
+		autobootTimeout, autobootTimeout == 1 ? "" : "s");
+	hasChanged = true;
+}
+
+static void cancelAutoboot(void) {
+	autobootCanceled = true;
+	autobootActive = false;
+	hasChanged = true;
+}
+
+static void autobootEventCB(void *arg) {
+	(void)arg;
+
+	if (!autobootActive)
+		return;
+
+	if (autobootTimeout)
+		autobootTimeout--;
+	if (autobootTimeout) {
+		updateAutobootContent();
+		return;
+	}
+
+	autobootActive = false;
+	curMenu->entries[selected]->selected(curMenu->entries[selected]);
+}
+
 static void uiRedrawWrapper(void *arg) {
 	(void)arg;
 	UI_HandleInputs();
@@ -112,6 +145,7 @@ static void uiRedrawWrapper(void *arg) {
 void UI_Init(void) {
 	memset(partitions, 0, sizeof(partitions));
 	UI_Switch(&rootMenu);
+	T_QueueRepeatingEvent(1000 * 1000, autobootEventCB, NULL);
 	T_QueueRepeatingEvent(10 * 1000, uiRedrawWrapper, NULL);
 }
 
@@ -406,6 +440,27 @@ static void drawLogs(const struct outputDevice *odev, uint logHeight) {
 	}
 }
 
+static void drawAutoboot(const struct outputDevice *odev) {
+	uint len, col;
+	const char *color = "\x1b[0m";
+
+	if (!autobootActive)
+		return;
+
+	if (autobootTimeout <= 1)
+		color = "\x1b[1m\x1b[31m";
+	else if (autobootTimeout <= 3)
+		color = "\x1b[1m\x1b[33m";
+
+	len = (uint)strlen(autobootText);
+	if (len >= odev->columns)
+		col = 1;
+	else
+		col = odev->columns - len + 1;
+
+	fctprintf(outputToDevice, (void *)odev, "\x1b[1;%uH%s%s\x1b[0m", col, color, autobootText);
+}
+
 static void drawBody(const struct outputDevice *odev, uint bodyHeight) {
 	uint i;
 	uint contentLines = menuContentLines(curMenu);
@@ -467,6 +522,7 @@ void UI_HandleInputs(void) {
 
 	ev = IN_ConsumeEvent();
 	while (ev) {
+		cancelAutoboot();
 		hasChanged = true;
 		bodyHeight = canonicalBodyHeight();
 		firstEntryLine = menuEntryBaseLine(curMenu) + selected;
@@ -545,6 +601,8 @@ void UI_Redraw(void) {
 			odev->writeStr("\r\n");
 			drawLogs(odev, logHeight);
 		}
+
+		drawAutoboot(odev);
 	}
 
 	hasChanged = false;
@@ -646,11 +704,12 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 }
 
 void UI_AddPart(struct partition *part) {
-	bool irqs;
-	int i, num;
+	bool irqs, bootNow = false;
+	int i, num, timeout;
+	uint defaultEntry;
 	struct menuEntry *entries;
 
-	num = C_Probe(&entries);
+	num = C_Probe(&entries, &timeout, &defaultEntry);
 	if (num == -1)
 		log_printf("C_Probe failed for partition %u of %s (%s)\r\n", part->index, part->bdev->name, FS_Mounted->name);
 	else if (num == 0)
@@ -664,13 +723,26 @@ void UI_AddPart(struct partition *part) {
 		for (i = num - 1; i >= 0; i--)
 			UI_PrependEntry(&rootMenu, &entries[i]);
 		numParts++;
+		if (!autobootCanceled && !IN_HasReceivedInput() && timeout >= 0 &&
+			defaultEntry < (uint)num && rootMenu.entries[defaultEntry] != &sysInfoEntry) {
+			selected = defaultEntry;
+			autobootTimeout = (uint)timeout;
+			autobootActive = true;
+			updateAutobootContent();
+			if (!autobootTimeout)
+				bootNow = true;
+		}
 		IRQ_Restore(irqs);
+		if (bootNow)
+			autobootEventCB(NULL);
 	}
 }
 
 void UI_DelPart(struct partition *part) {
 	uint i, partToDel = (uint)-1;
 	bool irqs = IRQ_DisableSave();
+
+	cancelAutoboot();
 
 	for (i = 0; i < numParts; i++) {
 		if (partitions[i].part == part) {

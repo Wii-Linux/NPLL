@@ -13,9 +13,11 @@
 
 static inputEvent_t queue[MAX_INPUT_EVENT];
 static int queuePos = 0;
+static bool hasReceivedInput = false;
 
 void IN_Init(void) {
 	memset(queue, 0, sizeof(queue));
+	hasReceivedInput = false;
 }
 
 inputEvent_t IN_ConsumeEvent(void) {
@@ -41,6 +43,8 @@ inputEvent_t IN_ConsumeEvent(void) {
 void IN_NewEvent(inputEvent_t ev) {
 	bool irqs;
 
+	hasReceivedInput = true;
+
 	/* somebody's producing too fast, or somebody's consuming too slow */
 	if (queuePos >= MAX_INPUT_EVENT)
 		return; /* drop it */
@@ -48,4 +52,8 @@ void IN_NewEvent(inputEvent_t ev) {
 	irqs = IRQ_DisableSave();
 	queue[queuePos++] = ev;
 	IRQ_Restore(irqs);
+}
+
+bool IN_HasReceivedInput(void) {
+	return hasReceivedInput;
 }

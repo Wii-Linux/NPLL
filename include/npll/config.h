@@ -9,6 +9,6 @@
 
 #include <npll/menu.h>
 
-extern int C_Probe(struct menuEntry **entriesOut);
+extern int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut);
 
 #endif /* _CONFIG_H */
