@@ -25,6 +25,7 @@
 #include <npll/hollywood/gpio.h>
 #include <npll/hollywood/ohci.h>
 #include <npll/log.h>
+#include <npll/video.h>
 #include <string.h>
 #include <npll/utils.h>
 #include "../armboot_bin.h"
@@ -260,11 +261,16 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 
 static void __attribute__((noreturn)) wiiExit(void) {
 	u32 iosVer = (u32)H_WiiBootIOS;
-	int i = 0;
+	int i = 0, ret;
 	void (*stub)(void);
+	u64 tb;
 	struct ipc_request_mini req;
 
 	IRQ_Disable();
+	L_Method = LOG_METHOD_ALL_ODEV;
+	log_printf("\x1b[1;1H\x1b[2JReloading...\r\n");
+	H_PrepareForExecEntry();
+	V_Flush();
 	if (iosVer <= 0)
 		iosVer = IOS_VALID_GUESS;
 
@@ -288,8 +294,22 @@ static void __attribute__((noreturn)) wiiExit(void) {
 		if (i >= 1000)
 			panic("IOS reload succeeded but stuck waiting for IPC");
 	}
+	udelay(5000 * 1000);
+
+	tb = mftb();
+	while (true) {
+		IOS_Reset();
+		ret = ES_Init();
+		if (!ret)
+			break;
+
+		if (T_HasElapsed(tb, 1000 * 1000))
+			panic("IOS reload succeeded and IPC is ready but IPC init failed");
+	}
+	udelay(500 * 1000);
 
 	/* IOS is reloaded and ready, hand off to the stub! */
+	log_puts("Handing off to stub...");
 	stub = (void (*)(void))(MEM1_CACHED_BASE + 0x1800);
 	stub();
 	__builtin_unreachable();
