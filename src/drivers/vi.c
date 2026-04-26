@@ -538,7 +538,7 @@ static void viDrvInit(void) {
 }
 
 static void viDrvCleanup(void) {
-	log_puts("TODO: VI Cleanup");
+	VIDEO_Shutdown();
 }
 
 static REGISTER_DRIVER(viDrv) = {
