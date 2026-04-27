@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/console.h"
 #define MODULE "CPU"
 #include <npll/cache.h>
 #include <npll/cpu.h>
@@ -76,7 +77,12 @@ void CPU_Init(void) {
 	mtspr(HID0, (mfspr(HID0) & ~(HID0_BHT | HID0_BTIC | HID0_DCFA | HID0_SPD | HID0_DPM)) | HID0_NHR);
 	/* we don't care about Paired Singles nor the Write Gather Pipe right now, sorry */
 	mtspr(HID2, mfspr(HID2) & ~(HID2_LSQE | HID2_PSE | HID2_WPE));
-	mtspr(HID4, (mfspr(HID4) & ~(HID4_ST0 | HID4_LPE | HID4_PS2_CTL)) | HID4_L2_CCFI | 0x24200000);
+
+	/* Gekko doesn't have HID4, so gate off GCN here */
+	/* ST0/LPE/(nonexistent)PS2_CTL off, L2_CCFI on, L2 Fetch Mode=64B, Bus Pipeline Depth=2, L2 2nd BCO on, L2 configured as 2-deep miss-under-miss cache */
+	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
+		mtspr(HID4, (mfspr(HID4) & ~(HID4_ST0 | HID4_LPE | HID4_PS2_CTL)) | HID4_L2_CCFI | HID4_L2FM_64B | HID4_BPD_2 | HID4_BCO | HID4_L2MUM);
+
 	mtmsr(mfmsr() & ~MSR_ME);
 
 	CPU_L2Enable();

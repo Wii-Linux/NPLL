@@ -84,11 +84,19 @@
 #define HID2_PSE  BIT(31 - 2)
 
 /* HID4 values */
-#define HID4_SBE     BIT(31 - 6)
-#define HID4_ST0     BIT(31 - 7) /* PS1_CTL on 750CL */
-#define HID4_LPE     BIT(31 - 8) /* Reserved on 750CL */
-#define HID4_L2_CCFI BIT(31 - 11)
-#define HID4_PS2_CTL BIT(31 - 12) /* Reserved on Broadway, but on 750CL it's PS2_CTL */
+#define HID4_L2FM_32B  (0u << (31 - 2))
+#define HID4_L2FM_64B  (1u << (31 - 2))
+#define HID4_L2FM_128B (2u << (31 - 2))
+#define HID4_BPD_2     (0u << (31 - 4))
+#define HID4_BPD_3     (1u << (31 - 4))
+#define HID4_BPD_4     (2u << (31 - 4))
+#define HID4_BCO       BIT(31 - 5)
+#define HID4_SBE       BIT(31 - 6)
+#define HID4_ST0       BIT(31 - 7) /* PS1_CTL on 750CL */
+#define HID4_LPE       BIT(31 - 8) /* Reserved on 750CL */
+#define HID4_L2MUM     BIT(31 - 10)
+#define HID4_L2_CCFI   BIT(31 - 11)
+#define HID4_PS2_CTL   BIT(31 - 12) /* Reserved on Broadway, but on 750CL it's PS2_CTL */
 
 /* L2CR values */
 #define L2CR_L2E     BIT(31 - 0)
