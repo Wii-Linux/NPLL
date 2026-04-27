@@ -24,8 +24,10 @@ static REGISTER_DRIVER(usbgeckoDrv);
 
 #define UG_SLOTA 0
 #define UG_SLOTB 1
+#define UG_LOAD_TIMEOUT_US (5 * 1000 * 1000)
 
 static uint slot = (uint)-1;
+static bool suppressOutput = false;
 
 static u16 usbgeckoTransaction(u16 tx, uint port) {
 	u16 rx;
@@ -49,13 +51,8 @@ static int usbgeckoRXReady(uint port) {
 	return usbgeckoTransaction(0xd000, port) & 0x0400;
 }
 
-static int usbgeckoGetChar(uint port, int retryCount) {
+static int usbgeckoGetChar(uint port) {
 	u16 data;
-	int i;
-
-	for (i = 0; i < retryCount; i++)
-		if (usbgeckoRXReady(port))
-			break;
 
 	data = usbgeckoTransaction(0xa000, port);
 	if (data & 0x0800)
@@ -64,8 +61,15 @@ static int usbgeckoGetChar(uint port, int retryCount) {
 		return -1;
 }
 
+static int usbgeckoTryGetChar(uint port) {
+	if (!usbgeckoRXReady(port))
+		return -1;
 
-static void usbgeckoWriteChar(const char c) {
+	return usbgeckoGetChar(port);
+}
+
+
+static void usbgeckoWriteCharRaw(const char c) {
 	while (!usbgeckoTXReady(slot)) {
 		/* spin */
 	}
@@ -73,39 +77,147 @@ static void usbgeckoWriteChar(const char c) {
 	usbgeckoTransaction(0xb000u | (u16)(c << 4), slot);
 }
 
-static void usbgeckoWriteStr(const char *str) {
+static void usbgeckoWriteChar(const char c) {
+	if (suppressOutput)
+		return;
+
+	usbgeckoWriteCharRaw(c);
+}
+
+static void usbgeckoWriteStrRaw(const char *str) {
 	while (*str) {
-		usbgeckoWriteChar(*str);
+		usbgeckoWriteCharRaw(*str);
 		str++;
 	}
+}
+
+static void usbgeckoWriteBufRaw(const char *buf, uint len) {
+	while (len) {
+		usbgeckoWriteCharRaw(*buf);
+		buf++;
+		len--;
+	}
+}
+
+static void usbgeckoWriteStr(const char *str) {
+	if (suppressOutput)
+		return;
+
+	usbgeckoWriteStrRaw(str);
 }
 
 static u8 tinyBuf[16] = { 0 };
 static u8 *buf;
 static uint bufIdx = 0;
 static u32 binSz = 0;
+static u64 lastRxTB = 0;
 static enum {
 	STATE_IDLE = 0,
 	STATE_GET_SIZE,
 	STATE_GET_DATA
 } usbgeckoState = STATE_IDLE;
 static const u8 bufMagic[8] = { 'N', 'P', 'L', 'L', 'B', 'I', 'N', 0x7f };
+static const char ackMagic = 0x06;
+
+static void usbgeckoAck(void) {
+	usbgeckoWriteBufRaw(&ackMagic, sizeof(ackMagic));
+}
+
+static void usbgeckoResetMagicSearch(u8 data) {
+	if (data == bufMagic[0]) {
+		tinyBuf[0] = data;
+		bufIdx = 1;
+	}
+	else {
+		bufIdx = 0;
+	}
+}
+
+static void usbgeckoResetState(void) {
+	suppressOutput = false;
+	usbgeckoState = STATE_IDLE;
+	bufIdx = 0;
+	lastRxTB = 0;
+}
+
+static int usbgeckoWaitChar(u32 timeoutUsecs) {
+	u64 startTB;
+	int ret;
+
+	startTB = mftb();
+	while (!T_HasElapsed(startTB, timeoutUsecs)) {
+		ret = usbgeckoTryGetChar(slot);
+		if (ret != -1)
+			return ret;
+	}
+
+	return -1;
+}
+
+static int usbgeckoReceivePayload(void) {
+	int ret;
+
+	/* Payload receive is deliberately blocking: the USB Gecko FIFO is small,
+	 * so returning to the normal callback loop here can drop bytes.
+	 */
+	while ((u32)bufIdx != binSz) {
+		ret = usbgeckoWaitChar(UG_LOAD_TIMEOUT_US);
+		if (ret == -1)
+			return -1;
+
+		buf[bufIdx] = (u8)(ret & 0xff);
+		bufIdx++;
+	}
+
+	return 0;
+}
+
+static void usbgeckoLaunchPayload(void) {
+	int ret;
+
+	suppressOutput = false;
+	log_puts("Preparing to launch...");
+
+	ret = ELF_CheckValid(buf);
+	if (ret) {
+		log_printf("Invalid ELF: %d\r\n", ret);
+		free(buf);
+		buf = NULL;
+		usbgeckoResetState();
+		return;
+	}
+
+	/* valid ELF, let's load it... */
+	log_printf("Launching ELF, goodbye!\r\n", ret);
+	ret = ELF_LoadMem(buf);
+	log_printf("ELF launch failed: %d\r\n", ret);
+	free(buf);
+	buf = NULL;
+	usbgeckoResetState();
+}
 
 static void usbgeckoCallback(void) {
-	int ret, retryCount = 50;
+	int ret;
 	u8 data;
+
+	if (usbgeckoState != STATE_IDLE && lastRxTB && T_HasElapsed(lastRxTB, UG_LOAD_TIMEOUT_US)) {
+		if (buf)
+			free(buf);
+		buf = NULL;
+		usbgeckoResetState();
+		log_puts("USB Gecko receive timed out");
+	}
 
 again:
 	/* try to get a byte */
-	ret = usbgeckoGetChar(slot, retryCount);
+	ret = usbgeckoTryGetChar(slot);
 
 	if (ret == -1) /* didn't get anything */
 		return;
 
 	/* we got a byte */
 	data = (u8)(ret & 0xff);
-	if (bufIdx < 10) /* for debugging */
-		log_printf("Got data: 0x%02x\r\n", data);
+	lastRxTB = mftb();
 
 	switch (usbgeckoState) {
 	case STATE_IDLE: {
@@ -114,9 +226,7 @@ again:
 
 		/* is what we have so far right? */
 		if (memcmp(tinyBuf, bufMagic, bufIdx)) {
-			/* nope :( */
-			log_puts("bogus data");
-			bufIdx = 0;
+			usbgeckoResetMagicSearch(data);
 			break;
 		}
 
@@ -125,8 +235,9 @@ again:
 			break; /* not yet */
 
 		/* yes, move on to the next state */
-		log_puts("awaiting size");
+		suppressOutput = true;
 		usbgeckoState = STATE_GET_SIZE;
+		lastRxTB = mftb();
 		bufIdx = 0;
 		break;
 	}
@@ -139,15 +250,17 @@ again:
 			break; /* not yet */
 
 		/* yes, interpret the size as a big-endian 32-bit integer */
-		binSz = ((u32 *)tinyBuf)[0];
+		binSz = ((u32)tinyBuf[0] << 24) |
+			((u32)tinyBuf[1] << 16) |
+			((u32)tinyBuf[2] << 8) |
+			(u32)tinyBuf[3];
 
 		/* is it sensical? */
 		/* a binary of 16M should never OOM, even on GameCube (though the load would fail since it'd overwrite itself) - any larger doesn't make any sense to load over USB Gecko anyways since it'd be so miserably slow */
 		if (binSz > (16 * 1024 * 1024) || binSz <= sizeof(Elf32_Ehdr)) {
 			/* hey now you can't do that */
+			usbgeckoResetState();
 			log_printf("Cannot possibly receive binary of nonsense size: %u\r\n", binSz);
-			usbgeckoState = STATE_IDLE;
-			bufIdx = 0;
 			break;
 		}
 
@@ -158,9 +271,8 @@ again:
 			buf = M_PoolAlloc(POOL_MEM2, binSz, 4);
 
 		if (!buf) {
+			usbgeckoResetState();
 			log_printf("Memory allocation for binary of size %u failed\r\n", binSz);
-			usbgeckoState = STATE_IDLE;
-			bufIdx = 0;
 			break;
 		}
 
@@ -170,35 +282,25 @@ again:
 		log_printf("Receiving binary with size: %u...\r\n", binSz);
 		usbgeckoState = STATE_GET_DATA;
 		bufIdx = 0;
+		usbgeckoAck();
+		ret = usbgeckoReceivePayload();
+		if (ret) {
+			uint received = bufIdx;
+			u32 expected = binSz;
+
+			free(buf);
+			buf = NULL;
+			usbgeckoResetState();
+			log_printf("USB Gecko receive timed out after %u/%u bytes\r\n", received, expected);
+			break;
+		}
+		usbgeckoAck();
+		usbgeckoLaunchPayload();
 		break;
 	}
 	case STATE_GET_DATA: {
-		buf[bufIdx] = data;
-		bufIdx++;
-
-		/* do we have enough? */
-		if ((u32)bufIdx != binSz)
-			break; /* not yet */
-
-		/* yes, let's do this thing */
-		log_puts("Preparing to launch...");
-
-		ret = ELF_CheckValid(buf);
-		if (ret) {
-			log_printf("Invalid ELF: %d\r\n", ret);
-			free(buf);
-			usbgeckoState = STATE_IDLE;
-			bufIdx = 0;
-			break;
-		}
-
-		/* valid ELF, let's load it... */
-		log_printf("Launching ELF, goodbye!\r\n", ret);
-		ret = ELF_LoadMem(buf);
-		log_printf("ELF launch failed: %d\r\n", ret);
-		free(buf);
-		usbgeckoState = STATE_IDLE;
-		bufIdx = 0;
+		(void)data;
+		usbgeckoResetState();
 		break;
 	}
 	}

@@ -33,6 +33,11 @@
 #include "gecko.h"
 
 #define MAX_ARGS_LEN 1024
+#define GECKO_LOAD_BLOCK_SIZE_DEFAULT (16 * 1024)
+#define GECKO_LOAD_BLOCK_SIZE_MAX (64 * 1024)
+#define GECKO_ACK_TIMEOUT_MS 5000
+#define GECKO_PROGRESS_INTERVAL (256 * 1024)
+#define GECKO_SEND_DELAY_US_DEFAULT 0
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -60,11 +65,36 @@ static const char *desc_gecko = "COM4";
 #endif
 
 static const char *envvar = "GECKOLOAD";
+static const char *delay_envvar = "GECKOLOAD_DELAY_US";
+static const char *block_envvar = "GECKOLOAD_BLOCK_SIZE";
+
+static bool wait_gecko_ack(void) {
+	static const u8 ack = 0x06;
+	u8 b;
+	int ret;
+
+	while (true) {
+		ret = gecko_read_timeout(&b, 1, GECKO_ACK_TIMEOUT_MS);
+		if (ret == 2)
+			fprintf(stderr, "timed out waiting for target acknowledgement\n");
+		if (ret)
+			return false;
+
+		if (b == ack)
+			return true;
+	}
+}
 
 static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 	u8 b[12];
+	u32 net_len;
 	u32 left, block;
 	const u8 *p;
+	const char *delay_env;
+	const char *block_env;
+	u32 send_delay_us = GECKO_SEND_DELAY_US_DEFAULT;
+	u32 block_size = GECKO_LOAD_BLOCK_SIZE_DEFAULT;
+	bool ok = true;
 
 	if (gecko_open (dev)) {
 		fprintf (stderr, "unable to open the device '%s'\n", dev);
@@ -83,8 +113,8 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 
 	/* write length */
 	printf ("sending file size (%u bytes)\n", len);
-	((u32 *)b)[0] = htonl(len);
-	gecko_flush();
+	net_len = htonl(len);
+	memcpy(b, &net_len, sizeof(net_len));
 
 	if (gecko_write (b, 4)) {
 		gecko_close ();
@@ -92,7 +122,31 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 		return false;
 	}
 
-	sleep(5);
+	printf ("waiting for NPLL to allocate the receive buffer\n");
+	if (!wait_gecko_ack()) {
+		gecko_close ();
+		fprintf (stderr, "error waiting for target acknowledgement\n");
+		return false;
+	}
+
+	delay_env = getenv(delay_envvar);
+	if (delay_env)
+		send_delay_us = strtoul(delay_env, NULL, 0);
+
+	block_env = getenv(block_envvar);
+	if (block_env) {
+		block_size = strtoul(block_env, NULL, 0);
+		if (!block_size)
+			block_size = 1;
+		if (block_size > GECKO_LOAD_BLOCK_SIZE_MAX)
+			block_size = GECKO_LOAD_BLOCK_SIZE_MAX;
+	}
+
+	printf ("using block size %u bytes", block_size);
+	if (send_delay_us)
+		printf (", delay %u us", send_delay_us);
+	printf ("\n");
+
 	printf ("sending data");
 	fflush (stdout);
 
@@ -100,25 +154,44 @@ static bool send_gecko (const char *dev, const u8 *buf, u32 len) {
 	p = buf;
 	while (left) {
 		block = left;
-		if (block > 16384)
-			block = 16384;
+		if (block > block_size)
+			block = block_size;
 		left -= block;
 
 		if (gecko_write (p, block)) {
 			fprintf (stderr, "error sending block\n");
+			ok = false;
 			break;
 		}
 		p += block;
 
-		printf (".");
-		fflush (stdout);
+		if (send_delay_us)
+			usleep(send_delay_us);
+
+		if (((u32)(p - buf) % GECKO_PROGRESS_INTERVAL) == 0) {
+			printf (".");
+			fflush (stdout);
+		}
 
 	}
 	printf ("\n");
 
+	if (ok) {
+		if (gecko_drain()) {
+			gecko_close ();
+			return false;
+		}
+
+		printf ("waiting for NPLL to finish receiving\n");
+		if (!wait_gecko_ack()) {
+			fprintf (stderr, "error waiting for final target acknowledgement\n");
+			ok = false;
+		}
+	}
+
 	gecko_close ();
 
-	return true;
+	return ok;
 }
 
 static void usage (const char *argv0) {

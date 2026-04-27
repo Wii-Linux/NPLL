@@ -26,6 +26,7 @@
 #include <errno.h>
 
 #ifndef __WIN32__
+#include <sys/select.h>
 #include <termios.h>
 #else
 #define WIN32_LEAN_AND_MEAN
@@ -123,10 +124,21 @@ void gecko_flush() {
 #endif
 }
 
+int gecko_drain() {
+#ifndef __WIN32__
+	if (tcdrain(fd_gecko)) {
+		perror ("gecko_drain");
+		return 1;
+	}
+#endif
+
+	return 0;
+}
+
 int gecko_read(void *buf, size_t count) {
 	size_t left, chunk;
 #ifndef __WIN32__
-	size_t res;
+	ssize_t res;
 #else
 	DWORD res;
 #endif
@@ -156,10 +168,50 @@ int gecko_read(void *buf, size_t count) {
 	return 0;
 }
 
+int gecko_read_timeout(void *buf, size_t count, int timeout_ms) {
+#ifndef __WIN32__
+	size_t left;
+	ssize_t res;
+	fd_set readfds;
+	struct timeval timeout;
+
+	left = count;
+	while (left) {
+		FD_ZERO(&readfds);
+		FD_SET(fd_gecko, &readfds);
+
+		timeout.tv_sec = timeout_ms / 1000;
+		timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+		res = select(fd_gecko + 1, &readfds, NULL, NULL, &timeout);
+		if (res < 0) {
+			perror("select");
+			return 1;
+		}
+		if (!res)
+			return 2;
+
+		res = read(fd_gecko, buf, left);
+		if (res < 1) {
+			perror("gecko_read");
+			return 1;
+		}
+
+		left -= res;
+		buf += res;
+	}
+
+	return 0;
+#else
+	(void)timeout_ms;
+	return gecko_read(buf, count);
+#endif
+}
+
 int gecko_write(const void *buf, size_t count) {
 	size_t left, chunk;
 #ifndef __WIN32__
-	size_t res;
+	ssize_t res;
 #else
 	DWORD res;
 #endif
@@ -172,7 +224,7 @@ int gecko_write(const void *buf, size_t count) {
 			chunk = FTDI_PACKET_SIZE;
 
 #ifndef __WIN32__
-		res = write(fd_gecko, buf, count);
+		res = write(fd_gecko, buf, chunk);
 		if (res < 1) {
 			perror("gecko_write");
 			return 1;
@@ -186,15 +238,6 @@ int gecko_write(const void *buf, size_t count) {
 
 		left -= res;
 		buf += res;
-
-#ifndef __WIN32__
-		gecko_flush();
-		if (tcdrain(fd_gecko)) {
-			perror ("gecko_drain");
-			return 1;
-		}
-		gecko_flush();
-#endif
 	}
 
 	return 0;
