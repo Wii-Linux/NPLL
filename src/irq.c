@@ -138,7 +138,6 @@ void IRQ_Init(void) {
 
 		/* unmask Latte IRQs in the Latte PI */
 		LATTE_PI_INTMR |= PI_IRQDEV_LATTE;
-		LATTE_PI_INTMR0 |= PI_IRQDEV_LATTE;
 	}
 
 	/* clear all handlers */
@@ -187,7 +186,6 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 			IRQ_Return();
 
 		ppc0intsts = LT_PPC0INT1STS;
-		PI_INTSR = PI_IRQDEV_LATTE;
 		if (ppc0intsts & HW_IRQDEV_GPIOB) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
@@ -207,11 +205,11 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 
 		ppc0intsts = LT_PPC0INT2STS;
 		if (ppc0intsts & LT_IRQDEV_SDHCI2) {
-			LT_PPC1INT2STS = LT_IRQDEV_SDHCI2;
+			LT_PPC0INT2STS = LT_IRQDEV_SDHCI2;
 			IRQ_DoHandle(IRQDEV_SDHCI2);
 		}
 		if (ppc0intsts & LT_IRQDEV_SDHCI3) {
-			LT_PPC1INT2STS = LT_IRQDEV_SDHCI3;
+			LT_PPC0INT2STS = LT_IRQDEV_SDHCI3;
 			IRQ_DoHandle(IRQDEV_SDHCI3);
 		}
 
