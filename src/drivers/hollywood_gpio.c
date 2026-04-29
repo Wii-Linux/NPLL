@@ -31,7 +31,6 @@ static void gpioIRQHandler(enum irqDev dev) {
 	in = HW_GPIOB_IN;
 	HW_GPIOB_INTFLAG = HW_GPIOB_INTFLAG;
 	HW_GPIOB_INTLVL = ~in;
-	log_printf("GPIO IRQ for device %d; prevIn = 0x%08x, curIn = 0x%08x\r\n", dev, in, prevIn);
 
 	set = in & ~prevIn;
 	clearred = prevIn & ~in;
