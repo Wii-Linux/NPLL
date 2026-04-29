@@ -779,6 +779,8 @@ static void siInit(void) {
 		regs->buf[i] = 0;
 	/* drain input buffers */
 	drainAllInBuf();
+	/* disable the stupid EXI clock speed lock that's a part of SI for some reason */
+	regs->exilk = 0;
 
 	/* cleanup device state */
 	memset(devices, 0, sizeof(devices));
