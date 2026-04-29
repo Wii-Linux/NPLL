@@ -8,6 +8,7 @@
  * Copyright (C) 2008,2009 Albert Herranz
  */
 
+#include "npll/irq.h"
 #define MODULE "GECKO"
 
 #include <npll/console.h>
@@ -31,10 +32,12 @@ static bool suppressOutput = false;
 
 static u16 usbgeckoTransaction(u16 tx, uint port) {
 	u16 rx;
+	bool irqs = IRQ_DisableSave();
 
 	H_EXISelect(port, 0, 32);
 	H_EXIRdWrImm(port, 2, &tx, &rx);
 	H_EXIDeselect(port);
+	IRQ_Restore(irqs);
 
 	return rx;
 }
