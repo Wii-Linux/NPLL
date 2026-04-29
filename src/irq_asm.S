@@ -48,25 +48,15 @@ IRQ_Return:
 
 IRQ_Disable:
 	mfmsr	r3
-	lis	r4, (~MSR_EE)@h
-	ori	r4, r4, (~MSR_EE)@l
-	and	r3, r3, r4
-	lis	r4, _irqBlr@h
-	ori	r4, r4, _irqBlr@l
-	mtsrr0	r4
-	mtsrr1	r3
-	rfi
+	# clear bit 16 aka MSR[EE]
+	rlwinm	r3, r3, 0, 17, 15
+	mtmsr	r3
+	blr
 
 IRQ_Enable:
 	mfmsr	r3
 	ori	r3, r3, MSR_EE
-	lis	r4, _irqBlr@h
-	ori	r4, r4, _irqBlr@l
-	mtsrr0	r4
-	mtsrr1	r3
-	rfi
-
-_irqBlr:
+	mtmsr	r3
 	blr
 
 .section .note.GNU-stack
