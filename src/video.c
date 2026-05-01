@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/output.h>
 #include <npll/panic.h>
@@ -29,6 +30,7 @@
 struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
 uint V_FbWidth, V_FbHeight, V_FbStride;
+static volatile bool fbLocked = false;
 
 /* 15 FPS */
 #define FRAME_MS_TARGET 66
@@ -410,6 +412,9 @@ void V_Flush(void) {
 	if (!V_ActiveDriver->flush)
 		return;
 
+	if (!V_LockFB())
+		return;
+
 	#ifdef VID_BENCH
 	tbStart[numFlushes] = mftb();
 	#endif
@@ -429,6 +434,8 @@ void V_Flush(void) {
 		numFlushes = 0;
 	}
 	#endif
+
+	V_UnlockFB();
 }
 
 static void flushWrapper(void *arg) {
@@ -462,4 +469,26 @@ void V_Register(struct videoInfo *info) {
 	#endif
 	O_AddDevice(&videoOutDev);
 	T_QueueRepeatingEvent(FRAME_MS_TARGET * 1000, flushWrapper, NULL);
+}
+
+bool V_LockFB(void) {
+	bool irqs;
+	bool locked = false;
+
+	irqs = IRQ_DisableSave();
+	if (!fbLocked) {
+		fbLocked = true;
+		locked = true;
+	}
+	IRQ_Restore(irqs);
+
+	return locked;
+}
+
+void V_UnlockFB(void) {
+	bool irqs;
+
+	irqs = IRQ_DisableSave();
+	fbLocked = false;
+	IRQ_Restore(irqs);
 }

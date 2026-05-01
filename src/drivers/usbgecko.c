@@ -199,9 +199,10 @@ static void usbgeckoLaunchPayload(void) {
 	usbgeckoResetState();
 }
 
-static void usbgeckoCallback(void) {
+static void usbgeckoPoll(void *dummy) {
 	int ret;
 	u8 data;
+	(void)dummy;
 
 	if (usbgeckoState != STATE_IDLE && lastRxTB && T_HasElapsed(lastRxTB, UG_LOAD_TIMEOUT_US)) {
 		if (buf)
@@ -354,9 +355,6 @@ static void usbgeckoInit(void) {
 		return;
 	}
 
-	/* register our callback */
-	D_AddCallback(usbgeckoCallback);
-
 	/* we're all good */
 	usbgeckoDrv.state = DRIVER_STATE_READY;
 
@@ -365,10 +363,13 @@ static void usbgeckoInit(void) {
 	usbgeckoWriteChar('\r');
 	usbgeckoWriteChar('\n');
 	O_AddDevice(&outDev);
+
+	/* register our timed event after the driver is fully installed */
+	T_QueueRepeatingEvent(10 * 1000, usbgeckoPoll, NULL);
 }
 
 static void usbgeckoCleanup(void) {
-	D_RemoveCallback(usbgeckoCallback);
+	O_RemoveDevice(&outDev);
 	usbgeckoDrv.state = DRIVER_STATE_NOT_READY;
 }
 

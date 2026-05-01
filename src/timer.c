@@ -25,10 +25,12 @@ struct repeatingEvent {
 };
 
 #define MAX_EVENTS 32
+#define DEC_IDLE 0x7fffffff
 
 static struct timedEvent events[MAX_EVENTS];
 static struct repeatingEvent repeatingEvents[MAX_EVENTS];
 uint numRepeatingEvents = 0;
+static bool eventsEnabled = false;
 
 /* bus clock / 4 */
 static u32 possibleTicksPerUsec[] = {
@@ -63,6 +65,8 @@ void udelay(u32 usec) {
 void T_Init(void) {
 	ticksPerUsec = possibleTicksPerUsec[H_ConsoleType];
 	memset(events, 0, sizeof(events));
+	eventsEnabled = false;
+	mtdec(DEC_IDLE);
 }
 
 static int latestQueuedEvent(void) {
@@ -86,19 +90,38 @@ static int eventIdxForTB(u64 tb) {
 	return i;
 }
 
+static void programNextDEC(u64 now) {
+	u64 delta;
+
+	if (!events[0].callback) {
+		mtdec(DEC_IDLE);
+		return;
+	}
+
+	if (events[0].fireTB <= now) {
+		mtdec(1);
+		return;
+	}
+
+	delta = events[0].fireTB - now;
+	if (delta > DEC_IDLE)
+		delta = DEC_IDLE;
+	mtdec((u32)delta);
+}
+
 void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 	int idx, max;
 	bool irqs;
-	u64 fireTB = mftb() + (fireInUsecs * ticksPerUsec);
+	u64 fireTB = mftb() + ((u64)fireInUsecs * ticksPerUsec);
 
 	irqs = IRQ_DisableSave();
 
 	max = latestQueuedEvent();
 	idx = eventIdxForTB(fireTB);
-	assert_msg(idx != MAX_EVENTS, "T_QueueEvent: events overflow");
+	assert_msg(max != MAX_EVENTS - 1, "T_QueueEvent: events overflow");
 
 	/* shift queue forward to make room */
-	if (max != -1) /* don't shift nothing */
+	if (max != -1 && idx <= max) /* don't shift nothing */
 		memmove(&events[idx + 1], &events[idx], (uint)(max - idx + 1) * sizeof(struct timedEvent));
 
 	/* insert the event */
@@ -107,9 +130,18 @@ void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
 	events[idx].cbData = cbData;
 
 	/* reprogram DEC if this is the first queued event */
-	if (idx == 0)
-		mtdec((u32)(events[0].fireTB - mftb()));
+	if (eventsEnabled && idx == 0)
+		programNextDEC(mftb());
 
+	IRQ_Restore(irqs);
+}
+
+void T_EnableEvents(void) {
+	bool irqs;
+
+	irqs = IRQ_DisableSave();
+	eventsEnabled = true;
+	programNextDEC(mftb());
 	IRQ_Restore(irqs);
 }
 
@@ -132,27 +164,40 @@ void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbDa
 void T_DECHandler(void) {
 	u64 tb;
 	struct timedEvent ev;
+	bool irqs;
 
 	/* consume all pending events */
 	while (true) {
+		irqs = IRQ_DisableSave();
 		tb = mftb();
-		if (tb < events[0].fireTB || !events[0].callback)
+		if (!eventsEnabled) {
+			mtdec(DEC_IDLE);
+			IRQ_Restore(irqs);
 			break;
+		}
+		if (!events[0].callback || tb < events[0].fireTB) {
+			programNextDEC(tb);
+			IRQ_Restore(irqs);
+			break;
+		}
 
 		/* stash the event */
 		memcpy(&ev, &events[0], sizeof(struct timedEvent));
 
 		/* shift list forward */
 		memmove(&events[0], &events[1], sizeof(events) - sizeof(struct timedEvent));
+		memset(&events[MAX_EVENTS - 1], 0, sizeof(struct timedEvent));
+
+		/*
+		 * If the next event was already due when we entered this pass,
+		 * drain it after this callback to preserve event order.
+		 */
+		if (events[0].callback && events[0].fireTB <= tb)
+			mtdec(DEC_IDLE);
+		else
+			programNextDEC(tb);
+		IRQ_Enable();
+
 		ev.callback(ev.cbData);
 	}
-
-	/*
-	 * set DEC to the next callback if we have something else in the queue,
-	 * else set it to the max possible value
-	 */
-	if (events[0].callback)
-		mtdec((u32)(events[0].fireTB - mftb()));
-	else
-		mtdec(0xffffffff);
 }

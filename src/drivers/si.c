@@ -710,8 +710,9 @@ static void probeN64Pad(uint chan) {
 	devices[chan].n64_pad.lastTB = lastTB;
 }
 
-static void siCallback(void) {
+static void siCallback(void *dummy) {
 	uint i;
+	(void)dummy;
 
 	/* re-probe the ports to find connections/disconnections periodically */
 	if (T_HasElapsed(lastConnectedCheck, 250 * 1000)) {
@@ -759,9 +760,6 @@ static void siInit(void) {
 		assert_unreachable();
 	}
 
-	/* register our callback */
-	D_AddCallback(siCallback);
-
 	/*
 	 * Reset and sanitize everything
 	 */
@@ -785,12 +783,15 @@ static void siInit(void) {
 	/* cleanup device state */
 	memset(devices, 0, sizeof(devices));
 
-	/* initial check which controllers are connected */
+	/* initial check of which controllers are connected */
 	checkConnected();
 	lastConnectedCheck = mftb();
 
 	/* we're all good */
 	siDrv.state = DRIVER_STATE_READY;
+
+	/* register our timed event after all SI state is coherent */
+	T_QueueRepeatingEvent(10 * 1000, siCallback, NULL);
 }
 
 static REGISTER_DRIVER(siDrv) = {

@@ -8,15 +8,10 @@
 
 #include <npll/types.h>
 #include <npll/drivers.h>
-#include <npll/panic.h>
 #include <npll/log.h>
-#include <npll/irq.h>
 #include <npll/utils.h>
 
-#define MAX_CALLBACKS 64
-
 u8 D_DriverMask;
-static drvCallback_t callbacks[MAX_CALLBACKS];
 
 static inline const char *D_StateToStr(enum driverState state) {
 	switch (state) {
@@ -71,44 +66,5 @@ void D_Init(void) {
 noload:
 			curDriver++;
 		}
-	}
-}
-
-void D_AddCallback(drvCallback_t cb) {
-	int i;
-	bool irqs;
-
-	for (i = 0; i < MAX_CALLBACKS; i++) {
-		if (!callbacks[i]) {
-			irqs = IRQ_DisableSave();
-			callbacks[i] = cb;
-			IRQ_Restore(irqs);
-			return;
-		}
-	}
-	panic("Out of callback slots");
-}
-
-
-void D_RemoveCallback(drvCallback_t cb) {
-	int i;
-	bool irqs;
-
-	for (i = 0; i < MAX_CALLBACKS; i++) {
-		if (callbacks[i] == cb) {
-			irqs = IRQ_DisableSave();
-			callbacks[i] = NULL;
-			IRQ_Restore(irqs);
-			return;
-		}
-	}
-	log_printf("WARNING: Tried to remove nonexistant callback %p\r\n", cb);
-}
-
-void D_RunCallbacks(void) {
-	int i;
-	for (i = 0; i < MAX_CALLBACKS; i++) {
-		if (callbacks[i])
-			callbacks[i]();
 	}
 }

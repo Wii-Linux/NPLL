@@ -115,6 +115,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	O_DebugInit();
 	E_Init();
 	IRQ_Init();
+	IRQ_Enable();
 	M_Init();
 	B_Init();
 	FS_Init();
@@ -123,7 +124,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	L_Method = LOG_METHOD_MENU_WINDOW;
 	#endif
 	D_Init();
-	IRQ_Enable();
+	T_EnableEvents();
 	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();

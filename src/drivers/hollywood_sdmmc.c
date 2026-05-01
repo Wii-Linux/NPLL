@@ -18,6 +18,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 #include "sdmmc/sdhc.h"
@@ -178,9 +179,10 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	B_Register(bdev);
 }
 
-static void sdmmcCB(void) {
+static void sdmmcConnectionCheck(void *dummy) {
 	u32 pstate;
 	int ret;
+	(void)dummy;
 	if (!checkConnected)
 		return;
 
@@ -251,7 +253,6 @@ static void sdmmcInit(void) {
 	else
 		maxHC = 2;
 
-	D_AddCallback(sdmmcCB);
 	IRQ_RegisterHandler(IRQDEV_SDHCI0, sdmmcIRQ);
 	IRQ_RegisterHandler(IRQDEV_SDHCI1, sdmmcIRQ);
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -302,6 +303,8 @@ static void sdmmcInit(void) {
 	IRQ_Unmask(IRQDEV_SDHCI1);
 	IRQ_Unmask(IRQDEV_SDHCI2);
 	IRQ_Unmask(IRQDEV_SDHCI3);
+
+	T_QueueRepeatingEvent(100 * 1000, sdmmcConnectionCheck, NULL);
 }
 
 static void sdmmcCleanup(void) {

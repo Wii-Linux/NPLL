@@ -31,6 +31,7 @@ static inline void mtdec(u32 val) {
 
 extern void udelay(u32 usec);
 extern void T_Init(void);
+extern void T_EnableEvents(void);
 extern bool T_HasElapsed(u64 startTB, u32 usecSince);
 extern void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData);
 extern void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData);

@@ -53,7 +53,9 @@ struct exceptionFrame {
 	u32 dsisr;
 };
 
-static struct exceptionFrame exceptionFrames[8];
+#define MAX_EXCEPTION_RECURSION 32
+
+static struct exceptionFrame exceptionFrames[MAX_EXCEPTION_RECURSION];
 static uint exceptionRecursionCount = 0;
 
 void __attribute__((noreturn)) E_Handler(int exception) {
@@ -68,9 +70,12 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 		__builtin_unreachable();
 	}
 	else if (exception == 0x0900) {
+		if (exceptionRecursionCount >= MAX_EXCEPTION_RECURSION)
+			panic("DEC exception recursion overflow");
 		memcpy(&exceptionFrames[exceptionRecursionCount++], frame, sizeof(struct exceptionFrame));
 		IRQ_Enable();
 		T_DECHandler();
+		IRQ_Disable();
 		memcpy(frame, &exceptionFrames[--exceptionRecursionCount], sizeof(struct exceptionFrame));
 		IRQ_Return();
 		__builtin_unreachable();

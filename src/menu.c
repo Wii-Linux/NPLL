@@ -567,6 +567,11 @@ void UI_Redraw(void) {
 	if (__likely(!hasChanged))
 		return;
 
+	if (!V_LockFB())
+		return;
+
+	hasChanged = false;
+
 	normalizeMenuState();
 	headerLineCount = headerLines(curMenu);
 
@@ -604,8 +609,7 @@ void UI_Redraw(void) {
 
 		drawAutoboot(odev);
 	}
-
-	hasChanged = false;
+	V_UnlockFB();
 }
 
 void UI_Switch(struct menu *m) {

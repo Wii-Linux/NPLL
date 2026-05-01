@@ -7,6 +7,7 @@
 #ifndef _VIDEO_H
 #define _VIDEO_H
 
+#include <stdbool.h>
 #include <npll/drivers.h>
 #include <npll/types.h>
 
@@ -20,6 +21,8 @@ struct videoInfo {
 
 extern void V_Flush(void);
 extern void V_Register(struct videoInfo *info);
+extern bool V_LockFB(void);
+extern void V_UnlockFB(void);
 
 extern struct videoInfo *V_ActiveDriver;
 extern u32 *V_FbPtr;

@@ -1,15 +1,13 @@
 /*
  * NPLL - Driver helpers
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _DRIVERS_H
 #define _DRIVERS_H
 
 #include <npll/types.h>
-
-typedef void (*drvCallback_t)(void);
 
 enum driverState {
 	DRIVER_STATE_NOT_READY,
@@ -59,21 +57,5 @@ extern u8 D_DriverMask;
  * Initialize all possible drivers
  */
 extern void D_Init(void);
-
-/*
- * Add a callback to be processed during the main loop
- */
-extern void D_AddCallback(drvCallback_t cb);
-
-/*
- * Remove a callback from being processed during the main loop
- */
-extern void D_RemoveCallback(drvCallback_t cb);
-
-/*
- * Run all callbacks
- */
-extern void D_RunCallbacks(void);
-
 
 #endif /* _DRIVERS_H */
