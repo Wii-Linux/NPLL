@@ -1,5 +1,5 @@
 /*
- * NPLL - Drivers - Hollywood SDMMC
+ * NPLL - Drivers - Hollywood/Latte Hardware - SDMMC
  *
  * Copyright (C) 2025-2026 Techflash
  */
@@ -76,76 +76,32 @@ static const char *bdevNames[2] = {
 	"sdhci2"
 };
 
-/* TODO: maybe move alignment handling into B_Read? */
-static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
-	u8 ALIGN(32) tmp[512];
-	uint blkSize;
-	size_t ret, startBlock, remaining, headSkip, headBytes, alignedBlocks, tailBytes;
-
-	/* precompute a bunch of junk */
-	blkSize = bdev->blockSize;
-	startBlock = (size_t)(off / blkSize);
-	remaining = len;
-	headSkip = (size_t)(off % blkSize);
-	headBytes = alignedBlocks = tailBytes = 0;
-
-	//log_printf("read: dest=0x%08x, SB=%u, len=%u, HS=%u, HB=%u\r\n", dest, startBlock, len, headSkip, headBytes);
-
-	/* destination buffer must be 32B aligned else the HC locks up */
-	if ((u32)dest & 0x1f) {
-		log_puts("sdmmcRead: cannot use unaligned buffer!!");
-		return -1;
+static const struct blockTransfer sdmmcTransfers[] = {
+	{
+		.size = 512,
+		.mode = BLOCK_TRANSFER_MULTIPLE,
+		.dmaAlign = 32
 	}
+};
+
+static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
+	uint blkSize;
+	size_t ret, startBlock, nblocks;
 
 	if (!bdevToMMC(bdev)) {
 		log_puts("sdmmcRead: bogus bdev");
 		return -1;
 	}
 
-	/* if we have an unaligned first block, read it separately */
-	if (headSkip) {
-		dcache_invalidate(tmp, sizeof(tmp));
-		ret = (size_t)mmc_block_read(bdevToMMC(bdev), startBlock, 1, tmp,
-			(uintptr_t)virtToPhys(tmp), NULL, NULL);
-		if (ret != blkSize)
-			return -1;
+	blkSize = bdev->blockSize;
+	startBlock = (size_t)(off / blkSize);
+	nblocks = len / blkSize;
 
-		headBytes = blkSize - headSkip;
-		if (headBytes > remaining)
-			headBytes = remaining;
-
-		memcpy(dest, tmp + headSkip, headBytes);
-
-		dest += headBytes;
-		remaining -= headBytes;
-		startBlock++;
-	}
-
-	alignedBlocks = remaining / blkSize;
-	tailBytes = remaining % blkSize;
-
-	/* read the remaining aligned portions in one pass, if any */
-	if (alignedBlocks) {
-		dcache_invalidate(dest, alignedBlocks * blkSize);
-		ret = (size_t)mmc_block_read(bdevToMMC(bdev), startBlock, alignedBlocks, dest,
-			(uintptr_t)virtToPhys(dest), NULL, NULL);
-		if (ret != alignedBlocks * blkSize)
-			return -1;
-
-		dest += alignedBlocks * blkSize;
-		startBlock += alignedBlocks;
-	}
-
-	/* if we have an unaligned last block, read it separately */
-	if (tailBytes) {
-		dcache_invalidate(tmp, sizeof(tmp));
-		ret = (size_t)mmc_block_read(bdevToMMC(bdev), startBlock, 1, tmp,
-			(uintptr_t)virtToPhys(tmp), NULL, NULL);
-		if (ret != blkSize)
-			return -1;
-
-		memcpy(dest, tmp, tailBytes);
-	}
+	dcache_invalidate(dest, len);
+	ret = (size_t)mmc_block_read(bdevToMMC(bdev), startBlock, nblocks, dest,
+		(uintptr_t)virtToPhys(dest), NULL, NULL);
+	if (ret != len)
+		return -1;
 
 	return (ssize_t)len;
 }
@@ -173,6 +129,10 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	bdev->size = (u64)capacity;
 	bdev->blockSize = (u32)mmc_block_size(bdevToMMC(bdev));
 	bdev->drvData = mmcDev;
+	bdev->transfers = sdmmcTransfers;
+	bdev->numTransfers = sizeof(sdmmcTransfers) / sizeof(sdmmcTransfers[0]);
+	bdev->blockAlignMode = BLOCK_ALIGN_BOUNCE;
+	bdev->dmaAlignMode = BLOCK_ALIGN_BOUNCE;
 	bdev->read = sdmmcRead;
 	bdev->write = sdmmcWrite;
 

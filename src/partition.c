@@ -30,12 +30,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 
 	mbr = (struct mbr *)_mbr;
 
-	if (!bdev->read) {
-		log_puts("bdev has no read functionality????");
-		return 0;
-	}
-
-	ret = bdev->read(bdev, _mbr, 512, 0);
+	ret = B_ReadDevice(bdev, _mbr, 512, 0);
 	if (ret != 512) {
 		log_printf("read failed trying to probe for MBR: %d\r\n", ret);
 		return 0;
@@ -86,7 +81,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 	while (extendedOff) {
 		log_printf("consuming extended partition @ 0x%llx, count=%d\r\n", extendedOff, count);
 
-		ret = bdev->read(bdev, _mbr, 512, extendedOff);
+		ret = B_ReadDevice(bdev, _mbr, 512, extendedOff);
 		if (ret != 512) {
 			log_printf("read failed trying to probe for extended partitions: %d\r\n", ret);
 			return count; /* we at least got something */

@@ -13,6 +13,33 @@
 #define MAX_BDEV 16
 #define MAX_PARTITIONS 32
 
+enum blockAlignmentMode {
+	/* The caller's request must already satisfy the relevant constraint. */
+	BLOCK_ALIGN_REJECT = 0,
+
+	/* The block core may use bounce buffers/read-modify-write cycles. */
+	BLOCK_ALIGN_BOUNCE
+};
+
+enum blockTransferMode {
+	/* Requests must be exactly this size. */
+	BLOCK_TRANSFER_EXACT = 0,
+
+	/* Requests may be any multiple of this size. */
+	BLOCK_TRANSFER_MULTIPLE
+};
+
+struct blockTransfer {
+	/* atomic transfer size in bytes */
+	u32 size;
+
+	/* whether size is exact or repeatable */
+	enum blockTransferMode mode;
+
+	/* required buffer alignment in bytes, or 0 for no special alignment */
+	u32 dmaAlign;
+};
+
 struct blockDevice {
 	/* name of the block device */
 	char *name;
@@ -25,6 +52,16 @@ struct blockDevice {
 
 	/* optional driver-specific data */
 	void *drvData;
+
+	/* supported transfer units */
+	const struct blockTransfer *transfers;
+	uint numTransfers;
+
+	/* how the core should handle unsupported offset/length alignment */
+	enum blockAlignmentMode blockAlignMode;
+
+	/* how the core should handle buffers that do not satisfy dmaAlign */
+	enum blockAlignmentMode dmaAlignMode;
 
 	/* block I/O operations */
 	ssize_t (*read)(struct blockDevice *bdev, void *dest, size_t len, u64 off);
@@ -54,6 +91,12 @@ extern void B_Register(struct blockDevice *bdev);
 
 /* unregister a block device */
 extern void B_Unregister(const struct blockDevice *bdev);
+
+/* read from a raw block device */
+extern ssize_t B_ReadDevice(struct blockDevice *bdev, void *dest, size_t len, u64 off);
+
+/* write to a raw block device */
+extern ssize_t B_WriteDevice(struct blockDevice *bdev, const void *src, size_t len, u64 off);
 
 /* read from a partition (offsets are relative to the partition start) */
 extern ssize_t B_Read(struct partition *part, void *dest, size_t len, u64 off);
