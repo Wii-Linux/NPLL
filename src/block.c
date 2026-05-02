@@ -244,7 +244,8 @@ void B_Register(struct blockDevice *bdev) {
 	assert_msg(addrIsValidCached((void *)bdev), "block: invalid device passed to B_Register");
 	assert_msg(findDev(bdev) == -1, "block: registering already-registered device");
 
-	P_ProbePartitions(bdev);
+	if (bdev->probePartitions)
+		P_ProbePartitions(bdev);
 
 	irqs = IRQ_DisableSave();
 	B_Devices[B_NumDevices++] = bdev;
@@ -286,7 +287,8 @@ void B_Unregister(const struct blockDevice *bdev) {
 			FS_Unmount();
 
 		UI_DelPart(bdev->partitions[i]);
-		free(bdev->partitions[i]);
+		if (bdev->probePartitions)
+			free(bdev->partitions[i]);
 	}
 
 	size = (uint)(MAX_BDEV - idx - 1) * sizeof(struct blockDevice *);

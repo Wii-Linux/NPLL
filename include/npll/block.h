@@ -70,6 +70,7 @@ struct blockDevice {
 	/* partitions on this device */
 	uint numPartitions;
 	struct partition *partitions[MAX_PARTITIONS];
+	bool probePartitions;
 };
 
 /* registered block devices */

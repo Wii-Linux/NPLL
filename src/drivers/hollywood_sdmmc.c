@@ -135,6 +135,8 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	bdev->dmaAlignMode = BLOCK_ALIGN_BOUNCE;
 	bdev->read = sdmmcRead;
 	bdev->write = sdmmcWrite;
+	bdev->probePartitions = true;
+
 
 	B_Register(bdev);
 }
