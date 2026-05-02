@@ -137,7 +137,7 @@ static void autobootEventCB(void *arg) {
 static void uiRedrawWrapper(void *arg) {
 	(void)arg;
 	UI_HandleInputs();
-	#ifndef DEBUG_NO_MENU
+	#ifndef DEBUG_ONLY_LOGS
 	UI_Redraw();
 	#endif
 }
