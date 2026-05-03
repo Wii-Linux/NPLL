@@ -40,13 +40,6 @@ static int findDev(const struct blockDevice *bdev) {
 	return -1;
 }
 
-static bool ptrAligned(const void *ptr, u32 align) {
-	if (!align)
-		return true;
-
-	return ((uintptr_t)ptr % align) == 0;
-}
-
 static bool transferSupports(const struct blockTransfer *xfer, size_t len, u64 off) {
 	if (!xfer->size || (off % xfer->size))
 		return false;
@@ -87,19 +80,6 @@ static const struct blockTransfer *selectTransfer(const struct blockDevice *bdev
 	return best;
 }
 
-static inline u64 alignDownU64(u64 val, u32 align) {
-	return val - (val % align);
-}
-
-static inline u64 alignUpU64(u64 val, u32 align) {
-	u64 rem;
-
-	rem = val % align;
-	if (!rem)
-		return val;
-
-	return val + (align - rem);
-}
 
 static ssize_t bounceDMA(struct blockDevice *bdev, const struct blockTransfer *xfer, void *buf, size_t len, u64 off, bool write) {
 	u8 *tmp;

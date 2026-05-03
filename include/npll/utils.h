@@ -139,4 +139,41 @@ static inline bool addrIsValidPhys(void *_addr) {
 #define VISIBLE __attribute__((visibility("default")))
 #define HIDDEN __attribute__((visibility("hidden")))
 
+
+static inline bool ptrAligned(const void *ptr, u32 align) {
+	if (!align)
+		return true;
+
+	return ((u32)ptr % align) == 0;
+}
+
+static inline u64 alignDownU64(u64 val, u32 align) {
+	return val - (val % align);
+}
+
+static inline u64 alignUpU64(u64 val, u32 align) {
+	u64 rem;
+
+	rem = val % align;
+	if (!rem)
+		return val;
+
+	return val + (align - rem);
+}
+
+static inline u32 alignDownU32(u32 val, u32 align) {
+	return val - (val % align);
+}
+
+static inline u32 alignUpU32(u32 val, u32 align) {
+	u32 rem;
+
+	rem = val % align;
+	if (!rem)
+		return val;
+
+	return val + (align - rem);
+}
+
+
 #endif /* _UTILS_H */
