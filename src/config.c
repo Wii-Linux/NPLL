@@ -272,5 +272,5 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 		*entriesOut = NULL;
 
 	free(file);
-	return numEntries;
+	return (int)numEntries;
 }
