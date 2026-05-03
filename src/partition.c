@@ -78,7 +78,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 	}
 
 	/* consume all extended partitions */
-	while (extendedOff) {
+	while (extendedOff && count < MAX_PARTITIONS) {
 		log_printf("consuming extended partition @ 0x%llx, count=%d\r\n", extendedOff, count);
 
 		ret = B_ReadDevice(bdev, _mbr, 512, extendedOff);
@@ -94,7 +94,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 
 		/* consume the given partitions */
 		extIdx = -1;
-		for (i = 0; i < 4; i++) {
+		for (i = 0; i < 4 && count < MAX_PARTITIONS; i++) {
 			if (entries[i].type == 0 || entries[i].sectors == 0)
 				continue;
 
