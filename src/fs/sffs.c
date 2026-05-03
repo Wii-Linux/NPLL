@@ -307,7 +307,6 @@ static ssize_t sffsRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 		else
 			ret = H_AESDecrypt(encBuf, decBuf, NULL, NULL, NAND_PAGE_SIZE);
 
-		ret = H_AESDecrypt(encBuf, decBuf, iv, key, NAND_PAGE_SIZE);
 		if (ret)
 			return total > 0 ? (ssize_t)total : ret;
 
