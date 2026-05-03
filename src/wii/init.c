@@ -149,6 +149,9 @@ static void armbootnow(void) {
 		}
 	}
 
+	if (!trampoline_pointer)
+		panic("ARMBootNow: Couldn't find LaunchIOS trampoline pointer");
+
 	/* write the pointer to our code there instead */
 	sram[trampoline_off] = (u32)virtToPhys(armbuf) + armbuf[0];
 	log_printf("set trampoline ptr to %08x\r\n", sram[trampoline_off]);
