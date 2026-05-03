@@ -83,7 +83,7 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 		 * we *might* just be able to set it and pray.
 		 * Might as well try...
 		 */
-		HW_AHBPROT = 0xfffffff;
+		HW_AHBPROT = 0xffffffff;
 		if (HW_AHBPROT != 0xffffffff)
 			wiiuPanic("Can't turn on AHBPROT, cannot continue."); /* well crap */
 	}
