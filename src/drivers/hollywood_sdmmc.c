@@ -211,7 +211,7 @@ static void sdmmcInit(void) {
 	memset(sdmmcRegistered, 0, sizeof(sdmmcRegistered));
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U)
-		maxHC = 3;
+		maxHC = 4;
 	else
 		maxHC = 2;
 
