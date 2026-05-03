@@ -1,7 +1,7 @@
 /*
  * NPLL - libc - string
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Based on code from EverythingNet:
  * Copyright (C) 2023-2025 Techflash
@@ -102,7 +102,7 @@ size_t strlen(const char *str) {
 
 size_t strnlen(const char *str, size_t maxlen) {
 	size_t i = 0;
-	for (; str[i] != '\0' || i != maxlen; i++);
+	for (; str[i] != '\0' && i != maxlen; i++);
 	return i;
 }
 
