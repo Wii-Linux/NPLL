@@ -44,11 +44,15 @@ static void otpInit(void) {
 	otpDrv.state = DRIVER_STATE_READY;
 }
 
+static void otpCleanup(void) {
+	otpDrv.state = DRIVER_STATE_NOT_READY;
+}
+
 static REGISTER_DRIVER(otpDrv) = {
 	.name = "Hollywood/Latte OTP / eFuse Memory",
 	.mask = DRIVER_ALLOW_WII | DRIVER_ALLOW_WIIU,
 	.state = DRIVER_STATE_NOT_READY,
 	.type = DRIVER_TYPE_OTHER,
 	.init = otpInit,
-	.cleanup = NULL
+	.cleanup = otpCleanup
 };

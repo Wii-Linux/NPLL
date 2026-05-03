@@ -225,6 +225,7 @@ static void nandInit(void) {
 static void nandCleanup(void) {
 	B_Unregister(&nandBdev);
 	nandReset();
+	nandDrv.state = DRIVER_STATE_NOT_READY;
 }
 
 static REGISTER_DRIVER(nandDrv) = {

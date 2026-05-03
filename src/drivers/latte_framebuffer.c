@@ -68,6 +68,7 @@ static void fbInit(void) {
 
 static void fbCleanup(void) {
 	free(shadowFb);
+	fbDrv.state = DRIVER_STATE_NOT_READY;
 }
 
 static REGISTER_DRIVER(fbDrv) = {

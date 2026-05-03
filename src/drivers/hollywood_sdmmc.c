@@ -291,6 +291,7 @@ static void sdmmcCleanup(void) {
 		free(mmcDev[1]);
 		B_Unregister(&sdmmcBdev[1]);
 	}
+	sdmmcDrv.state = DRIVER_STATE_NOT_READY;
 }
 
 static REGISTER_DRIVER(sdmmcDrv) = {

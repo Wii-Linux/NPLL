@@ -538,7 +538,7 @@ static void viDrvInit(void) {
 }
 
 static void viDrvCleanup(void) {
-	VIDEO_Shutdown();
+	viFlush();
 }
 
 static REGISTER_DRIVER(viDrv) = {

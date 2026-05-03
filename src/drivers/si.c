@@ -794,11 +794,15 @@ static void siInit(void) {
 	T_QueueRepeatingEvent(10 * 1000, siCallback, NULL);
 }
 
+static void siCleanup(void) {
+	siDrv.state = DRIVER_STATE_NOT_READY;
+}
+
 static REGISTER_DRIVER(siDrv) = {
 	.name = "Serial Interface",
 	.mask = DRIVER_ALLOW_ALL,
 	.state = DRIVER_STATE_NOT_READY,
 	.type = DRIVER_TYPE_INPUT,
 	.init = siInit,
-	.cleanup = NULL
+	.cleanup = siCleanup
 };

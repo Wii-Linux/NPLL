@@ -87,11 +87,15 @@ static void drcInit(void) {
 	O_AddDevice(&outDev);
 }
 
+static void drcCleanup(void) {
+	drcDrv.state = DRIVER_STATE_NOT_READY;
+}
+
 static REGISTER_DRIVER(drcDrv) = {
 	.name = "Wii U GamePad Text Console",
 	.mask = DRIVER_ALLOW_WIIU,
 	.state = DRIVER_STATE_NOT_READY,
 	.type = DRIVER_TYPE_GFX,
 	.init = drcInit,
-	.cleanup = NULL
+	.cleanup = drcCleanup
 };

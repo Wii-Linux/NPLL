@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include <stdio.h>
 #include <npll/block.h>
 #include <npll/cpu.h>
 #include <npll/console.h>
@@ -11,6 +12,7 @@
 #include <npll/fs.h>
 #include <npll/input.h>
 #include <npll/irq.h>
+#include <npll/log_internal.h>
 #include <npll/output.h>
 #include <npll/regs.h>
 #include <npll/video.h>
@@ -20,36 +22,51 @@
  * since the allocator can only free the most recent allocation
  */
 void H_PrepareForExecEntry(void) {
-	uint i;
+	uint curType, firstType, lastType;
 	struct driver *curDriver;
+
+	L_Method = LOG_METHOD_ALL_ODEV;
+	printf("\x1b[1;1H\x1b[2J");
+
+	/* disable IRQs */
+	IRQ_Disable();
 
 	/* unmount the current FS */
 	FS_Unmount();
 
-	/* Unregister all block devices, and as such, any partitions associated with them as well */
-	for (i = B_NumDevices; i > 0; i--) {
-		if (B_Devices[i])
-			B_Unregister(B_Devices[i]);
-	}
+	/* shutdown all drivers in the reverse order */
+	lastType = DRIVER_TYPE_BLOCK;
+	firstType = DRIVER_TYPE_END - 1;
+	curType = firstType;
 
-	/* do one final V_Flush */
-	V_Flush();
+	for (; curType >= lastType; curType--) {
+		curDriver = __drivers_start;
+		while ((u32)curDriver < ((u32)__drivers_end) - 1) {
+			if (curDriver->state == DRIVER_STATE_READY &&
+			    curDriver->type == curType && curDriver->cleanup)
+				curDriver->cleanup();
 
-	/* shutdown all remaining drivers */
-	curDriver = __drivers_start;
-	while ((u32)curDriver < ((u32)__drivers_end) - 1) {
-		if (curDriver->state == DRIVER_STATE_READY && curDriver->cleanup)
-			curDriver->cleanup();
-
-		curDriver++;
+			curDriver++;
+		}
 	}
 
 	/* shutdown the block and FS layers */
 	FS_Shutdown();
 	B_Shutdown();
 
-	/* disable IRQs */
-	IRQ_Disable();
+	/* kill off the last of them */
+	lastType = DRIVER_TYPE_START + 1;
+	curType = firstType;
+	for (; curType >= lastType; curType--) {
+		curDriver = __drivers_start;
+		while ((u32)curDriver < ((u32)__drivers_end) - 1) {
+			if (curDriver->state == DRIVER_STATE_READY &&
+			    curDriver->type == curType && curDriver->cleanup)
+				curDriver->cleanup();
+
+			curDriver++;
+		}
+	}
 
 	/*
 	 * disable the L2 cache, Linux has some problems with it...

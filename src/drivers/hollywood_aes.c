@@ -154,6 +154,7 @@ static void aesInit(void) {
 
 static void aesCleanup(void) {
 	aesReset();
+	aesDrv.state = DRIVER_STATE_NOT_READY;
 }
 
 static REGISTER_DRIVER(aesDrv) = {
