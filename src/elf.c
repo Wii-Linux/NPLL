@@ -112,8 +112,10 @@ int ELF_LoadMem(const void *data) {
 		load = ELF_LoadPhdr(phdr, &addr, &size, &off, &ret);
 		if (ret)
 			return ret;
-		else if (!load)
+		else if (!load) {
+			phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
 			continue;
+		}
 
 		/* copy it into memory */
 		memcpy(addr, (void *)((u32)data + off), size);
