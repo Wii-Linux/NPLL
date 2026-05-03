@@ -146,7 +146,6 @@ static int sffsLookupEntry(const char *path, struct sffs_fst_entry **out) {
 	while (*p) {
 		memcpy(tmp, current->fileName, 12);
 		tmp[12] = 0;
-		log_printf("checking %s\r\n", tmp);
 		/* current must be a dir if we're going to descend into it */
 		if (!MODE_IS_DIR(current->mode))
 			return -ENOTDIR;
