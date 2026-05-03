@@ -200,15 +200,6 @@ static ssize_t nandRead(struct blockDevice *bdev, void *dest, size_t len, u64 of
 	return (ssize_t)len;
 }
 
-static ssize_t nandWrite(struct blockDevice *bdev, const void *src, size_t len, u64 off) {
-	/* TODO: this */
-	(void)bdev;
-	(void)src;
-	(void)len;
-	(void)off;
-	return -1;
-}
-
 static void nandReset(void) {
 	nandSendCommand(NAND_CMD_RESET, 0, NAND_CTRL_WAIT, 0);
 	nandWait();
