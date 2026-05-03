@@ -539,6 +539,9 @@ static void viDrvInit(void) {
 
 static void viDrvCleanup(void) {
 	viFlush();
+	free(rgbFb);
+	free(xfb);
+	viDrv.state = DRIVER_STATE_NOT_READY;
 }
 
 static REGISTER_DRIVER(viDrv) = {
