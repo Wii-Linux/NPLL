@@ -175,6 +175,9 @@ static void armbootnow(void) {
 			}
 		}
 		log_printf("Number of tikviews for IOS%d: %d\r\n", iosVer, num_tikviews);
+		if (num_tikviews > 4)
+			panic("too many tikviews");
+
 		if (ES_GetTikViews(titleID, tikviews, num_tikviews)) {
 			if (!retries)
 				panic("ES_GetTikViews failed");
