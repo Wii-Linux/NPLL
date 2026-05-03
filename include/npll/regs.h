@@ -102,6 +102,10 @@
 #define HW_RESETS            _HOLLYWOOD_REG(0x194)
 #  define RESETS_RSTBINB         BIT(0)
 #  define RESETS_RSTB_DSP        BIT(22)
+#define HW_OTP_COMMAND       _HOLLYWOOD_REG(0x1ec)
+#  define HW_OTP_COMMAND_RD      BIT(31)
+#  define HW_OTP_COMMAND_BANK_SHIFT 8
+#define HW_OTP_DATA          _HOLLYWOOD_REG(0x1f0)
 #define HW_VERSION           _HOLLYWOOD_REG(0x214)
 #define HW_MEM_PROT_SPL      _HOLLYWOOD_MC_REG(0x4)
 #define HW_MEM_PROT_SPL_BASE _HOLLYWOOD_MC_REG(0x6)
@@ -130,6 +134,7 @@
 #  define LT_IRQDEV_SDHCI2       BIT(0)
 #  define LT_IRQDEV_SDHCI3       BIT(1)
 
+#define LT_EFUSEPROT   _LATTE_REG(0x110)
 #define LT_CHIPREVID   _LATTE_REG(0x1a0)
 #define LT_PIMCOMPAT   _LATTE_REG(0x1b0)
 
