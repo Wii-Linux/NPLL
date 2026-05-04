@@ -169,7 +169,8 @@ static struct blockDevice diBdev = {
 	.dmaAlignMode = BLOCK_ALIGN_BOUNCE,
 	.read = diRead,
 	.write = NULL,
-	.probePartitions = true
+	.probePartitions = true,
+	.flags = BLOCK_FLAG_OPTICAL
 };
 
 static const char *dateToRevWii(u32 date) {

@@ -66,6 +66,9 @@ struct filesystem {
 
 	/* Return the size of the file, or negative on error */
 	ssize_t (*getSize)(struct filesystem *fs, int fd);
+
+	/* mask of devices that can use this fs */
+	u32 flagMask;
 };
 
 /* the currently mounted filesystem (NULL if none) */

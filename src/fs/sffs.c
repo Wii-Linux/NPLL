@@ -347,4 +347,5 @@ struct filesystem FS_SFFS = {
 	.read = sffsRead,
 	.seek = sffsSeek,
 	.getSize = sffsGetSize,
+	.flagMask = BLOCK_FLAG_HLWD_NAND
 };

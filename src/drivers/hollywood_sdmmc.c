@@ -136,6 +136,7 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	bdev->read = sdmmcRead;
 	bdev->write = sdmmcWrite;
 	bdev->probePartitions = true;
+	bdev->flags = BLOCK_FLAG_STANDARD;
 
 
 	B_Register(bdev);

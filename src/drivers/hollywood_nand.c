@@ -104,7 +104,8 @@ static struct blockDevice nandBdev = {
 	.write = NULL,
 	.partitions = { &boot1part, &boot2part, &sffspart },
 	.numPartitions = 3,
-	.probePartitions = false
+	.probePartitions = false,
+	.flags = BLOCK_FLAG_HLWD_NAND
 };
 
 static void nandCalculateBufs(void **ecc, void **data, size_t len, void *buf) {

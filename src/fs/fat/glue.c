@@ -3,6 +3,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/block.h"
 #define MODULE "fat"
 #include <assert.h>
 #include <errno.h>
@@ -321,6 +322,7 @@ struct filesystem VISIBLE FS_FAT = {
 	.read = fatRead,
 	.seek = fatSeek,
 	.getSize = fatGetSize,
+	.flagMask = BLOCK_FLAG_STANDARD
 };
 
 struct filesystem VISIBLE FS_exFAT = {
@@ -333,5 +335,6 @@ struct filesystem VISIBLE FS_exFAT = {
 	.close = fatClose,
 	.read = fatRead,
 	.seek = fatSeek,
-	.getSize = fatGetSize
+	.getSize = fatGetSize,
+	.flagMask = BLOCK_FLAG_STANDARD
 };

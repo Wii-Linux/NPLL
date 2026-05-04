@@ -130,8 +130,17 @@ struct filesystem *FS_Probe(struct partition *part) {
 		assert_msg(filesystems[i]->probe, "fs: filesystem has no probe op");
 		log_printf("FS_Probe loop %d (%s)\r\n", i, filesystems[i]->name);
 
-		if (filesystems[i]->probe(filesystems[i], part))
+		if (!(filesystems[i]->flagMask & part->bdev->flags)) {
+			log_puts("Skipping (incompatible)...");
+			continue;
+		}
+
+		if (filesystems[i]->probe(filesystems[i], part)) {
+			log_puts("Success");
 			return filesystems[i];
+		}
+		else
+			log_puts("Failed");
 	}
 
 	return NULL;

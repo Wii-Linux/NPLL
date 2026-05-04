@@ -29,6 +29,10 @@ enum blockTransferMode {
 	BLOCK_TRANSFER_MULTIPLE
 };
 
+#define BLOCK_FLAG_STANDARD  BIT(0)
+#define BLOCK_FLAG_HLWD_NAND BIT(1)
+#define BLOCK_FLAG_OPTICAL   BIT(2)
+
 struct blockTransfer {
 	/* atomic transfer size in bytes */
 	u32 size;
@@ -71,6 +75,9 @@ struct blockDevice {
 	uint numPartitions;
 	struct partition *partitions[MAX_PARTITIONS];
 	bool probePartitions;
+
+	/* block flags */
+	u32 flags;
 };
 
 /* registered block devices */
