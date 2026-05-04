@@ -37,7 +37,8 @@ static struct platOps gamecubePlatOps = {
 	.debugWriteStr = NULL,
 	.reboot = gamecubeReboot,
 	.shutdown = NULL,
-	.exit = NULL /* does Swiss or whatever offer any way? */
+	.exit = NULL, /* does Swiss or whatever offer any way? */
+	.ejectDisc = NULL
 };
 
 void __attribute__((noreturn)) H_InitGameCube(void) {

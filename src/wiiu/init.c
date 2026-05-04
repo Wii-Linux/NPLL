@@ -67,7 +67,8 @@ static struct platOps wiiuPlatOps = {
 	.debugWriteStr = wiiuDebugStr,
 	.reboot = wiiuReboot,
 	.shutdown = wiiuShutdown,
-	.exit = NULL
+	.exit = NULL,
+	.ejectDisc = NULL, /* maybe once we do an entire AHCI stack.... */
 };
 
 void __attribute__((noreturn)) H_InitWiiU(void) {

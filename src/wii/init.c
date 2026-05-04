@@ -321,13 +321,21 @@ static void __attribute__((noreturn)) wiiExit(void) {
 	__builtin_unreachable();
 }
 
+static void wiiEject(void) {
+	HW_GPIOB_OUT |= GPIO_DO_EJECT;
+	barrier();
+	udelay(500 * 1000);
+	HW_GPIOB_OUT &= ~GPIO_DO_EJECT;
+}
+
 static struct platOps wiiPlatOps = {
 	.panic = wiiPanic,
 	.debugWriteChar = NULL,
 	.debugWriteStr = NULL,
 	.reboot = wiiReboot,
 	.shutdown = wiiShutdown,
-	.exit = NULL
+	.exit = NULL,
+	.ejectDisc = wiiEject
 };
 
 enum wiiInitState {

@@ -55,6 +55,9 @@ struct platOps {
 
 	/* return to the loader */
 	void (*exit)(void);
+
+	/* eject inserted disc */
+	void (*ejectDisc)(void);
 };
 
 extern enum consoleType H_ConsoleType;

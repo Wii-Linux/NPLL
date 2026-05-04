@@ -68,7 +68,14 @@ static void rootMenuRetToLdrCB(struct menuEntry *dummy) {
 	H_PlatOps->exit();
 }
 
+static void rootMenuEjectDiscCB(struct menuEntry *dummy) {
+	(void)dummy;
+	assert(H_PlatOps->ejectDisc);
+	H_PlatOps->ejectDisc();
+}
 
+
+static struct menuEntry ejectDiscEntry = { .name = "Eject Disc", .selected = rootMenuEjectDiscCB };
 static struct menuEntry rebootEntry = { .name = "Reboot", .selected = rootMenuRebootCB };
 static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMenuShutdownCB };
 static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
@@ -80,6 +87,9 @@ static struct menuEntry *rootMenuEntries[4] = {
 
 static void rootMenuInit(struct menu *m) {
 	uint idx = 1;
+
+	if (H_PlatOps->ejectDisc)
+		m->entries[idx++] = &ejectDiscEntry;
 
 	if (H_PlatOps->reboot)
 		m->entries[idx++] = &rebootEntry;
