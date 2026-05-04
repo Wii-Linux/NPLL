@@ -37,6 +37,7 @@
 #  define PI_IRQDEV_RSWST        BIT(16)
 #  define PI_IRQDEV_LATTE        BIT(24)
 #define PI_RESET             _FLIPPER_PI_REG(0x24)
+#  define PI_RESET_DI            BIT(2)
 
 /* the weird Latte PI that got stuffed into the base of the Flipper reg space, where the GX CP used to be */
 #define LATTE_PI_INTSR       _FLIPPER_REG(0x00)
@@ -99,8 +100,11 @@
 #define HW_AHBPROT           _HOLLYWOOD_REG(0x64)
 #  define AHBPROT_PPCKERN        BIT(31)
 #define HW_AIPROT            _HOLLYWOOD_REG(0x70)
+#define HW_COMPAT            _HOLLYWOOD_REG(0x180)
+#  define HW_COMPAT_DVDVIDEO     BIT(21)
 #define HW_RESETS            _HOLLYWOOD_REG(0x194)
 #  define RESETS_RSTBINB         BIT(0)
+#  define RESETS_RSTB_DIRSTB     BIT(10)
 #  define RESETS_RSTB_DSP        BIT(22)
 #define HW_OTP_COMMAND       _HOLLYWOOD_REG(0x1ec)
 #  define HW_OTP_COMMAND_RD      BIT(31)

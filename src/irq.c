@@ -38,6 +38,8 @@ static struct irqDevInfo irqDevInfo[IRQDEV_MAX] = {
 	{ NULL, NULL, &LT_PPC0INT2EN, 0, 0, LT_IRQDEV_SDHCI3 },
 	/* RSW */
 	{ &PI_INTMR, &PI_INTMR, NULL, PI_IRQDEV_RSW, PI_IRQDEV_RSW, 0 },
+	/* DI */
+	{ &PI_INTMR, &HW_PPCIRQMASK, NULL, PI_IRQDEV_DI, HW_IRQDEV_DI, 0 }
 };
 
 static void getIrqDevInfo(enum irqDev dev, vu32 **reg, u32 *mask) {
@@ -155,6 +157,10 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 	if (H_ConsoleType != CONSOLE_TYPE_WII_U)
 		intsr = PI_INTSR;
 
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE && intsr & PI_IRQDEV_DI) {
+		IRQ_DoHandle(IRQDEV_DI);
+		PI_INTSR = PI_IRQDEV_DI;
+	}
 	if (H_ConsoleType == CONSOLE_TYPE_WII && intsr & PI_IRQDEV_RSW) {
 		PI_INTSR = PI_IRQDEV_RSW;
 		IRQ_DoHandle(IRQDEV_RSW);
@@ -177,6 +183,10 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		if (ppcirqflag & HW_IRQDEV_SDHCI1) {
 			HW_PPCIRQFLAG = HW_IRQDEV_SDHCI1;
 			IRQ_DoHandle(IRQDEV_SDHCI1);
+		}
+		if (ppcirqflag & HW_IRQDEV_DI) {
+			IRQ_DoHandle(IRQDEV_DI);
+			HW_PPCIRQFLAG = HW_IRQDEV_DI;
 		}
 	}
 
