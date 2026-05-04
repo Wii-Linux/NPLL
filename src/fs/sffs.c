@@ -248,6 +248,7 @@ static int sffsOpen(struct filesystem *fs, const char *path) {
 
 static void sffsClose(struct filesystem *fs, int fd) {
 	(void)fs;
+	VALIDATE_FD();
 	files[fd].open = false;
 }
 
