@@ -13,6 +13,7 @@
 #include <npll/types.h>
 #include "fs/fat/glue.h"
 #include "fs/sffs.h"
+#include "fs/iso9660.h"
 
 struct filesystem *FS_Mounted = NULL;
 struct partition *FS_MountedPartition = NULL;
@@ -21,7 +22,8 @@ static bool initialized = false;
 static struct filesystem *filesystems[] = {
 	&FS_FAT,
 	&FS_exFAT,
-	&FS_SFFS
+	&FS_SFFS,
+	&FS_ISO9660
 };
 
 

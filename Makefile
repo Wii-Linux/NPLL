@@ -109,7 +109,7 @@ SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c
 # Misc Drivers
 SOURCE  += drivers/hollywood_aes.c drivers/hollywood_otp.c
 # Filesystems
-SOURCE  += fs/sffs.c
+SOURCE  += fs/sffs.c fs/iso9660.c
 FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
 FAT_EXPORTS := FS_FAT FS_exFAT
 
