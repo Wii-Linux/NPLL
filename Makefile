@@ -89,15 +89,29 @@ CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -ggdb3 -nostdinc -ffreestanding
 CFLAGS  += -O3 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 
-SOURCE  := bs1.S entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c
-SOURCE  += allocator.c cpu.c timer.c panic.c init.c drivers.c output.c main.c menu.c sysinfo.c video.c input.c elf.c elf_asm.S log.c platOps_debug.c tiny_usbgecko.c exception.c exception_2200.S irq.c irq_asm.S cleanup.c config.c
-SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c
-SOURCE  += drivers/hollywood_gpio.c drivers/exi.c drivers/usbgecko.c drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/hollywood_sdmmc.c drivers/hollywood_nand.c drivers/hollywood_aes.c drivers/hollywood_otp.c drivers/si.c drivers/reset_switch.c drivers/di.c
-SOURCE  += drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c
-SOURCE  += block.c partition.c fs.c fs/sffs.c
+# Bootstrap
+SOURCE  := bs1.S entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c init.c tiny_usbgecko.c platOps_debug.c
+# CPU plumbing
+SOURCE  += exception_2200.S irq_asm.S cpu.c exception.c irq.c
+# Core subsystems
+SOURCE  += allocator.c timer.c panic.c drivers.c output.c main.c menu.c sysinfo.c video.c input.c elf.c elf_asm.S log.c cleanup.c config.c
+SOURCE  += block.c partition.c fs.c
+# libc, compiler support, etc
+SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c armboot_bin.c
+# Bus drivers
+SOURCE  += drivers/exi.c
+# Video / Output drivers
+SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/usbgecko.c
+# Storage drivers
+SOURCE  += drivers/hollywood_sdmmc.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/hollywood_nand.c drivers/di.c
+# Input Drivers
+SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c
+# Misc Drivers
+SOURCE  += drivers/hollywood_aes.c drivers/hollywood_otp.c
+# Filesystems
+SOURCE  += fs/sffs.c
 FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
 FAT_EXPORTS := FS_FAT FS_exFAT
-SOURCE  += armboot_bin.c
 
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
 FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
