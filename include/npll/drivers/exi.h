@@ -1,11 +1,13 @@
 /*
  * NPLL - Drivers - EXI
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #ifndef _DRIVERS_EXI_H
 #define _DRIVERS_EXI_H
+
+#include <npll/drivers.h>
 
 /*
  * Selects the desired device (CS line) on the given
@@ -42,4 +44,3 @@ extern int H_EXIXferImm(unsigned int channel,
 
 DECLARE_DRIVER(exiDrv);
 #endif /* _DRIVERS_EXI_H */
-
