@@ -60,6 +60,7 @@ static volatile struct exi_regs *regs;
 #define   EXI_CSR_CLK_1MHZ     (0u << EXI_CSR_CLK_SHIFT)
 #define EXI_CSR_CS_SHIFT     7
 #define EXI_CSR_CS           (7u << EXI_CSR_CS_SHIFT)
+#define EXI_CSR_EXT_IRQ      BIT(11)
 #define EXI_CSR_EXT          BIT(12)
 
 #define EXI_CR_TSTART        BIT(0)
@@ -101,7 +102,8 @@ void H_EXISelect(uint channel, uint cs, uint clkMhz) {
 
 	dbg("Channel %d, selecting CS %d at clock %dMHz\r\n", channel, cs, clkMhz);
 
-	csr = 0;
+	csr = regs->channels[channel].csr;
+	csr &= 0x405;
 	csr |= BIT((EXI_CSR_CS_SHIFT + cs)); /* set the appropriate CS bit */
 	csr |= exiSpeedFromMhz(clkMhz);         /* set the appropriate CLK bits */
 	dbg("Writing CSR=0x%08x\r\n", csr);
@@ -109,12 +111,55 @@ void H_EXISelect(uint channel, uint cs, uint clkMhz) {
 }
 
 /*
+ * Selects an SD card clock mode without asserting a CS line.
+ */
+void H_EXISelectSD(uint channel, uint clkMhz) {
+	u32 csr;
+
+	dbg("Channel %d, selecting SD clock %dMHz\r\n", channel, clkMhz);
+
+	csr = regs->channels[channel].csr;
+	csr &= 0x405;
+	csr |= exiSpeedFromMhz(clkMhz);
+	regs->channels[channel].csr = csr;
+}
+
+/*
  * Deselects any selected device (CS line) on the given
  * EXI channel.
  */
 void H_EXIDeselect(uint channel) {
-	dbg("Writing CSR=0x00000000\r\n");
-	regs->channels[channel].csr = 0;
+	u32 csr;
+
+	csr = regs->channels[channel].csr;
+	csr &= 0x405;
+	dbg("Writing CSR=0x%08x\r\n", csr);
+	regs->channels[channel].csr = csr;
+}
+
+/*
+ * Returns whether a channel's EXT line is asserted.
+ */
+bool H_EXIExtPresent(uint channel) {
+	if (channel > 2)
+		return false;
+
+	return !!(regs->channels[channel].csr & EXI_CSR_EXT);
+}
+
+/*
+ * Clears a channel's latched external-device edge.
+ */
+void H_EXIClearExt(uint channel) {
+	u32 csr;
+
+	if (channel > 2)
+		return;
+
+	csr = regs->channels[channel].csr;
+	csr &= 0x405;
+	csr |= EXI_CSR_EXT_IRQ;
+	regs->channels[channel].csr = csr;
 }
 
 /*
@@ -248,6 +293,11 @@ static void exiInit(void) {
 	default:
 		break;
 	}
+
+	regs->channels[0].csr = EXI_CSR_EXT_IRQ;
+	regs->channels[1].csr = EXI_CSR_EXT_IRQ;
+	regs->channels[2].csr = 0;
+	regs->channels[0].csr = BIT(13);
 
 	/* we're all good */
 	exiDrv.state = DRIVER_STATE_READY;

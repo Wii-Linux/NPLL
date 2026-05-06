@@ -16,10 +16,25 @@
 extern void H_EXISelect(unsigned int channel, unsigned int cs, unsigned int clkMhz);
 
 /*
+ * Selects an SD card clock mode without asserting a CS line.
+ */
+extern void H_EXISelectSD(unsigned int channel, unsigned int clkMhz);
+
+/*
  * Deselects any selected device (CS line) on the given
  * EXI channel.
  */
 extern void H_EXIDeselect(unsigned int channel);
+
+/*
+ * Returns true when the channel's external device detect line is asserted.
+ */
+extern bool H_EXIExtPresent(unsigned int channel);
+
+/*
+ * Clears a channel's latched external device detect edge.
+ */
+extern void H_EXIClearExt(unsigned int channel);
 
 /*
  * Immediate transaction to channel.
