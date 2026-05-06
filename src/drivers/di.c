@@ -10,6 +10,9 @@
  * Copyright (C) 2005,2006,2007,2009 Albert Herranz
  *
  * Portions based on previous work by Scream|CT.
+ *
+ *
+ * GameCube drive firmware patching based on Swiss: https://github.com/emukidid/swiss-gc/blob/master/cube/swiss/source/devices/dvd/dvd.c
  */
 
 #define MODULE "DI"
@@ -38,8 +41,17 @@
 #define DI_CMD_READ_DVDR     0xd0000000
 #define DI_CMD_READ_PHYSINFO 0xad000000
 #define DI_CMD_GET_STATUS    0xe0000000
-#define DI_CMD_GCN_UNLOCK1   0xff014d41
-#define DI_CMD_GCN_UNLOCK2   0xff004456
+
+
+/* [ff][01]MATSHITA[02][00] */
+#define DI_CMD_GCN_UNLOCK1A  0xff014d41 /* [ff][01]MA */
+#define DI_CMD_GCN_UNLOCK1B  0x54534849 /* TSHI */
+#define DI_CMD_GCN_UNLOCK1C  0x54410200 /* TA[02][00] */
+
+/* [ff][00]DVD-GAME[03][00] */
+#define DI_CMD_GCN_UNLOCK2A  0xff004456 /* [ff][00]DV */
+#define DI_CMD_GCN_UNLOCK2B  0x442d4741 /* D-GA */
+#define DI_CMD_GCN_UNLOCK2C  0x4d450300 /* ME[03][00] */
 
 /* DISR bits */
 #define DI_SR_BRK        BIT(0)
@@ -267,7 +279,7 @@ static int diDoCMD(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataL
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		if (cmdbuf0 == DI_CMD_GCN_UNLOCK1 || cmdbuf0 == DI_CMD_GCN_UNLOCK2)
+		if (cmdbuf0 == DI_CMD_GCN_UNLOCK1A || cmdbuf0 == DI_CMD_GCN_UNLOCK2A)
 			regs->sr |= DI_GCN_SR_UNLOCK;
 		else if (data)
 			regs->sr = DI_GCN_SR_DMA_READ;
@@ -310,13 +322,16 @@ static int diDoCMD(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataL
 static int diUnlockGC(void) {
 	int ret;
 
-	ret = diDoCMD(DI_CMD_GCN_UNLOCK1, 0x54534849, 0x54410200, NULL, 0);
-	if (ret) {
+	/* [ff][01]MATSHITA[02][00] */
+	ret = diDoCMD(DI_CMD_GCN_UNLOCK1A, DI_CMD_GCN_UNLOCK1B, DI_CMD_GCN_UNLOCK1C, NULL, 0);
+	/* expected to produce DEINT */
+	if (ret && ret != -EIO) {
 		log_printf("GC unlock 1 failed: %d SR=%08x\r\n", ret, regs->sr);
 		return ret;
 	}
 
-	ret = diDoCMD(DI_CMD_GCN_UNLOCK2, 0x442d4741, 0x4d450300, NULL, 0);
+	/* [ff][00]DVD-GAME[03][00] */
+	ret = diDoCMD(DI_CMD_GCN_UNLOCK2A, DI_CMD_GCN_UNLOCK2B, DI_CMD_GCN_UNLOCK2C, NULL, 0);
 	if (ret)
 		log_printf("GC unlock 2 failed: %d SR=%08x\r\n", ret, regs->sr);
 
