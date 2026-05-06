@@ -1135,6 +1135,7 @@ int sdhc_init(void *iobase, const int *irq_table, int nirqs, sdio_host_dev_t *de
 	dev->set_operational = &sdhc_set_operational;
 	dev->set_bus_width = &sdhc_set_bus_width;
 	dev->get_present_state = &sdhc_get_present_state_register;
+	dev->flags = 0;
 	dev->priv = sdhc;
 	/* Clear IRQs */
 	writel(0, sdhc->base + INT_STATUS_EN);

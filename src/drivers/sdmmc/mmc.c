@@ -393,6 +393,71 @@ static int mmc_voltage_validation(mmc_card_t card)
 	return 0;
 }
 
+static int mmc_spi_card_init(mmc_card_t card)
+{
+	struct mmc_cmd cmd = {.data = NULL};
+	int ret;
+	u32 ocr = 0;
+
+	cmd.index = MMC_READ_OCR;
+	cmd.arg = 0;
+	cmd.rsp_type = MMC_RSP_TYPE_R3;
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (!ret && (cmd.response[0] & BIT(31))) {
+		card->type = CARD_TYPE_SD;
+		card->ocr = cmd.response[0];
+		card->high_capacity = !!(card->ocr & BIT(30));
+		return 0;
+	}
+
+	cmd.index = MMC_SEND_EXT_CSD;
+	cmd.arg = 0x1AA;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret || (cmd.response[0] & 0xfff) != 0x1AA) {
+		ZF_LOGE("Failed SPI SEND_IF_COND");
+		return 1;
+	}
+
+	for (unsigned int i = 0; i < 1000; i++) {
+		cmd.index = MMC_APP_CMD;
+		cmd.arg = 0;
+		cmd.rsp_type = MMC_RSP_TYPE_R1;
+		ret = host_send_command(card, &cmd, NULL, NULL);
+		if (ret)
+			return 1;
+
+		cmd.index = SD_SD_APP_OP_COND;
+		cmd.arg = BIT(30);
+		cmd.rsp_type = MMC_RSP_TYPE_R3;
+		ret = host_send_command(card, &cmd, NULL, NULL);
+		if (ret)
+			return 1;
+		if (cmd.response[0] & BIT(31)) {
+			ocr = cmd.response[0];
+			break;
+		}
+		udelay(1000);
+	}
+
+	if (!(ocr & BIT(31))) {
+		ZF_LOGE("Timeout waiting on SPI card init");
+		return 1;
+	}
+
+	cmd.index = MMC_READ_OCR;
+	cmd.arg = 0;
+	cmd.rsp_type = MMC_RSP_TYPE_R3;
+	ret = host_send_command(card, &cmd, NULL, NULL);
+	if (ret)
+		return 1;
+
+	card->type = CARD_TYPE_SD;
+	card->ocr = cmd.response[0];
+	card->high_capacity = !!(card->ocr & BIT(30));
+	return 0;
+}
+
 
 static int mmc_reset(mmc_card_t card)
 {
@@ -451,16 +516,24 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 		free(mmc);
 		return -1;
 	}
-	/* Initialise the card */
-	if (mmc_reset(mmc)) {
-		ZF_LOGE("Failed to reset SD/MMC card");
-		free(mmc);
-		return -1;
-	}
-	if (mmc_voltage_validation(mmc)) {
-		ZF_LOGE("Failed to perform voltage validation");
-		free(mmc);
-		return -1;
+	if (sdio->flags & SDIO_HOST_SPI) {
+		if (mmc_spi_card_init(mmc)) {
+			ZF_LOGE("Failed to initialise SPI SD/MMC card");
+			free(mmc);
+			return -1;
+		}
+	} else {
+		/* Initialise the card */
+		if (mmc_reset(mmc)) {
+			ZF_LOGE("Failed to reset SD/MMC card");
+			free(mmc);
+			return -1;
+		}
+		if (mmc_voltage_validation(mmc)) {
+			ZF_LOGE("Failed to perform voltage validation");
+			free(mmc);
+			return -1;
+		}
 	}
 	/* Register the card */
 	if (mmc_card_registry(mmc)) {

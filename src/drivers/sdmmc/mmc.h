@@ -55,6 +55,7 @@
 #define MMC_IO_RW_EXTENDED		53 //R5
 #define MMC_APP_CMD			   55 //R1
 #define MMC_GEN_CMD			   56 //R1b
+#define MMC_READ_OCR			 58 //R3
 #define MMC_RW_MULTIPLE_REGISTER  60 //R1b
 #define MMC_RW_MULTIPLE_BLOCK	 61 //R1b
 

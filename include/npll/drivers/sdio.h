@@ -14,6 +14,7 @@
 
 /* NOT to be confused with SDHC. This API is universal */
 
+#define SDIO_HOST_SPI BIT(0)
 
 /* for Hollywood/Latte main SDHC */
 #define SDHC0_ADDR (void *)0xcd070000
@@ -61,6 +62,7 @@ struct sdio_host_dev {
     int (*nth_irq)(struct sdio_host_dev *sdio, int n);
     u32 (*get_present_state)(struct sdio_host_dev *sdio);
 
+    u32 flags;
     void *priv;
 };
 typedef struct sdio_host_dev sdio_host_dev_t;
