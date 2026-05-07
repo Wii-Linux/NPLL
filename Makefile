@@ -74,14 +74,17 @@ endif
 
 ifeq ($(VERBOSE),1)
 HIDE :=
+# for libfdt
+VECHO := echo
 else
 HIDE := @
+VECHO := @echo
 endif
 
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -ggdb3 -nostdinc -ffreestanding -fno-pic -fno-pie -Wl,-no-pie -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -Iexternal/dtc/libfdt -ggdb3 -nostdinc -ffreestanding -fno-pic -fno-pie -Wl,-no-pie -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
@@ -112,26 +115,34 @@ SOURCE  += drivers/hollywood_aes.c drivers/hollywood_otp.c
 SOURCE  += fs/sffs.c fs/iso9660.c
 FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
 FAT_EXPORTS := FS_FAT FS_exFAT
-
-OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
-FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
-FAT_COMBINED := build/fs/fat/fat.o
 OUT_ELF := bin/npll.elf
 OUT_DOL := bin/npll.dol
 
-.PHONY: all clean
-
+# need to put this before the libfdt include
 ifeq ($(BUILD_DOL),0)
 all: $(OUT_ELF)
 else
 all: $(OUT_ELF) $(OUT_DOL)
 endif
 
+
+include external/dtc/libfdt/Makefile.libfdt
+# clean up
+LIBFDT_COMBINED := build/libfdt.o
+LIBFDT_OBJS := $(patsubst %.o,build/libfdt/%.o,$(LIBFDT_OBJS))
+LIBFDT_SRCS := $(patsubst %.c,external/dtc/libfdt/%.c,$(LIBFDT_SRCS))
+
+OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
+FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
+FAT_COMBINED := build/fs/fat/fat.o
+
+.PHONY: all clean libfdt_clean
+
 $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
 	$(HIDE)$(ELF2DOL) $< $@
 
-$(OUT_ELF): $(OBJ) $(FAT_COMBINED)
+$(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
@@ -141,6 +152,15 @@ $(FAT_COMBINED): $(FAT_OBJ)
 	$(HIDE)$(LD) -r -o $@ $^
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
+
+$(LIBFDT_COMBINED): $(LIBFDT_OBJS)
+	$(info $s  LD(r) $@)
+	$(HIDE)$(LD) -r -o $@ $^
+
+build/libfdt/%.o: external/dtc/libfdt/%.c
+	$(info $s  CC $<)
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -o $@ -c $<
 
 # external files that trigger annoying warnings
 build/fs/fat/ff.o: src/fs/fat/ff.c
