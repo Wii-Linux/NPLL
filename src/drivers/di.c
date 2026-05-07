@@ -15,6 +15,7 @@
  * GameCube drive firmware patching based on Swiss: https://github.com/emukidid/swiss-gc/blob/master/cube/swiss/source/devices/dvd/dvd.c
  */
 
+#include "di_firmware.h"
 #define MODULE "DI"
 
 #include <assert.h>
@@ -36,12 +37,16 @@
 
 /* DI commands */
 #define DI_CMD_INQUIRY       0x12000000
+#define DI_CMD_SETEXTENSION  0x55010000
 #define DI_CMD_READ_DISC_ID  0xa8000040
 #define DI_CMD_READ_NORMAL   0xa8000000
 #define DI_CMD_READ_DVDR     0xd0000000
 #define DI_CMD_READ_PHYSINFO 0xad000000
 #define DI_CMD_GET_STATUS    0xe0000000
-
+#define DI_CMD_SET_STATUS    0xee060300
+#define DI_CMD_DEBUG_BASE    0xfe110000
+#define DI_CMD_DEBUG_WRITEMEM 0xfe010100
+#define DI_CMD_DEBUG_READMEM 0xfe010000
 
 /* [ff][01]MATSHITA[02][00] */
 #define DI_CMD_GCN_UNLOCK1A  0xff014d41 /* [ff][01]MA */
@@ -52,6 +57,12 @@
 #define DI_CMD_GCN_UNLOCK2A  0xff004456 /* [ff][00]DV */
 #define DI_CMD_GCN_UNLOCK2B  0x442d4741 /* D-GA */
 #define DI_CMD_GCN_UNLOCK2C  0x4d450300 /* ME[03][00] */
+
+/* debug bits */
+#define DEBUG_STOP_DRIVE 0
+#define DEBUG_START_DRIVE 0x100
+#define DEBUG_ACCEPT_COPY 0x4000
+#define DEBUG_DISC_CHECK 0x8000
 
 /* DISR bits */
 #define DI_SR_BRK        BIT(0)
@@ -120,7 +131,7 @@
 
 
 #define DVD_BLOCK_SIZE 2048
-#define DI_COMMAND_TIMEOUT_US (15 * 1000 * 1000)
+#define DI_COMMAND_TIMEOUT_US (1000 * 1000 * 1000)
 #define GCN_DISC_SIZE ((u64)712880 * DVD_BLOCK_SIZE)
 #define WII_SL_DISC_SIZE 405012480ull
 
@@ -431,7 +442,7 @@ static int diWaitForStatus(const char *ctx, u32 *status) {
 			return 0;
 
 		udelay(10 * 1000);
-	} while (!T_HasElapsed(tb, 5000 * 1000));
+	} while (!T_HasElapsed(tb, 30 * 1000 * 1000));
 
 	log_printf("%s: DI did not become ready; ret=%d CR=%08x SR=%08x\r\n", ctx, ret, regs->cr, regs->sr);
 	return ret ? ret : -ETIMEDOUT;
@@ -592,13 +603,106 @@ tryAgain:
 	}
 }
 
+static u32 diReadMem32(u32 addr) {
+	regs->sr = 0x2E;
+	regs->cvr = 0;
+	regs->cmdbuf[0] = DI_CMD_DEBUG_READMEM;
+	regs->cmdbuf[1] = addr;
+	regs->cmdbuf[2] = 0x00010000;
+	regs->immbuf = 0;
+	regs->cr = DI_CR_TSTART;
+
+	while (regs->cr & DI_CR_TSTART);
+	return regs->immbuf;
+}
+
+static void diWriteMem32(u32 addr, u32 dat) {
+	/* Swiss does this jank, and I don't think it could be adapted well into a real command (DMA 0B to address 0?) */
+	regs->sr = 0x2E;
+	regs->cvr = 0;
+	regs->cmdbuf[0] = DI_CMD_DEBUG_WRITEMEM;
+	regs->cmdbuf[1] = addr;
+	regs->cmdbuf[2] = 0x00040000;
+	regs->mar = 0;
+	regs->length = 0;
+	regs->cr = DI_CR_TSTART | DI_CR_DMA;
+	while (regs->cr & DI_CR_TSTART);
+
+	/* executing it as a command????? */
+	regs->sr = 0x2E;
+	regs->cvr = 0;
+	regs->cmdbuf[0] = dat;
+	regs->cr = DI_CR_TSTART;
+	while (regs->cr & DI_CR_TSTART);
+}
+
+static void diReadMemArray(u32 addr, void *buf, u32 size) {
+	u32 *ptr = (u32 *)buf;
+	int rem = (int)size;
+
+	while (rem > 0) {
+		*ptr++ = diReadMem32(addr);
+		addr += 4;
+		rem -= 4;
+	}
+}
+
+static void diWriteMemArray(u32 addr, const void *buf, u32 size) {
+	u32 *ptr = (u32 *)buf;
+	int rem = (int)size;
+
+	while (rem > 0) {
+		diWriteMem32(addr, *ptr++);
+		addr += 4;
+		rem -= 4;
+	}
+}
+
+static const void *drivePatchPtr(void) {
+	if (driveDate == 0x20020402)
+		return &drive04firmware;
+	if (driveDate == 0x20010608)
+		return &drive06firmware;
+	if (driveDate == 0x20010831)
+		return &driveQfirmware;
+	if (driveDate == 0x20020823)
+		return &drive08firmware;
+	return NULL;
+}
+
+static void diApplyGCNPatches() {
+	const void *patchCode;
+
+	patchCode = drivePatchPtr();
+	if(patchCode == NULL)
+		return;    /* Unsupported drive */
+
+	log_printf("Drive date %08x\r\n", driveDate);
+	log_puts("Unlocking drive");
+	diUnlockGC();
+	log_puts("Write patch");
+	diWriteMemArray(0xff40d000, patchCode, 0x1F0);
+	diWriteMem32(0x804c, 0x00d04000);
+	log_printf("Set extension %08x\r\n", diGetStatus());
+	diDoCMD(DI_CMD_SETEXTENSION, 0, 0, NULL, 0);
+	log_printf("Unlock again %08x\r\n", diGetStatus());
+	diUnlockGC();
+	log_printf("Debug Motor On %08x\r\n", diGetStatus());
+	diDoCMD(DI_CMD_DEBUG_BASE | DEBUG_ACCEPT_COPY | DEBUG_START_DRIVE, 0, 0, NULL, 0);
+	log_printf("Set Status %08x\r\n", diGetStatus());
+	diDoCMD(DI_CMD_SET_STATUS, 0, 0, NULL, 0);
+	log_printf("Set Status - done %08x\r\n", diGetStatus());
+}
+
 /* can't rely on IRQs sadly, CVRINT only detects falling edge (open->closed) */
 static void diCoverPoller(void *dummy) {
 	static const char *const cvrToStr[2] = { "Closed", "Open" };
+	struct discID discID ALIGN(32);
 	int prevState, curState;
 	u32 cvr, status;
 	char statusStr[128];
 	int ret;
+	bool triedFWPatch = false;
 	(void)dummy;
 
 	cvr = regs->cvr;
@@ -609,6 +713,8 @@ static void diCoverPoller(void *dummy) {
 		return;
 
 	log_printf("DI Cover status: %s -> %s\r\n", cvrToStr[prevState], cvrToStr[curState]);
+
+again:
 	status = diGetStatus();
 	diStatusToStr(status, statusStr, sizeof(statusStr));
 	log_printf("Drive status: %08x %s\r\n", status, statusStr);
@@ -631,7 +737,32 @@ static void diCoverPoller(void *dummy) {
 			diReset();
 			if (diWaitForStatus("lid close reset", &status))
 				return;
+
+			/* need to try to read discid to see the new status */
+			ret = diDoCMD(DI_CMD_READ_DISC_ID, 0, 0x20, &discID, sizeof(discID));
+			status = diGetStatus();
+
 			diProbeNewMedia();
+			diStatusToStr(status, statusStr, sizeof(statusStr));
+			log_printf("Drive status from probe: %08x %s\r\n", status, statusStr);
+
+			/*
+			 * Is it the suspicious combo?  We got here from EAGAIN
+			 * (from Media Changed error on first diProbeMedia),
+			 * if we now get no disc + medium not present/cover opened, then
+			 * it is quite probable that the drive rejected a valid DVD-R(OM).
+			 */
+			if (DI_STATUS_GET_STATUS(status) == DI_STATUS_NO_DISC &&
+			    DI_STATUS_GET_ERR(status) == DI_ERROR_COVER_OPENED) {
+				if (triedFWPatch) {
+					log_puts("Firmware patch didn't work...");
+					return;
+				}
+				log_puts("suspected stock GCN drive fw rejecting DVD-R, trying patches");
+				diApplyGCNPatches();
+				triedFWPatch = true;
+				goto again;
+			}
 		}
 	}
 }
