@@ -48,6 +48,17 @@ void *memmove(void *dest, const void *src, size_t n) {
 	return dest;
 }
 
+void *memchr(const void *s, int c, size_t n) {
+	size_t i;
+	const u8 *ptr = s;
+
+	for (i = 0; i < n; i++) {
+		if ((int)*ptr == c)
+			return (void *)ptr;
+	}
+
+	return NULL;
+}
 
 /*
  * str* functions
@@ -114,6 +125,15 @@ char *strchr(const char *s, int c) {
 	return NULL;
 }
 
+char *strrchr(const char *s, int c) {
+	const char *str = s + strlen(s);
+
+	while (str >= s) {
+		if (*str == c) return (char *)str;
+		str--;
+	}
+	return NULL;
+}
 
 char *strstr(const char *haystack, const char *needle) {
 	size_t size = strlen(needle);
