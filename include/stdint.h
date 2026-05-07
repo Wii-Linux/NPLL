@@ -1,7 +1,7 @@
 /*
  * NPLL - libc - stdint
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Based on code from EverythingNet:
  * Copyright (C) 2023-2025 Techflash
@@ -11,6 +11,7 @@
 #define _STDINT_H
 
 #include <stddef.h>
+#include <limits.h>
 #include <npll/types.h>
 
 typedef i8 int8_t;
