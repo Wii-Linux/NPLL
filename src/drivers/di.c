@@ -131,7 +131,13 @@
 
 
 #define DVD_BLOCK_SIZE 2048
-#define DI_COMMAND_TIMEOUT_US (1000 * 1000 * 1000)
+#define DI_TIMEOUT_SHORT_US     (2 * 1000 * 1000)
+#define DI_TIMEOUT_STATUS_US    (5 * 1000 * 1000)
+#define DI_TIMEOUT_MEDIA_US     (30 * 1000 * 1000)
+#define DI_TIMEOUT_READ_US      (30 * 1000 * 1000)
+#define DI_TIMEOUT_PATCH_US     (60 * 1000 * 1000)
+#define DI_MEDIA_SETTLE_US      (1500 * 1000)
+#define DI_MEDIA_RETRY_US       (250 * 1000)
 #define GCN_DISC_SIZE ((u64)712880 * DVD_BLOCK_SIZE)
 #define WII_SL_DISC_SIZE 405012480ull
 
@@ -150,7 +156,16 @@ static volatile struct diRegs *regs;
 static u32 driveDate;
 static u32 lastDICVR;
 static bool bdevRegistered = false;
-static bool usingDVDR = false;
+static bool usingWiiDVDRRead = false;
+static bool patchedGCNMedia = false;
+static bool mediaValidated = false;
+
+enum diMediaState {
+	DI_MEDIA_EMPTY = 0,
+	DI_MEDIA_ORIGINAL,
+	DI_MEDIA_DVDR_REJECTED,
+	DI_MEDIA_UNKNOWN
+};
 
 struct diInquiryResponse {
 	u32 unk;
@@ -278,12 +293,12 @@ static int diWaitIdle(uint timeoutUs) {
 	return 0;
 }
 
-static int diDoCMD(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataLen) {
+static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataLen, uint timeoutUs) {
 	u64 tb;
-	u32 sr;
+	u32 sr, residual;
 	int ret;
 
-	ret = diWaitIdle(DI_COMMAND_TIMEOUT_US);
+	ret = diWaitIdle(timeoutUs);
 	if (ret) {
 		log_printf("timed out waiting for DI idle; CR=%08x\r\n", regs->cr);
 		return ret;
@@ -311,7 +326,7 @@ static int diDoCMD(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataL
 
 	tb = mftb();
 	while (regs->cr & DI_CR_TSTART) {
-		if (T_HasElapsed(tb, DI_COMMAND_TIMEOUT_US)) {
+		if (T_HasElapsed(tb, timeoutUs)) {
 			log_puts("timed out waiting on cmd");
 			log_printf("cmd: %08x %08x %08x\r\n", cmdbuf0, cmdbuf1, cmdbuf2);
 			log_printf("DMA of %uB @ %08x\r\n", dataLen, data);
@@ -326,6 +341,13 @@ static int diDoCMD(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataL
 		return -EINTR;
 	if (sr & DI_SR_DEINT)
 		return -EIO;
+	if (data) {
+		residual = regs->length;
+		if (residual) {
+			log_printf("cmd %08x incomplete DMA: %uB left of %uB\r\n", cmdbuf0, residual, dataLen);
+			return -EIO;
+		}
+	}
 
 	return 0;
 }
@@ -334,7 +356,7 @@ static int diUnlockGC(void) {
 	int ret;
 
 	/* [ff][01]MATSHITA[02][00] */
-	ret = diDoCMD(DI_CMD_GCN_UNLOCK1A, DI_CMD_GCN_UNLOCK1B, DI_CMD_GCN_UNLOCK1C, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_GCN_UNLOCK1A, DI_CMD_GCN_UNLOCK1B, DI_CMD_GCN_UNLOCK1C, NULL, 0, DI_TIMEOUT_SHORT_US);
 	/* expected to produce DEINT */
 	if (ret && ret != -EIO) {
 		log_printf("GC unlock 1 failed: %d SR=%08x\r\n", ret, regs->sr);
@@ -342,7 +364,7 @@ static int diUnlockGC(void) {
 	}
 
 	/* [ff][00]DVD-GAME[03][00] */
-	ret = diDoCMD(DI_CMD_GCN_UNLOCK2A, DI_CMD_GCN_UNLOCK2B, DI_CMD_GCN_UNLOCK2C, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_GCN_UNLOCK2A, DI_CMD_GCN_UNLOCK2B, DI_CMD_GCN_UNLOCK2C, NULL, 0, DI_TIMEOUT_SHORT_US);
 	if (ret)
 		log_printf("GC unlock 2 failed: %d SR=%08x\r\n", ret, regs->sr);
 
@@ -412,7 +434,7 @@ static int diGetStatusRaw(u32 *status) {
 	regs->immbuf = 0;
 	barrier();
 
-	ret = diDoCMD(DI_CMD_GET_STATUS, 0, 0, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_GET_STATUS, 0, 0, NULL, 0, DI_TIMEOUT_STATUS_US);
 	if (ret)
 		return ret;
 
@@ -448,27 +470,43 @@ static int diWaitForStatus(const char *ctx, u32 *status) {
 	return ret ? ret : -ETIMEDOUT;
 }
 
+static bool diStatusIsNoDisc(u32 status) {
+	return DI_STATUS_GET_STATUS(status) == DI_STATUS_NO_DISC ||
+	    DI_STATUS_GET_ERR(status) == DI_ERROR_COVER_OPENED;
+}
+
+static bool diStatusIsMediaChanged(u32 status) {
+	return DI_STATUS_GET_STATUS(status) == DI_STATUS_DISC_CHANGED ||
+	    DI_STATUS_GET_ERR(status) == DI_ERROR_MEDIA_CHANGED;
+}
+
+static int diReadRaw(void *dest, size_t len, u64 off) {
+	u32 cmdbuf1, cmdbuf2, cmd;
+
+	if ((off % DVD_BLOCK_SIZE) || (len % DVD_BLOCK_SIZE))
+		return -EINVAL;
+
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || !usingWiiDVDRRead) {
+		if (off >> 2 > 0xffffffff)
+			return -EINVAL;
+		cmd = DI_CMD_READ_NORMAL;
+		cmdbuf1 = (u32)(off >> 2);
+		cmdbuf2 = (u32)len;
+	}
+	else {
+		cmd = DI_CMD_READ_DVDR;
+		cmdbuf1 = (u32)(off / DVD_BLOCK_SIZE);
+		cmdbuf2 = (u32)(len / DVD_BLOCK_SIZE);
+	}
+
+	return diDoCMDTimeout(cmd, cmdbuf1, cmdbuf2, dest, (uint)len, DI_TIMEOUT_READ_US);
+}
+
 static ssize_t diRead(struct blockDevice *bdev, void *dest, size_t len, u64 off) {
-	u32 cmdbuf1, cmdbuf2;
 	int ret;
 	(void)bdev;
 
-	if ((off % DVD_BLOCK_SIZE) || (len % DVD_BLOCK_SIZE))
-		return -1;
-
-	if (usingDVDR) {
-		cmdbuf1 = (u32)(off / DVD_BLOCK_SIZE);
-		cmdbuf2 = (u32)(len / DVD_BLOCK_SIZE);
-		ret = diDoCMD(DI_CMD_READ_DVDR, cmdbuf1, cmdbuf2, dest, (uint)len);
-	}
-	else {
-		if (off >> 2 > 0xffffffff)
-			return -1;
-		cmdbuf1 = (u32)(off >> 2);
-		cmdbuf2 = (u32)len;
-		ret = diDoCMD(DI_CMD_READ_NORMAL, cmdbuf1, cmdbuf2, dest, (uint)len);
-	}
-
+	ret = diReadRaw(dest, len, off);
 	if (ret)
 		return -1;
 
@@ -481,7 +519,7 @@ static int diReadDiscSize(u64 *size) {
 	int ret;
 
 	memset(&info, 0, sizeof(info));
-	ret = diDoCMD(DI_CMD_READ_PHYSINFO, 0, 0, &info, sizeof(info));
+	ret = diDoCMDTimeout(DI_CMD_READ_PHYSINFO, 0, 0, &info, sizeof(info), DI_TIMEOUT_MEDIA_US);
 	if (ret) {
 		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 			*size = GCN_DISC_SIZE;
@@ -495,7 +533,7 @@ static int diReadDiscSize(u64 *size) {
 
 	first = npll_be32_to_cpu(info.firstDataPSN);
 	last = npll_be32_to_cpu(info.lastDataPSN);
-	if (last < first || (!usingDVDR && !first && !last)) {
+	if (last < first || (!usingWiiDVDRRead && !first && !last)) {
 		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 			*size = GCN_DISC_SIZE;
 			log_printf("Using fallback GameCube disc size: %llu bytes\r\n", *size);
@@ -516,6 +554,11 @@ static int diReadDiscSize(u64 *size) {
 static int diRegisterMedia(void) {
 	int ret;
 
+	if (!mediaValidated) {
+		log_puts("refusing to register unvalidated DI media");
+		return -ENOMEDIUM;
+	}
+
 	if (bdevRegistered) {
 		B_Unregister(&diBdev);
 		bdevRegistered = false;
@@ -526,6 +569,10 @@ static int diRegisterMedia(void) {
 	if (ret) {
 		diBdev.size = 0;
 		return ret;
+	}
+	if (!diBdev.size) {
+		log_puts("refusing to register zero-sized DI media");
+		return -EIO;
 	}
 
 	B_Register(&diBdev);
@@ -548,12 +595,77 @@ static void diIRQHandler(enum irqDev dev) {
 		regs->sr = sr | srReason;
 }
 
+static bool diBufInteresting(const u8 *buf, size_t len) {
+	size_t i;
+	bool allZero = true, allFF = true;
+
+	for (i = 0; i < len; i++) {
+		if (buf[i] != 0)
+			allZero = false;
+		if (buf[i] != 0xff)
+			allFF = false;
+		if (!allZero && !allFF)
+			return true;
+	}
+
+	return false;
+}
+
+static int diValidateMediaRead(void) {
+	u8 buf[DVD_BLOCK_SIZE] ALIGN(32);
+	int ret;
+
+	memset(buf, 0, sizeof(buf));
+	ret = diReadRaw(buf, sizeof(buf), 0);
+	log_printf("DI validate sector 0: ret=%d status=%08x\r\n", ret, diGetStatus());
+	if (!ret && diBufInteresting(buf, sizeof(buf))) {
+		mediaValidated = true;
+		return 0;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	ret = diReadRaw(buf, sizeof(buf), 16 * DVD_BLOCK_SIZE);
+	log_printf("DI validate sector 16: ret=%d status=%08x ident=%02x%02x%02x%02x%02x\r\n",
+		   ret, diGetStatus(), buf[1], buf[2], buf[3], buf[4], buf[5]);
+	if (!ret && diBufInteresting(buf, sizeof(buf))) {
+		mediaValidated = true;
+		return 0;
+	}
+
+	mediaValidated = false;
+	return ret ? ret : -EIO;
+}
+
+static enum diMediaState diClassifyProbe(int readIDRet, u32 status, const struct discID *discID) {
+	if (!readIDRet) {
+		log_printf("Disc ID: %02x%02x%02x%02x%02x%02x\r\n",
+			discID->bytes[0], discID->bytes[1], discID->bytes[2],
+			discID->bytes[3], discID->bytes[4], discID->bytes[5]);
+		return DI_MEDIA_ORIGINAL;
+	}
+
+	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE &&
+	    DI_STATUS_GET_ERR(status) == DI_ERROR_NORMAL_READ_ON_DVDR)
+		return DI_MEDIA_DVDR_REJECTED;
+
+	if (diStatusIsNoDisc(status))
+		return DI_MEDIA_EMPTY;
+
+	if (diStatusIsMediaChanged(status))
+		return DI_MEDIA_UNKNOWN;
+
+	return DI_MEDIA_UNKNOWN;
+}
+
+static int diTryGCNPatchOnRejectedMedia(int readIDRet, u32 status);
+
 static int diProbeNewMedia(void) {
 	struct discID discID ALIGN(32);
+	enum diMediaState media;
+	u64 mediaChangeStart;
 	u32 status;
 	char statusStr[128];
 	int ret;
-	bool again = false;
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		ret = diUnlockGC();
@@ -561,49 +673,75 @@ static int diProbeNewMedia(void) {
 			return ret;
 	}
 
+	mediaChangeStart = mftb();
 tryAgain:
 	memset(&discID, 0, sizeof(discID));
+	mediaValidated = false;
 
-	ret = diDoCMD(DI_CMD_READ_DISC_ID, 0, 0x20, &discID, sizeof(discID));
+	ret = diDoCMDTimeout(DI_CMD_READ_DISC_ID, 0, 0x20, &discID, sizeof(discID), DI_TIMEOUT_MEDIA_US);
 	status = diGetStatus();
 	diStatusToStr(status, statusStr, sizeof(statusStr));
-	log_printf("Drive status: %08x %s\r\n", status, statusStr);
-	if (DI_STATUS_GET_ERR(status) == DI_ERROR_NORMAL_READ_ON_DVDR) {
+	media = diClassifyProbe(ret, status, &discID);
+	log_printf("Drive status: %08x %s, read ID ret=%d, media=%d, gcnPatched=%d\r\n",
+		   status, statusStr, ret, media, patchedGCNMedia);
+
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE && patchedGCNMedia && media != DI_MEDIA_ORIGINAL) {
+		ret = diValidateMediaRead();
+		if (!ret)
+			return diRegisterMedia();
+		log_printf("Patched GCN media validation failed: %d\r\n", ret);
+	}
+
+	if (media == DI_MEDIA_DVDR_REJECTED && H_ConsoleType != CONSOLE_TYPE_GAMECUBE) {
 		log_puts("DVD-R style read commands required");
-		usingDVDR = true;
+		usingWiiDVDRRead = true;
+		ret = diValidateMediaRead();
+		if (ret)
+			return ret;
 		return diRegisterMedia();
 	}
-	else if (DI_STATUS_GET_STATUS(status) == DI_STATUS_NO_DISC ||
-	    DI_STATUS_GET_ERR(status) == DI_ERROR_COVER_OPENED) {
+	else if (media == DI_MEDIA_EMPTY) {
 		log_puts("No disc present");
-		usingDVDR = false;
+		usingWiiDVDRRead = false;
+		patchedGCNMedia = false;
 		return -ENOMEDIUM;
 	}
-	else if (DI_STATUS_GET_STATUS(status) == DI_STATUS_DISC_CHANGED ||
-	    DI_STATUS_GET_ERR(status) == DI_ERROR_MEDIA_CHANGED) {
-		if (!again) {
-			again = true;
+	else if (media == DI_MEDIA_UNKNOWN && diStatusIsMediaChanged(status)) {
+		if (!T_HasElapsed(mediaChangeStart, DI_MEDIA_SETTLE_US)) {
+			udelay(DI_MEDIA_RETRY_US);
 			goto tryAgain;
 		}
-		log_puts("No media ready after lid close");
-		usingDVDR = false;
-		return -EAGAIN;
+		usingWiiDVDRRead = false;
+		ret = diTryGCNPatchOnRejectedMedia(ret, status);
+		if (!ret)
+			return diProbeNewMedia();
+		log_puts("No media ready after lid close; leaving media unregistered");
+		return ret;
 	}
-	else if (ret) {
+	else if (media == DI_MEDIA_UNKNOWN) {
 		log_printf("Read Disc ID failed: %d\r\n", ret);
-		usingDVDR = false;
+		usingWiiDVDRRead = false;
+		ret = diTryGCNPatchOnRejectedMedia(ret, status);
+		if (!ret)
+			return diProbeNewMedia();
 		return ret;
 	}
 	else {
-		log_printf("Disc ID: %02x%02x%02x%02x%02x%02x\r\n",
-			discID.bytes[0], discID.bytes[1], discID.bytes[2],
-			discID.bytes[3], discID.bytes[4], discID.bytes[5]);
-		usingDVDR = false;
+		usingWiiDVDRRead = false;
+		ret = diValidateMediaRead();
+		if (ret)
+			return ret;
 		return diRegisterMedia();
 	}
 }
 
-static u32 diReadMem32(u32 addr) {
+static int diReadMem32(u32 addr, u32 *dat) {
+	int ret;
+
+	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
+	if (ret)
+		return ret;
+
 	regs->sr = 0x2E;
 	regs->cvr = 0;
 	regs->cmdbuf[0] = DI_CMD_DEBUG_READMEM;
@@ -612,12 +750,24 @@ static u32 diReadMem32(u32 addr) {
 	regs->immbuf = 0;
 	regs->cr = DI_CR_TSTART;
 
-	while (regs->cr & DI_CR_TSTART);
-	return regs->immbuf;
+	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
+	if (ret) {
+		log_printf("debug readmem timeout addr=%08x CR=%08x\r\n", addr, regs->cr);
+		return ret;
+	}
+
+	*dat = regs->immbuf;
+	return 0;
 }
 
-static void diWriteMem32(u32 addr, u32 dat) {
+static int diWriteMem32(u32 addr, u32 dat) {
+	int ret;
+
 	/* Swiss does this jank, and I don't think it could be adapted well into a real command (DMA 0B to address 0?) */
+	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
+	if (ret)
+		return ret;
+
 	regs->sr = 0x2E;
 	regs->cvr = 0;
 	regs->cmdbuf[0] = DI_CMD_DEBUG_WRITEMEM;
@@ -626,36 +776,54 @@ static void diWriteMem32(u32 addr, u32 dat) {
 	regs->mar = 0;
 	regs->length = 0;
 	regs->cr = DI_CR_TSTART | DI_CR_DMA;
-	while (regs->cr & DI_CR_TSTART);
+	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
+	if (ret) {
+		log_printf("debug writemem setup timeout addr=%08x CR=%08x\r\n", addr, regs->cr);
+		return ret;
+	}
 
 	/* executing it as a command????? */
 	regs->sr = 0x2E;
 	regs->cvr = 0;
 	regs->cmdbuf[0] = dat;
 	regs->cr = DI_CR_TSTART;
-	while (regs->cr & DI_CR_TSTART);
+	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
+	if (ret)
+		log_printf("debug writemem data timeout addr=%08x dat=%08x CR=%08x\r\n", addr, dat, regs->cr);
+	return ret;
 }
 
-static void diReadMemArray(u32 addr, void *buf, u32 size) {
+static int diReadMemArray(u32 addr, void *buf, u32 size) {
 	u32 *ptr = (u32 *)buf;
+	int ret;
 	int rem = (int)size;
 
 	while (rem > 0) {
-		*ptr++ = diReadMem32(addr);
+		ret = diReadMem32(addr, ptr);
+		if (ret)
+			return ret;
+		ptr++;
 		addr += 4;
 		rem -= 4;
 	}
+
+	return 0;
 }
 
-static void diWriteMemArray(u32 addr, const void *buf, u32 size) {
-	u32 *ptr = (u32 *)buf;
+static int diWriteMemArray(u32 addr, const void *buf, u32 size) {
+	const u32 *ptr = (const u32 *)buf;
+	int ret;
 	int rem = (int)size;
 
 	while (rem > 0) {
-		diWriteMem32(addr, *ptr++);
+		ret = diWriteMem32(addr, *ptr++);
+		if (ret)
+			return ret;
 		addr += 4;
 		rem -= 4;
 	}
+
+	return 0;
 }
 
 static const void *drivePatchPtr(void) {
@@ -670,39 +838,80 @@ static const void *drivePatchPtr(void) {
 	return NULL;
 }
 
-static void diApplyGCNPatches() {
+static int diApplyGCNPatches(void) {
 	const void *patchCode;
+	int ret;
 
 	patchCode = drivePatchPtr();
 	if(patchCode == NULL)
-		return;    /* Unsupported drive */
+		return -ENODEV;    /* Unsupported drive */
 
 	log_printf("Drive date %08x\r\n", driveDate);
 	log_puts("Unlocking drive");
-	diUnlockGC();
+	ret = diUnlockGC();
+	if (ret)
+		return ret;
 	log_puts("Write patch");
-	diWriteMemArray(0xff40d000, patchCode, 0x1F0);
-	diWriteMem32(0x804c, 0x00d04000);
+	ret = diWriteMemArray(0xff40d000, patchCode, 0x1F0);
+	if (ret)
+		return ret;
+	ret = diWriteMem32(0x804c, 0x00d04000);
+	if (ret)
+		return ret;
 	log_printf("Set extension %08x\r\n", diGetStatus());
-	diDoCMD(DI_CMD_SETEXTENSION, 0, 0, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_SETEXTENSION, 0, 0, NULL, 0, DI_TIMEOUT_PATCH_US);
+	if (ret)
+		return ret;
 	log_printf("Unlock again %08x\r\n", diGetStatus());
-	diUnlockGC();
+	ret = diUnlockGC();
+	if (ret)
+		return ret;
 	log_printf("Debug Motor On %08x\r\n", diGetStatus());
-	diDoCMD(DI_CMD_DEBUG_BASE | DEBUG_ACCEPT_COPY | DEBUG_START_DRIVE, 0, 0, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_DEBUG_BASE | DEBUG_ACCEPT_COPY | DEBUG_START_DRIVE, 1, 0, NULL, 0, DI_TIMEOUT_PATCH_US);
+	if (ret && ret != -EIO)
+		return ret;
+	if (ret == -EIO)
+		log_puts("Debug Motor On signaled DEINT; continuing");
 	log_printf("Set Status %08x\r\n", diGetStatus());
-	diDoCMD(DI_CMD_SET_STATUS, 0, 0, NULL, 0);
+	ret = diDoCMDTimeout(DI_CMD_SET_STATUS, 0, 0, NULL, 0, DI_TIMEOUT_PATCH_US);
+	if (ret)
+		return ret;
 	log_printf("Set Status - done %08x\r\n", diGetStatus());
+	patchedGCNMedia = true;
+	return 0;
+}
+
+static int diTryGCNPatchOnRejectedMedia(int readIDRet, u32 status) {
+	char statusStr[128];
+	int ret;
+
+	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE || patchedGCNMedia || !drivePatchPtr())
+		return -EAGAIN;
+	if (!readIDRet || diStatusIsNoDisc(status))
+		return -EAGAIN;
+
+	diStatusToStr(status, statusStr, sizeof(statusStr));
+	log_printf("GCN media may need firmware patch: read ID ret=%d status=%08x %s\r\n",
+		   readIDRet, status, statusStr);
+	log_puts("suspected stock GCN drive fw rejecting DVD-R, trying patches");
+	ret = diApplyGCNPatches();
+	if (ret) {
+		log_printf("Firmware patch failed: %d\r\n", ret);
+		log_puts("Resetting DI after failed firmware patch");
+		diReset();
+		return ret;
+	}
+
+	return 0;
 }
 
 /* can't rely on IRQs sadly, CVRINT only detects falling edge (open->closed) */
 static void diCoverPoller(void *dummy) {
 	static const char *const cvrToStr[2] = { "Closed", "Open" };
-	struct discID discID ALIGN(32);
 	int prevState, curState;
 	u32 cvr, status;
 	char statusStr[128];
 	int ret;
-	bool triedFWPatch = false;
 	(void)dummy;
 
 	cvr = regs->cvr;
@@ -714,15 +923,19 @@ static void diCoverPoller(void *dummy) {
 
 	log_printf("DI Cover status: %s -> %s\r\n", cvrToStr[prevState], cvrToStr[curState]);
 
-again:
 	status = diGetStatus();
 	diStatusToStr(status, statusStr, sizeof(statusStr));
 	log_printf("Drive status: %08x %s\r\n", status, statusStr);
 
-	if (curState && bdevRegistered) {
-		B_Unregister(&diBdev);
-		bdevRegistered = false;
-		diBdev.size = 0;
+	if (curState) {
+		if (bdevRegistered) {
+			B_Unregister(&diBdev);
+			bdevRegistered = false;
+			diBdev.size = 0;
+		}
+		mediaValidated = false;
+		usingWiiDVDRRead = false;
+		patchedGCNMedia = false;
 	}
 	else if (!curState) {
 		if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE) {
@@ -732,38 +945,8 @@ again:
 				return;
 		}
 		ret = diProbeNewMedia();
-		if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE && ret == -EAGAIN) {
-			log_puts("Resetting DI after media-changed probe");
-			diReset();
-			if (diWaitForStatus("lid close reset", &status))
-				return;
-
-			/* need to try to read discid to see the new status */
-			ret = diDoCMD(DI_CMD_READ_DISC_ID, 0, 0x20, &discID, sizeof(discID));
-			status = diGetStatus();
-
-			diProbeNewMedia();
-			diStatusToStr(status, statusStr, sizeof(statusStr));
-			log_printf("Drive status from probe: %08x %s\r\n", status, statusStr);
-
-			/*
-			 * Is it the suspicious combo?  We got here from EAGAIN
-			 * (from Media Changed error on first diProbeMedia),
-			 * if we now get no disc + medium not present/cover opened, then
-			 * it is quite probable that the drive rejected a valid DVD-R(OM).
-			 */
-			if (DI_STATUS_GET_STATUS(status) == DI_STATUS_NO_DISC &&
-			    DI_STATUS_GET_ERR(status) == DI_ERROR_COVER_OPENED) {
-				if (triedFWPatch) {
-					log_puts("Firmware patch didn't work...");
-					return;
-				}
-				log_puts("suspected stock GCN drive fw rejecting DVD-R, trying patches");
-				diApplyGCNPatches();
-				triedFWPatch = true;
-				goto again;
-			}
-		}
+		if (ret == -EAGAIN)
+			log_puts("DI media probe remains ambiguous; leaving media unregistered");
 	}
 }
 
@@ -771,6 +954,7 @@ static void diInit(void) {
 	struct diInquiryResponse resp ALIGN(32);
 	char status[128];
 	u32 rawStatus;
+	int ret;
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
 		regs = (volatile struct diRegs *)0xcc006000;
@@ -794,12 +978,15 @@ static void diInit(void) {
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
 	/* get an inquiry */
-	diDoCMD(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp));
+	diDoCMDTimeout(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp), DI_TIMEOUT_STATUS_US);
 
 	log_printf("Drive date: (MM/DD/YYYY) %02x/%02x/%04x\r\n", (resp.date & 0x0000ff00) >> 8, resp.date & 0x000000ff, (resp.date & 0xffff0000) >> 16);
 	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
 		log_printf("Drive type: %s\r\n", dateToRevWii(resp.date));
 	driveDate = resp.date;
+	mediaValidated = false;
+	usingWiiDVDRRead = false;
+	patchedGCNMedia = false;
 
 	/* register our IRQ handler */
 	IRQ_RegisterHandler(IRQDEV_DI, diIRQHandler);
@@ -810,8 +997,11 @@ static void diInit(void) {
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
 	lastDICVR = regs->cvr;
-	if (!(lastDICVR & DI_CVR_CVR))
-		diProbeNewMedia();
+	if (!(lastDICVR & DI_CVR_CVR)) {
+		ret = diProbeNewMedia();
+		if (ret == -EAGAIN)
+			log_puts("Initial DI media probe remains ambiguous; leaving media unregistered");
+	}
 
 	T_QueueRepeatingEvent(200 * 1000, diCoverPoller, NULL);
 
@@ -828,6 +1018,9 @@ static void diCleanup(void) {
 		bdevRegistered = false;
 		diBdev.size = 0;
 	}
+	mediaValidated = false;
+	usingWiiDVDRRead = false;
+	patchedGCNMedia = false;
 
 	diDrv.state = DRIVER_STATE_NOT_READY;
 }
