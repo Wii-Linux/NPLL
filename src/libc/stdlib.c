@@ -69,7 +69,7 @@ long strtol(const char *str, char **endPtr, int base) {
 			break;
 
 		/* is it valid digit? */
-		if (!isdigit(tmp) && base > 10)
+		if (!isdigit(tmp) && base <= 10)
 			break;
 
 		/* normalize ASCII characters into an integer */
@@ -120,7 +120,7 @@ long long strtoll(const char *str, char **endPtr, int base) {
 			break;
 
 		/* is it valid digit? */
-		if (!isdigit(tmp) && base > 10)
+		if (!isdigit(tmp) && base <= 10)
 			break;
 
 		/* normalize ASCII characters into an integer */
