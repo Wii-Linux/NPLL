@@ -20,7 +20,7 @@
 #define assert_msg(cond, msg) if (!(cond)) { panic(msg); }
 #define assert_unreachable() { \
 	char __unreachablePanic[128]; \
-	sprintf(__unreachablePanic, "assert_unreachable() reached at %s:%d!", __FILE__, __LINE__); \
+	snprintf(__unreachablePanic, sizeof(__unreachablePanic), "assert_unreachable() reached at %s:%d!", __FILE__, __LINE__); \
 	panic(__unreachablePanic); \
 }
 
