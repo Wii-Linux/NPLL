@@ -22,7 +22,7 @@
  * since the allocator can only free the most recent allocation
  */
 void H_PrepareForExecEntry(void) {
-	uint curType, firstType, lastType;
+	int curType, firstType, lastType;
 	struct driver *curDriver;
 
 	L_Method = LOG_METHOD_ALL_ODEV;
@@ -43,7 +43,7 @@ void H_PrepareForExecEntry(void) {
 		curDriver = __drivers_start;
 		while ((u32)curDriver < ((u32)__drivers_end) - 1) {
 			if (curDriver->state == DRIVER_STATE_READY &&
-			    curDriver->type == curType && curDriver->cleanup)
+			    curDriver->type == (uint)curType && curDriver->cleanup)
 				curDriver->cleanup();
 
 			curDriver++;
@@ -61,7 +61,7 @@ void H_PrepareForExecEntry(void) {
 		curDriver = __drivers_start;
 		while ((u32)curDriver < ((u32)__drivers_end) - 1) {
 			if (curDriver->state == DRIVER_STATE_READY &&
-			    curDriver->type == curType && curDriver->cleanup)
+			    curDriver->type == (uint)curType && curDriver->cleanup)
 				curDriver->cleanup();
 
 			curDriver++;
