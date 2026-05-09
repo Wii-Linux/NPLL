@@ -772,6 +772,8 @@ void UI_DelPart(struct partition *part) {
 
 	for (i = 0; i < partitions[partToDel].numEntries; i++) {
 		log_printf("deleting entry %u of part %u\r\n", i, partToDel);
+		/* 2=DATA_IDX_PATH */
+		free((void *)partitions[partToDel].entries[i].data[2]);
 		UI_DelEntry(&rootMenu, &partitions[partToDel].entries[i]);
 	}
 
