@@ -214,7 +214,9 @@ int H_EXIXferImm(uint channel, uint len, uint mode, const void *in, void *out) {
 			data = (u32)*(u16 *)in << 16;
 			break;
 		case 3:
-			data = (*(u32 *)in & 0x00ffffff) << 8;
+			data = ((u32)((u8 *)in)[0] << 24);
+			data |= ((u32)((u8 *)in)[1] << 16);
+			data |= ((u32)((u8 *)in)[2] << 8);
 			break;
 		case 4:
 			data = *(u32 *)in;
@@ -266,7 +268,9 @@ int H_EXIXferImm(uint channel, uint len, uint mode, const void *in, void *out) {
 			*(u16 *)out = (u16)((data & 0xffff0000) >> 16);
 			break;
 		case 3:
-			*(u32 *)out = (data & 0xffffff00) >> 8;
+			((u8 *)out)[0] = (u8)((data & 0xff000000) >> 24);
+			((u8 *)out)[1] = (u8)((data & 0x00ff0000) >> 16);
+			((u8 *)out)[2] = (u8)((data & 0x0000ff00) >> 8);
 			break;
 		case 4:
 			*(u32 *)out = data;
