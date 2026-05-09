@@ -190,7 +190,7 @@ static void usbgeckoLaunchPayload(void) {
 	}
 
 	/* valid ELF, let's load it... */
-	log_printf("Launching ELF, goodbye!\r\n", ret);
+	log_puts("Launching ELF, goodbye!");
 	ret = ELF_LoadMem(buf);
 	log_printf("ELF launch failed: %d\r\n", ret);
 	free(buf);
