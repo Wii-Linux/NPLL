@@ -116,8 +116,7 @@ static u32 binSz = 0;
 static u64 lastRxTB = 0;
 static enum {
 	STATE_IDLE = 0,
-	STATE_GET_SIZE,
-	STATE_GET_DATA
+	STATE_GET_SIZE
 } usbgeckoState = STATE_IDLE;
 static const u8 bufMagic[8] = { 'N', 'P', 'L', 'L', 'B', 'I', 'N', 0x7f };
 static const char ackMagic = 0x06;
@@ -284,7 +283,6 @@ again:
 
 		/* yes, we can receive that */
 		log_printf("Receiving binary with size: %u...\r\n", binSz);
-		usbgeckoState = STATE_GET_DATA;
 		bufIdx = 0;
 		usbgeckoAck();
 		ret = usbgeckoReceivePayload();
@@ -300,11 +298,6 @@ again:
 		}
 		usbgeckoAck();
 		usbgeckoLaunchPayload();
-		break;
-	}
-	case STATE_GET_DATA: {
-		(void)data;
-		usbgeckoResetState();
 		break;
 	}
 	}
