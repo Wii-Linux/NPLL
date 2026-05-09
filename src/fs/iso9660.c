@@ -369,6 +369,8 @@ static void iso9660Close(struct filesystem *fs, int fd) {
 
 static ssize_t iso9660Read(struct filesystem *fs, int fd, void *dest, size_t len) {
 	struct iso9660FdInfo *file;
+	ssize_t ret;
+
 	(void)fs;
 	VALIDATE_FD(-EBADF);
 
@@ -380,7 +382,13 @@ static ssize_t iso9660Read(struct filesystem *fs, int fd, void *dest, size_t len
 	if (len > (size_t)(file->size - file->pos))
 		len = file->size - file->pos;
 
-	return B_Read(mountedPart, dest, len, (file->loc * SECTOR_SIZE) + file->pos);
+	ret = B_Read(mountedPart, dest, len, (file->loc * SECTOR_SIZE) + file->pos);
+	if (ret != (ssize_t)len)
+		return ret;
+
+	file->pos += len;
+
+	return ret;
 }
 
 static ssize_t iso9660Seek(struct filesystem *fs, int fd, ssize_t off) {
