@@ -242,7 +242,7 @@ static int iso9660Lookup(const char *path, struct iso9660DirRecordHdr *out) {
 
 	cur = &pvd.data.pvd.rootDirHdr;
 
-	if (strlen(path) > FILENAME_MAX)
+	if (strlen(path) >= FILENAME_MAX)
 		return -EINVAL;
 
 	while (true) {
