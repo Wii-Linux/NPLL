@@ -366,7 +366,7 @@ static void odevWriteChar(char c) {
 				  (FONT_WIDTH * posX) + /* h offset in buf */
 				  x; /* h offset within char */
 
-			if (dat & (1 << (8 - x)))
+			if (dat & (1 << (7 - x)))
 				pix = color[0]; /* fg */
 			else
 				pix = color[1]; /* bg */
