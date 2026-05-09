@@ -149,8 +149,8 @@ static bool fatProbe(struct filesystem *fs, struct partition *part) {
 		}
 		else return false;
 	}
+	case 2:
 	case 3:
-	case 4:
 		return false;
 	default:
 		__builtin_unreachable();
