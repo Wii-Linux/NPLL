@@ -148,13 +148,13 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 			goto cont;
 		}
 		else if (isInTitle) { /* consume title */
-			if (titleCur >= sizeof(entryTitle))
+			if (titleCur >= sizeof(entryTitle) - 1)
 				goto cont;
 			entryTitle[titleCur++] = *cur;
 			goto cont;
 		}
 		else if (isInPath) { /* consume path */
-			if (pathCur >= sizeof(entryPath))
+			if (pathCur >= sizeof(entryPath) - 1)
 				goto cont;
 			entryPath[pathCur++] = *cur;
 			goto cont;
