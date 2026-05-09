@@ -49,6 +49,10 @@ static volatile struct exi_regs *regs;
 /*
  * Hardware register values, masks, and shifts
  */
+#define EXI_CSR_EXIINTMASK   BIT(0)
+#define EXI_CSR_EXIINT       BIT(1)
+#define EXI_CSR_TCINTMASK    BIT(2)
+#define EXI_CSR_TCINT        BIT(3)
 #define EXI_CSR_CLK_SHIFT    4
 #define EXI_CSR_CLK          (7u << EXI_CSR_CLK_SHIFT)
 #define   EXI_CSR_CLK_64MHZ    (6u << EXI_CSR_CLK_SHIFT)
@@ -60,8 +64,10 @@ static volatile struct exi_regs *regs;
 #define   EXI_CSR_CLK_1MHZ     (0u << EXI_CSR_CLK_SHIFT)
 #define EXI_CSR_CS_SHIFT     7
 #define EXI_CSR_CS           (7u << EXI_CSR_CS_SHIFT)
-#define EXI_CSR_EXT_IRQ      BIT(11)
+#define EXI_CSR_EXTINTMASK   BIT(10)
+#define EXI_CSR_EXTINT       BIT(11)
 #define EXI_CSR_EXT          BIT(12)
+#define EXI_CSR_ROMDIS       BIT(13)
 
 #define EXI_CR_TSTART        BIT(0)
 #define EXI_CR_DMA           BIT(1)
@@ -103,7 +109,7 @@ void H_EXISelect(uint channel, uint cs, uint clkMhz) {
 	dbg("Channel %d, selecting CS %d at clock %dMHz\r\n", channel, cs, clkMhz);
 
 	csr = regs->channels[channel].csr;
-	csr &= 0x405;
+	csr &= (EXI_CSR_EXIINTMASK | EXI_CSR_TCINTMASK | EXI_CSR_EXTINTMASK);
 	csr |= BIT((EXI_CSR_CS_SHIFT + cs)); /* set the appropriate CS bit */
 	csr |= exiSpeedFromMhz(clkMhz);         /* set the appropriate CLK bits */
 	dbg("Writing CSR=0x%08x\r\n", csr);
@@ -119,7 +125,7 @@ void H_EXISelectSD(uint channel, uint clkMhz) {
 	dbg("Channel %d, selecting SD clock %dMHz\r\n", channel, clkMhz);
 
 	csr = regs->channels[channel].csr;
-	csr &= 0x405;
+	csr &= (EXI_CSR_EXIINTMASK | EXI_CSR_TCINTMASK | EXI_CSR_EXTINTMASK);
 	csr |= exiSpeedFromMhz(clkMhz);
 	regs->channels[channel].csr = csr;
 }
@@ -132,7 +138,7 @@ void H_EXIDeselect(uint channel) {
 	u32 csr;
 
 	csr = regs->channels[channel].csr;
-	csr &= 0x405;
+	csr &= (EXI_CSR_EXIINTMASK | EXI_CSR_TCINTMASK | EXI_CSR_EXTINTMASK);
 	dbg("Writing CSR=0x%08x\r\n", csr);
 	regs->channels[channel].csr = csr;
 }
@@ -157,8 +163,8 @@ void H_EXIClearExt(uint channel) {
 		return;
 
 	csr = regs->channels[channel].csr;
-	csr &= 0x405;
-	csr |= EXI_CSR_EXT_IRQ;
+	csr &= (EXI_CSR_EXTINTMASK | EXI_CSR_TCINTMASK | EXI_CSR_EXTINTMASK);
+	csr |= EXI_CSR_EXTINT;
 	regs->channels[channel].csr = csr;
 }
 
@@ -298,10 +304,9 @@ static void exiInit(void) {
 		break;
 	}
 
-	regs->channels[0].csr = EXI_CSR_EXT_IRQ;
-	regs->channels[1].csr = EXI_CSR_EXT_IRQ;
+	regs->channels[0].csr = EXI_CSR_EXTINT | EXI_CSR_ROMDIS;
+	regs->channels[1].csr = EXI_CSR_EXTINT;
 	regs->channels[2].csr = 0;
-	regs->channels[0].csr = BIT(13);
 
 	/* we're all good */
 	exiDrv.state = DRIVER_STATE_READY;
