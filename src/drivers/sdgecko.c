@@ -4,6 +4,7 @@
  * Copyright (C) 2026 Techflash
  */
 
+#include "npll/irq.h"
 #define MODULE "sdgecko"
 
 #include <assert.h>
@@ -74,14 +75,17 @@ static bool sdgeckoSlotPresent(uint i) {
 
 /* FIXME: USB Gecko driver should probably just expose this info tbh */
 static bool sdgeckoSlotHasUSBGecko(uint i) {
+	bool irqs;
 	u16 rx, tx = 0x9000;
 
 	if (!sdgeckoSlots[i].hotplug)
 		return false;
 
+	irqs = IRQ_DisableSave();
 	H_EXISelect(sdgeckoSlots[i].channel, sdgeckoSlots[i].cs, 32);
 	(void)H_EXIRdWrImm(sdgeckoSlots[i].channel, 2, &tx, &rx);
 	H_EXIDeselect(sdgeckoSlots[i].channel);
+	IRQ_Restore(irqs);
 
 	return rx == 0x0470;
 }
