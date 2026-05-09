@@ -100,7 +100,7 @@ static void sysinfoMenuInit(struct menu *m) {
 		if (name)
 			sprintf(tmp, "Flipper SoC Revision: %s", name);
 		else
-			sprintf(tmp, "Flipper SoC Revision: Unknown (%08x) (?!)", name, H_GCNRev);
+			sprintf(tmp, "Flipper SoC Revision: Unknown (%08x) (?!)", H_GCNRev);
 
 		strcat(m->content, tmp);
 		strcat(m->content, "\r\n");
