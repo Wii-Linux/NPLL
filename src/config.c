@@ -113,7 +113,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 		return -1;
 	}
 
-	file = malloc((size_t)size);
+	file = malloc((size_t)size + 1);
 	ret = FS_Read(fd, file, (size_t)size);
 	if (ret != size) {
 		log_printf("FS_Read on gumboot/gumboot.lst failed: %d\r\n", ret);
@@ -121,6 +121,8 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 		FS_Close(fd);
 		return -1;
 	}
+	/* ensure it's NULL terminated to catch strtol and whatnot, just in case */
+	file[size] = '\0';
 	FS_Close(fd);
 
 	cur = curLine = file;
