@@ -128,7 +128,6 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	bdev->name = (char *)name;
 	bdev->size = (u64)capacity;
 	bdev->blockSize = (u32)mmc_block_size(bdevToMMC(bdev));
-	bdev->drvData = mmcDev;
 	bdev->transfers = sdmmcTransfers;
 	bdev->numTransfers = sizeof(sdmmcTransfers) / sizeof(sdmmcTransfers[0]);
 	bdev->blockAlignMode = BLOCK_ALIGN_BOUNCE;
