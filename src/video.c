@@ -356,7 +356,7 @@ static void odevWriteChar(char c) {
 		maybeScroll();
 	}
 
-	row = font + (c * FONT_HEIGHT);
+	row = font + ((u8)c * FONT_HEIGHT);
 
 	for (y = 0; y < FONT_HEIGHT; y++) {
 		dat = *row;
