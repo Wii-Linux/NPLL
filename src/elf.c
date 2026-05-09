@@ -83,8 +83,10 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_
 	/* make it virtual */
 	addr = physToCached(addr);
 
-	if (!addrIsValidCached(addr)) {
-		log_printf("address 0x%08x is not valid on this platform\r\n", addr);
+	if (!(((u32)addr & 0xf0000000) == 0x80000000 && size < MEM1_SIZE_GCN) &&
+	     (((u32)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII && size < MEM2_SIZE_WII) &&
+	     (((u32)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII_U && size < MEM2_SIZE_WIIU)) {
+		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", addr, size);
 		*bail = ELF_ERR_INVALID_EXEC;
 		return false;
 	}
