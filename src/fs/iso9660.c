@@ -157,11 +157,15 @@ struct iso9660VolDesc {
 
 static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, struct iso9660DirRecordHdr *out) {
 	int ret;
-	uint off = 0;
-	uint dirLen = from->dataLen.be;
 	char fileName[FILENAME_MAX], *semicolon;
 	void *buf;
+	uint dirLen = from->dataLen.be, off = 0;
 	struct iso9660DirRecordHdr *rec;
+
+	if (dirLen > 512 * 1024) {
+		log_printf("iso9660LookupAt: insane from->dataLen (%u), aborting\r\n", dirLen);
+		return -ERANGE;
+	}
 
 	if (from == &pvd.data.pvd.rootDirHdr)
 		buf = root; /* use cached root dir */
