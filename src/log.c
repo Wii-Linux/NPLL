@@ -74,7 +74,7 @@ void _log_puts(const char *str) {
 	}
 	case LOG_METHOD_NONE: {
 		while (*str)
-			memlogWriteChar(*str);
+			memlogWriteChar(*str++);
 		memlogWriteChar('\r');
 		memlogWriteChar('\n');
 		break;
