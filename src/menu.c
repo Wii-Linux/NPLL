@@ -542,7 +542,7 @@ void UI_HandleInputs(void) {
 				bodyScroll++;
 				clampScrollToBody(bodyHeight);
 			}
-			else if (selected < (curMenu->numEntries - 1)) {
+			else if ((int)selected < ((int)curMenu->numEntries - 1)) {
 				selected++;
 				ensureSelectionVisible(bodyHeight);
 			}
