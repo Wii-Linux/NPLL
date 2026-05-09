@@ -153,5 +153,5 @@ long long strtoll(const char *str, char **endPtr, int base) {
 
 unsigned long long strtoull(const char *str, char **endPtr, int base) {
 	/* strtoull is supposed to be able to handle negatives too */
-	return (unsigned long)strtoll(str, endPtr, base);
+	return (unsigned long long)strtoll(str, endPtr, base);
 }
