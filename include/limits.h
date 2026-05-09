@@ -9,7 +9,7 @@
 
 #define CHAR_BIT 8
 
-#define INT_MAX  0xffffffff
+#define INT_MAX  0x7fffffff
 #define INT32_MAX INT_MAX
 #define UINT_MAX 0xffffffffU
 #define ULONG_MAX UINT_MAX
