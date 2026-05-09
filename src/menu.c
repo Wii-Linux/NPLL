@@ -81,7 +81,7 @@ static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMe
 static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
 static struct menuEntry sysInfoEntry = { .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } };
 
-static struct menuEntry *rootMenuEntries[4] = {
+static struct menuEntry *rootMenuEntries[5] = {
 	&sysInfoEntry,
 };
 
