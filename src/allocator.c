@@ -68,7 +68,7 @@ extern u32 __reloc_dest_start;
 /* align `x` down to the previous multiple of `a` (power of 2) */
 #define ALIGN_DOWN(x, a) ((x) & ~((a) - 1))
 
-#define IS_POWER_OF_2(x) ((x) && ((x) & (x - 1)) == 0)
+#define IS_POWER_OF_2(x) ((x) && ((x) & ((x) - 1)) == 0)
 
 #define MIN_ALIGN 32
 
