@@ -244,11 +244,11 @@ static ssize_t fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 	VALIDATE_FD(-EBADF);
 
 	fr = f_read(&openFiles[fd], dest, len, &bytesRead);
-	if (fr == FR_OK && bytesRead == len)
-		return (ssize_t)len;
 
 	/* TODO: more error codes */
 	switch (fr) {
+	case FR_OK:
+		return (ssize_t)len;
 	case FR_DISK_ERR:
 		return -EIO;
 	case FR_INVALID_PARAMETER:
