@@ -302,6 +302,7 @@ static ssize_t sffsRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 		if (nandReadPage(mountedPart, encBuf, NAND_PAGE_SIZE, page) != NAND_PAGE_SIZE)
 			return total > 0 ? (ssize_t)total : -EIO;
 
+		/* FIXME: bogus decryption upon IV!=0 when seeking to middle of file */
 		if (!pageNum)
 			ret = H_AESDecrypt(encBuf, decBuf, iv, key, NAND_PAGE_SIZE);
 		else
