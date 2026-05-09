@@ -735,6 +735,7 @@ tryAgain:
 	}
 }
 
+#if 0
 static int diReadMem32(u32 addr, u32 *dat) {
 	int ret;
 
@@ -759,6 +760,7 @@ static int diReadMem32(u32 addr, u32 *dat) {
 	*dat = regs->immbuf;
 	return 0;
 }
+#endif
 
 static int diWriteMem32(u32 addr, u32 dat) {
 	int ret;
@@ -793,6 +795,7 @@ static int diWriteMem32(u32 addr, u32 dat) {
 	return ret;
 }
 
+#if 0
 static int diReadMemArray(u32 addr, void *buf, u32 size) {
 	u32 *ptr = (u32 *)buf;
 	int ret;
@@ -809,6 +812,7 @@ static int diReadMemArray(u32 addr, void *buf, u32 size) {
 
 	return 0;
 }
+#endif
 
 static int diWriteMemArray(u32 addr, const void *buf, u32 size) {
 	const u32 *ptr = (const u32 *)buf;
