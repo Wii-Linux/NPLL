@@ -88,8 +88,7 @@ CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -Iexternal/dtc/libfdt -ggdb3 -n
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-# -O3 is just too buggy and unstable :(
-CFLAGS  += -O3 -fwrapv -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
+CFLAGS  += -O3 -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
 LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
 
 # Bootstrap
