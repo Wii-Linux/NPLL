@@ -222,7 +222,7 @@ static void nandCleanup(void) {
 
 static REGISTER_DRIVER(nandDrv) = {
 	.name = "Hollywood/Latte NAND Interface",
-	.mask = DRIVER_ALLOW_WII | DRIVER_ALLOW_WIIU,
+	.mask = DRIVER_ALLOW_WII,
 	.state = DRIVER_STATE_NOT_READY,
 	.type = DRIVER_TYPE_BLOCK,
 	.init = nandInit,
