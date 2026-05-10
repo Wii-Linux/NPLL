@@ -159,7 +159,7 @@ $(LIBFDT_COMBINED): $(LIBFDT_OBJS)
 build/libfdt/%.o: external/dtc/libfdt/%.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -o $@ -c $<
+	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -Wno-strict-overflow -o $@ -c $<
 
 # external files that trigger annoying warnings
 build/fs/fat/ff.o: src/fs/fat/ff.c
