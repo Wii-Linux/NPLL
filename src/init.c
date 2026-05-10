@@ -123,8 +123,8 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	#ifndef DEBUG_ONLY_LOGS
 	L_Method = LOG_METHOD_MENU_WINDOW;
 	#endif
-	D_Init();
 	T_EnableEvents();
+	D_Init();
 	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();
