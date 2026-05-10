@@ -262,6 +262,7 @@ static ssize_t sffsRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 	struct sffsFdInfo *file;
 	u32 key[4];
 	u32 iv[4] = {0, 0, 0, 0};
+	bool cbcCont = false;
 	int ret;
 
 	(void)fs;
@@ -302,15 +303,24 @@ static ssize_t sffsRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 		if (nandReadPage(mountedPart, encBuf, NAND_PAGE_SIZE, page) != NAND_PAGE_SIZE)
 			return total > 0 ? (ssize_t)total : -EIO;
 
-		/* FIXME: bogus decryption upon IV!=0 when seeking to middle of file */
-		if (!pageNum)
+		if (!pageNum) {
+			memset(iv, 0, sizeof(iv));
 			ret = H_AESDecrypt(encBuf, decBuf, iv, key, NAND_PAGE_SIZE);
-		else
+		}
+		else if (cbcCont) {
 			ret = H_AESDecrypt(encBuf, decBuf, NULL, NULL, NAND_PAGE_SIZE);
+		}
+		else {
+			if (nandReadPage(mountedPart, decBuf, NAND_PAGE_SIZE, page - 1) != NAND_PAGE_SIZE)
+				return total > 0 ? (ssize_t)total : -EIO;
+			memcpy(iv, decBuf + NAND_PAGE_SIZE - sizeof(iv), sizeof(iv));
+			ret = H_AESDecrypt(encBuf, decBuf, iv, key, NAND_PAGE_SIZE);
+		}
 
 		if (ret)
 			return total > 0 ? (ssize_t)total : ret;
 
+		cbcCont = true;
 		memcpy((u8 *)dest + total, decBuf + pageOff, toCopy);
 		total += toCopy;
 		file->pos += toCopy;
