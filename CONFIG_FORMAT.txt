@@ -1,0 +1,98 @@
+=== Key concepts / general format ===
+- The generic grammar is key/value based
+- A key is extremely literally *everything* before the first `=` (with the only exception being indentation for entry keys), and the value is *everything* after it until the end of the line
+  - As such, whitespace (tabs/spaces) around keys/values is treated literally, so in most cases this is probably inadvisable (e.g. "foo = bar" would literally define key "foo " with value " bar")
+  - Inline comments are not supported; `foo=bar # baz` literally defines a key "foo" with value "bar # baz"
+  - '=' characters in values are allowed and treated literally; `foo=bar=baz` literally defines a key "foo" with value "bar=baz"
+- Empty lines are allowed and ignored
+- There is a top level set of config keys
+- `cfg_version` must be the first key, and if it's not one of the supported versions by the parser, it immediately aborts loading the config
+- Other global keys may follow
+- Following globals are a set of entries
+  - An entry starts with an `[entry_id]`
+  - It's followed by any number of indented keys in that entry
+- Lines that start with a hashtag (or indent + hashtag) are comments
+- Indentation means exactly 1 tab; no spaces
+  - Spaces are only permitted as part of a value, in which case they are treated literally
+  - 1 level of tab serves to inidicate that a key is treated as part of an entry
+- `@include` may appear at the beginning of any line, and works sort of like C, in the sense that the contents of the referenced path are "pasted in" at the current location, and the parser will parse all of them, starting from the state it was in immediately prior to the `@include`, and then continue with the rest of the original file, from the state it was in immediately prior to completing the included file
+  - Max depth of 8 files
+  - No recursion permitted
+
+=== Globals ===
+- Supported globals:
+  - `cfg_version` (REQUIRED): Describes the version of the config file that follows.  Must be the first line of the file.  Current version is 1.
+  - `default` (optional): Entry ID to boot as the default entry.  Defaults to the first discovered entry.
+  - `timeout` (optional): Timeout to count down for auto-boot.  0: boot instantly; -1: never auto-boot; >0: auto-boot in this many seconds.  Defaults to -1.
+
+=== Paths ===
+- A path consists of the format "medium[,partNum]:path"
+  - the `path` portion should not start with a leading `/`, and the first component of the path is always relative to the filesystem root
+- Partition numbers are 1-indexed (e.g. "p0" is not valid, "p1" is the first partition)
+  - NOTE: "p1" may currently also incidentally refer to the full disk on partition-less devices; this is an implementation detail regarding how block devices are implemented under the hood, may change at any time, and should not be relied on; "p1" should only be used to refer to the 1st actual partition
+  - Lacking a partition number means to access the full disk (NOTE: this may currently incidentally access the 1st partition on disks with partitions; again, this should not be relied on)
+- The 'medium' portion may be either an alias or a genuine device name
+  - Currently supported block device names are: `sdhci0`, `sdhci2` (maybe alias to `emmc`?), `nand0`, `nand1` (FOOTGUN: nand0 partition 3 holds SFFS on Wii, but on Wii U it's nand1!  Wii U nand0 is CafeOS boot data, nand1 is vWii), `sdgecko-a`, `sdgecko-b`, `sdgecko-sp1`, `sdgecko-sp2`, and `di`
+  - Aliases are:
+    - `dvd` -> `di` (only on GC/Wii)
+    - `emmc` -> `sdhci2` (only on Wii U)
+    - `sd` -> `sdhci0` (only on Wii/Wii U)
+    - `nand` -> `nand0` (Wii) AND `nand` -> `nand1` (Wii U); `nand` always refers to the NAND bank that holds SFFS
+  - Special alias: `self` - partition number is not permitted - refers to the same device from which this config (which is currently being parsed and contains this alias) was loaded
+  - The only validation performed is that it maps to a currently-registered block device at entry load-time, the parser doesn't actually care at parse-time
+- Example valid paths:
+  - `sd,p1:bootmii/ppcboot.elf` - Refers to the path `bootmii/ppcboot.elf` on a filesystem on partition 1 of device `sd` (aka `sdhci0`)
+  - `self:wiilinux/v4_19325.krn` - Refers to the path `wiilinux/v4_19325.krn` on the filesystem from which this config was loaded
+  - sdgecko-sp2:swiss.dol` - Refers to the path `swiss.dol` on a filesystem on the full block device `sdgecko-sp2`
+  - `nand,p3:title/00000001/00000002/content/00000098.app` - Refers to the path `title/00000001/00000002/content/00000098.app` on a filesystem on partition 3 (the SFFS partition) of the Wii NAND device (whichever one it may be)
+
+=== Entries ===
+- An entry consists of an ID, and 3 required keys / sets of keys (where `X` = "repeat for each supported console").
+  - ID: a unique entry ID, wrapped in [brackets], at the start of a line
+  - Keys:
+    - `name`: the name of entry in the menu
+    - `platforms`: comma-separated list of platforms (`gamecube`, `wii`, and `wiiu` are valid) that this entry should appear on.  Also instructs the parser as to what types (see below) are allowed, and to some extent what type-specific-keys are allowed; as well as which ones should be expected.  `wii` includes vWii (because under most circumstances the difference doesn't matter; the only thing Linux may be confused by is the different WiFi card).
+    - `type_X`: primary type, optionally followed by (comma-separated) modifiers
+- An entry terminates at the presence of another entry ID, or at EOF
+
+=== Types ===
+- Valid primary types:
+  - `linux`: A Linux kernel zImage/dtbImage/vmlinux
+  - `generic`: A generic PowerPC ELF of any kind
+  - `generic_dol`: A generic GameCube/Wii DOL of any kind
+  - `channel`: Wii/vWii channel; implies the IOS modifier
+- Each type defines various keys for it's own use:
+  - `generic` + `generic_dol` + `linux`
+    - `exec_X`: a path to an executable (ELF/DOL respectively) to load
+  - `linux`
+    - `initrd_X` (optional): a path to an initrd to load
+    - `dtb_X` (optional): a path to a DTB to load
+    - `cmdline_X` (optional): cmdline to pass to the kernel; how to do so depends on the modifies; defaults to setting it in DTB.  Requires DTB unless modifiers are passed.
+  - `channel`
+    - `titleid`: comma separated TID hi/lo
+- Modifiers may require further keys:
+  - `ios` (only valid in `type_wii`)
+    - `ios`: IOS version to reload into (only applies on Wii)
+  - `mini` (only valid in `type_wii`)
+    - `mini`: Path to the new MINI armboot.bin to load
+- Modifiers may also modify behavior:
+  - `dkp_cmdline` will check for DevkitPro-style cmdline magic in the first executable section and put the cmdline there if so
+  - `linux_loader_cmdline` will check for linux-loader magic in MEM2 and put the cmdline there if so
+
+
+Error handling:
+  - Missing `cfg_version`: abort loading config
+  - `cfg_version` mismatch: abort loading config
+  - Unknown key at global level: warn and ignore key
+  - Unknown key in entry: warn and ignore key
+  - Unknown values in `platforms`: warn, only continue parsing entry if it at least contains a valid entry matching the current environment
+  - Unknown values in `type_X` where X=current-platform: warn and do not add entry
+  - Multiple primary values in `type_X` where X=current-platform: warn and do not add entry
+  - Multiple entries with the same ID: warn, keep first, do not add future ones
+  - Missing required keys in entry: warn and do not add entry
+  - Any required path is of an invalid format: warn and do not add entry
+  - Include hits max depth: skip over include directive and continue; once walked back up the stack, try to parse (with the knowledge that it will likely fail)
+  - Include recursion within depth: skip over the recursive include directive and continue; once walked back up the stack, try to parse (with the knowledge that it will likely fail)
+  - Path cannot be resolved upon attempted load (device not registered, filesystem can't be mounted, file does not exist, etc): warn including reason and allow user to select another (or this one again) entry
+
+Overall it was designed to be maximally expressive, easy to grasp (INI-inspired), and braindead-trivial to parse (though validation that an entry actually describes something *sane* might be tricky).
