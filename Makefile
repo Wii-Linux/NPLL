@@ -20,6 +20,7 @@ CC := $(CROSS_PREFIX)gcc
 LD := $(CROSS_PREFIX)ld
 AR := $(CROSS_PREFIX)ar
 OBJCOPY := $(CROSS_PREFIX)objcopy
+NM := $(CROSS_PREFIX)nm
 endif
 endif
 
@@ -66,6 +67,7 @@ export ARM_TOOLCHAIN_PREFIX
 
 LD ?= ld
 OBJCOPY ?= objcopy
+NM ?= nm
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
 $(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools, will skip building DOL)
@@ -145,6 +147,17 @@ $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(HIDE)start=$$($(NM) $@ | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
+	  end=$$($(NM) $@ | awk '$$3=="__sbss_end"{print $$1; exit}'); \
+	  if [ -n "$$start" ] && [ -n "$$end" ]; then \
+	    used=$$((0x$$end - 0x$$start)); \
+	    total=$$((768 * 1024)); \
+	    free=$$((total - used)); \
+	    pct=$$(awk -v u=$$used -v t=$$total 'BEGIN{printf "%.2f", u*100/t}'); \
+	    printf '  NPLL image: %u / %u bytes used (%s%%), %d bytes free\n' $$used $$total $$pct $$free; \
+	  else \
+	    echo "  (size report skipped: missing __reloc_dest_start / __sbss_end symbols)"; \
+	  fi
 
 $(FAT_COMBINED): $(FAT_OBJ)
 	$(info $s  LD(r) $@)
