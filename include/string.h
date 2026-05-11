@@ -15,7 +15,7 @@ extern void *memset(void *s, int c, size_t len);
 extern void *memchr(const void *s, int c, size_t n);
 extern char *strcat(char *dest, const char *src);
 extern int strcmp(const char *str1, const char *str2);
-extern char *strcpy(char *dest, const char *src);
+extern char *strncpy(char *dest, const char *src, size_t n);
 extern size_t strlen(const char *str);
 extern size_t strnlen(const char *str, size_t maxlen);
 extern char *strchr(const char *s, int c);
