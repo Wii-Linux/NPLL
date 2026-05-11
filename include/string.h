@@ -21,3 +21,4 @@ extern size_t strnlen(const char *str, size_t maxlen);
 extern char *strchr(const char *s, int c);
 extern char *strrchr(const char *s, int c);
 extern char *strstr(const char *haystack, const char *needle);
+extern char *strdup(const char *s);

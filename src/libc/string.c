@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 int memcmp(const void *s1, const void *s2, size_t n) {
@@ -109,6 +110,17 @@ size_t strlen(const char *str) {
 	size_t i = 0;
 	for (; str[i] != '\0'; i++);
 	return i;
+}
+
+char *strdup(const char *s) {
+	size_t n = strlen(s) + 1;
+	char *r = malloc(n);
+
+	if (!r)
+		return NULL;
+
+	memcpy(r, s, n);
+	return r;
 }
 
 size_t strnlen(const char *str, size_t maxlen) {
