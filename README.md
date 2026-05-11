@@ -106,6 +106,9 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 - `P`   - Block device partition management
 - `C`   - Config file handling
 
+## Config format
+For info about the dedicated NPLL config format, see `CONFIG_FORMAT.txt`.  
+
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
 "GameCube™" is a trademark of Nintendo of America Inc.  
