@@ -139,7 +139,7 @@
 #define DI_MEDIA_SETTLE_US      (1500 * 1000)
 #define DI_MEDIA_RETRY_US       (250 * 1000)
 #define GCN_DISC_SIZE ((u64)712880 * DVD_BLOCK_SIZE)
-#define WII_SL_DISC_SIZE 405012480ull
+#define WII_SL_DISC_SIZE ((u64)2294912 * DVD_BLOCK_SIZE)
 
 static REGISTER_DRIVER(diDrv);
 struct diRegs {
