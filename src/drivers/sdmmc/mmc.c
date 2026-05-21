@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "npll/drivers/sdio.h"
 #define MODULE "mmc"
 #include "mmc.h"
 #include <string.h>
@@ -557,7 +558,7 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 	 * suggests the MMC bus-width switch still needs more work. Keep MMC in
 	 * 1-bit mode for now so capacity probing and block I/O can proceed.
 	 */
-	if (mmc->type == CARD_TYPE_SD) {
+	if (mmc->type == CARD_TYPE_SD && !(sdio->flags & SDIO_HOST_SPI)) {
 		cmd.index = MMC_APP_CMD;
 		cmd.arg = (u32)mmc->raw_rca << 16;
 		cmd.rsp_type = MMC_RSP_TYPE_R1;
