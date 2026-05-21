@@ -23,18 +23,19 @@
 
 static REGISTER_DRIVER(usbgeckoDrv);
 
-#define UG_SLOTA 0
-#define UG_SLOTB 1
 #define UG_LOAD_TIMEOUT_US (5 * 1000 * 1000)
 
+extern struct exi_device_driver usbgeckoEXIDriver;
 static uint slot = (uint)-1;
+static uint activeCS = 0;
 static bool suppressOutput = false;
+static bool pollQueued = false;
 
 static u16 usbgeckoTransaction(u16 tx, uint port) {
 	u16 rx;
 	bool irqs = IRQ_DisableSave();
 
-	H_EXISelect(port, 0, 32);
+	H_EXISelect(port, activeCS, 32);
 	H_EXIRdWrImm(port, 2, &tx, &rx);
 	H_EXIDeselect(port);
 	IRQ_Restore(irqs);
@@ -203,6 +204,9 @@ static void usbgeckoPoll(void *dummy) {
 	u8 data;
 	(void)dummy;
 
+	if (slot == (uint)-1)
+		return;
+
 	if (usbgeckoState != STATE_IDLE && lastRxTB && T_HasElapsed(lastRxTB, UG_LOAD_TIMEOUT_US)) {
 		if (buf)
 			free(buf);
@@ -315,54 +319,70 @@ static const struct outputDevice outDev = {
 	.rows = 25
 };
 
-static void usbgeckoInit(void) {
-	void *str = NULL, *chr = NULL;
+static int usbgeckoEXIProbe(struct exi_device *dev) {
+	if (slot != (uint)-1)
+		return -1;
 
+	slot = dev->channel;
+	activeCS = dev->cs;
+	if (!usbgeckoIsAdapterPresent(slot)) {
+		slot = (uint)-1;
+		activeCS = 0;
+		return -1;
+	}
+
+	dev->drv_data = &usbgeckoDrv;
+	usbgeckoDrv.state = DRIVER_STATE_READY;
+
+	usbgeckoWriteStr("USB Gecko driver is now enabled in ");
+	usbgeckoWriteStr(dev->name);
+	usbgeckoWriteStr("\r\n");
+	O_AddDevice(&outDev);
+
+	if (!pollQueued) {
+		T_QueueRepeatingEvent(10 * 1000, usbgeckoPoll, NULL);
+		pollQueued = true;
+	}
+
+	return 0;
+}
+
+static void usbgeckoEXIRemove(struct exi_device *dev) {
+	if (dev->drv_data)
+		O_RemoveDevice(&outDev);
+
+	if (buf)
+		free(buf);
+	buf = NULL;
+	dev->drv_data = NULL;
+	slot = (uint)-1;
+	activeCS = 0;
+	usbgeckoResetState();
+	usbgeckoDrv.state = DRIVER_STATE_NO_HARDWARE;
+}
+
+struct exi_device_driver usbgeckoEXIDriver = {
+	.name = "USB Gecko",
+	.probe = usbgeckoEXIProbe,
+	.remove = usbgeckoEXIRemove,
+};
+
+static void usbgeckoInit(void) {
 	if (exiDrv.state != DRIVER_STATE_READY) {
 		usbgeckoDrv.state = DRIVER_STATE_NEED_DEP;
 		return;
 	}
 
-	/* it conflicts with our probing */
-	if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
-		str = H_PlatOps->debugWriteStr;
-		H_PlatOps->debugWriteStr = NULL;
-		chr = H_PlatOps->debugWriteChar;
-		H_PlatOps->debugWriteChar = NULL;
-	}
-
-
-	if (usbgeckoIsAdapterPresent(UG_SLOTB))
-		slot = UG_SLOTB;
-	else if (usbgeckoIsAdapterPresent(UG_SLOTA))
-		slot = UG_SLOTA;
-	else {
-		slot = (uint)-1;
+	(void)H_EXIRegisterDriver(&usbgeckoEXIDriver);
+	if (usbgeckoDrv.state != DRIVER_STATE_READY)
 		usbgeckoDrv.state = DRIVER_STATE_NO_HARDWARE;
-
-		/* restore */
-		if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
-			H_PlatOps->debugWriteStr = str;
-			H_PlatOps->debugWriteChar = chr;
-		}
-		return;
-	}
-
-	/* we're all good */
-	usbgeckoDrv.state = DRIVER_STATE_READY;
-
-	usbgeckoWriteStr("USB Gecko driver is now enabled in Slot-");
-	usbgeckoWriteChar('A' + (char)slot);
-	usbgeckoWriteChar('\r');
-	usbgeckoWriteChar('\n');
-	O_AddDevice(&outDev);
-
-	/* register our timed event after the driver is fully installed */
-	T_QueueRepeatingEvent(10 * 1000, usbgeckoPoll, NULL);
 }
 
 static void usbgeckoCleanup(void) {
-	O_RemoveDevice(&outDev);
+	H_EXIUnregisterDriver(&usbgeckoEXIDriver);
+	if (slot != (uint)-1)
+		O_RemoveDevice(&outDev);
+	slot = (uint)-1;
 	usbgeckoDrv.state = DRIVER_STATE_NOT_READY;
 }
 

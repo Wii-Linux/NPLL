@@ -4,7 +4,6 @@
  * Copyright (C) 2026 Techflash
  */
 
-#include "npll/irq.h"
 #define MODULE "sdgecko"
 
 #include <assert.h>
@@ -17,11 +16,11 @@
 #include <npll/drivers/mmc.h>
 #include <npll/drivers/sdio.h>
 #include <npll/log.h>
-#include <npll/timer.h>
 #include <npll/types.h>
 #include "sdmmc/sdspi.h"
 
 static REGISTER_DRIVER(sdgeckoDrv);
+struct exi_device_driver sdgeckoEXIDriver;
 
 struct sdgecko_slot {
 	uint channel;
@@ -43,7 +42,6 @@ static const struct sdgecko_slot sdgeckoSlots[] = {
 static sdio_host_dev_t sdgeckoSDIO[NUM_SDGECKO_SLOTS];
 static mmc_card_t sdgeckoMMC[NUM_SDGECKO_SLOTS];
 static struct blockDevice sdgeckoBdev[NUM_SDGECKO_SLOTS];
-static bool sdgeckoEnabled[NUM_SDGECKO_SLOTS];
 static bool sdgeckoRegistered[NUM_SDGECKO_SLOTS];
 static bool sdgeckoProbeFailed[NUM_SDGECKO_SLOTS];
 
@@ -64,30 +62,6 @@ static uint bdevToIdx(struct blockDevice *bdev) {
 	}
 
 	assert_unreachable();
-}
-
-static bool sdgeckoSlotPresent(uint i) {
-	if (!sdgeckoSlots[i].hotplug)
-		return true;
-
-	return H_EXIExtPresent(sdgeckoSlots[i].channel);
-}
-
-/* FIXME: USB Gecko driver should probably just expose this info tbh */
-static bool sdgeckoSlotHasUSBGecko(uint i) {
-	bool irqs;
-	u16 rx, tx = 0x9000;
-
-	if (!sdgeckoSlots[i].hotplug)
-		return false;
-
-	irqs = IRQ_DisableSave();
-	H_EXISelect(sdgeckoSlots[i].channel, sdgeckoSlots[i].cs, 32);
-	(void)H_EXIRdWrImm(sdgeckoSlots[i].channel, 2, &tx, &rx);
-	H_EXIDeselect(sdgeckoSlots[i].channel);
-	IRQ_Restore(irqs);
-
-	return rx == 0x0470;
 }
 
 static bool sdgeckoAnyRegistered(void) {
@@ -186,34 +160,53 @@ static void sdgeckoRemove(uint i) {
 		sdgeckoMMC[i] = NULL;
 	}
 	memset(&sdgeckoBdev[i], 0, sizeof(sdgeckoBdev[i]));
+	memset(&sdgeckoSDIO[i], 0, sizeof(sdgeckoSDIO[i]));
 	sdgeckoProbeFailed[i] = false;
 	sdgeckoUpdateDriverState();
 }
 
-static void sdgeckoProbe(uint i) {
+static int sdgeckoSlotIndex(uint channel, uint cs) {
+	uint i;
+
+	for (i = 0; i < NUM_SDGECKO_SLOTS; i++) {
+		if (sdgeckoSlots[i].channel == channel && sdgeckoSlots[i].cs == cs)
+			return (int)i;
+	}
+
+	return -1;
+}
+
+static int sdgeckoProbeDevice(struct exi_device *dev) {
+	int idx;
+	uint i;
 	int ret;
 
-	if (!sdgeckoEnabled[i] || sdgeckoRegistered[i] || sdgeckoProbeFailed[i])
-		return;
-	if (!sdgeckoSlotPresent(i))
-		return;
-	if (sdgeckoSlots[i].hotplug) {
-		udelay(250000);
-		if (!sdgeckoSlotPresent(i))
-			return;
-	}
-	if (sdgeckoSlotHasUSBGecko(i)) {
-		log_printf("skipping %s: USB Gecko detected\r\n", sdgeckoSlots[i].name);
+	idx = sdgeckoSlotIndex(dev->channel, dev->cs);
+	if (idx < 0)
+		return -1;
+	i = (uint)idx;
+
+	if (sdgeckoRegistered[i])
+		return 0;
+	if (sdgeckoProbeFailed[i])
+		return -1;
+	if (sdgeckoSlots[i].gamecube_only && H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
+		return -1;
+
+	if (sdspiInit(dev->channel, dev->cs, dev->hotplug, &sdgeckoSDIO[i])) {
+		log_printf("failed to init SPI host for %s\r\n", sdgeckoSlots[i].name);
 		sdgeckoProbeFailed[i] = true;
-		return;
+		return -1;
 	}
+
+	dev->drv_data = &sdgeckoSDIO[i];
 
 	ret = mmc_init(&sdgeckoSDIO[i], &sdgeckoMMC[i]);
 	if (ret) {
 		log_printf("mmc_init failed for %s with %d\r\n",
 			   sdgeckoSlots[i].name, ret);
 		sdgeckoProbeFailed[i] = true;
-		return;
+		return -1;
 	}
 
 	log_printf("initialized %s\r\n", sdgeckoSlots[i].name);
@@ -221,69 +214,53 @@ static void sdgeckoProbe(uint i) {
 		free(sdgeckoMMC[i]);
 		sdgeckoMMC[i] = NULL;
 		sdgeckoProbeFailed[i] = true;
+		return -1;
 	}
+
+	return 0;
 }
 
-static void sdgeckoHotplug(void *dummy) {
-	uint i;
-	(void)dummy;
+static void sdgeckoRemoveDevice(struct exi_device *dev) {
+	int idx = sdgeckoSlotIndex(dev->channel, dev->cs);
 
-	for (i = 0; i < NUM_SDGECKO_SLOTS; i++) {
-		if (!sdgeckoEnabled[i] || !sdgeckoSlots[i].hotplug)
-			continue;
-
-		if (!sdgeckoSlotPresent(i)) {
-			H_EXIClearExt(sdgeckoSlots[i].channel);
-			if (sdgeckoRegistered[i] || sdgeckoProbeFailed[i]) {
-				log_printf("removed %s\r\n", sdgeckoSlots[i].name);
-				sdgeckoRemove(i);
-			}
-			continue;
-		}
-
-		H_EXIClearExt(sdgeckoSlots[i].channel);
-		sdgeckoProbe(i);
-	}
+	if (idx >= 0)
+		sdgeckoRemove((uint)idx);
+	dev->drv_data = NULL;
 }
 
 static void sdgeckoInit(void) {
-	uint i;
+	if (exiDrv.state != DRIVER_STATE_READY) {
+		sdgeckoDrv.state = DRIVER_STATE_NEED_DEP;
+		return;
+	}
 
 	memset(sdgeckoSDIO, 0, sizeof(sdgeckoSDIO));
 	memset(sdgeckoMMC, 0, sizeof(sdgeckoMMC));
 	memset(sdgeckoBdev, 0, sizeof(sdgeckoBdev));
-	memset(sdgeckoEnabled, 0, sizeof(sdgeckoEnabled));
 	memset(sdgeckoRegistered, 0, sizeof(sdgeckoRegistered));
 	memset(sdgeckoProbeFailed, 0, sizeof(sdgeckoProbeFailed));
 
 	sdgeckoDrv.state = DRIVER_STATE_INITIALIZING;
 
-	for (i = 0; i < NUM_SDGECKO_SLOTS; i++) {
-		if (sdgeckoSlots[i].gamecube_only && H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
-			continue;
-
-		if (sdspiInit(sdgeckoSlots[i].channel, sdgeckoSlots[i].cs, sdgeckoSlots[i].hotplug, &sdgeckoSDIO[i])) {
-			log_printf("failed to init SPI host for %s\r\n",
-				   sdgeckoSlots[i].name);
-			continue;
-		}
-
-		sdgeckoEnabled[i] = true;
-		sdgeckoProbe(i);
-	}
-
+	(void)H_EXIRegisterDriver(&sdgeckoEXIDriver);
 	sdgeckoUpdateDriverState();
-	T_QueueRepeatingEvent(500 * 1000, sdgeckoHotplug, NULL);
 }
 
 static void sdgeckoCleanup(void) {
 	uint i;
 
+	H_EXIUnregisterDriver(&sdgeckoEXIDriver);
 	for (i = 0; i < NUM_SDGECKO_SLOTS; i++)
 		sdgeckoRemove(i);
 
 	sdgeckoDrv.state = DRIVER_STATE_NOT_READY;
 }
+
+struct exi_device_driver sdgeckoEXIDriver = {
+	.name = "SDGecko",
+	.probe = sdgeckoProbeDevice,
+	.remove = sdgeckoRemoveDevice,
+};
 
 static REGISTER_DRIVER(sdgeckoDrv) = {
 	.name = "SDGecko",

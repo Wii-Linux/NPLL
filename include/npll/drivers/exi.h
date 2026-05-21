@@ -8,6 +8,28 @@
 #define _DRIVERS_EXI_H
 
 #include <npll/drivers.h>
+#include <npll/types.h>
+
+struct exi_device_driver;
+
+struct exi_device {
+	unsigned int channel;
+	unsigned int cs;
+	struct exi_device_driver *driver;
+	const char *name;
+	unsigned int max_clk_mhz;
+	bool hotplug;
+	void *drv_data;
+};
+
+struct exi_device_driver {
+	const char *name;
+	int (*probe)(struct exi_device *dev);
+	void (*remove)(struct exi_device *dev);
+};
+
+extern int H_EXIRegisterDriver(struct exi_device_driver *drv);
+extern void H_EXIUnregisterDriver(struct exi_device_driver *drv);
 
 /*
  * Selects the desired device (CS line) on the given
@@ -35,6 +57,11 @@ extern bool H_EXIExtPresent(unsigned int channel);
  * Clears a channel's latched external device detect edge.
  */
 extern void H_EXIClearExt(unsigned int channel);
+
+/*
+ * Read a device's standard EXI ID.
+ */
+extern unsigned int H_EXIReadID(unsigned int channel, unsigned int cs);
 
 /*
  * Immediate transaction to channel.
