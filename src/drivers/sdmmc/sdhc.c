@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#define MODULE "sdhc"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>

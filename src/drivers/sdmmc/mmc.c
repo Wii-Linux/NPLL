@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#define MODULE "mmc"
 #include "mmc.h"
 #include <string.h>
 #include <assert.h>
