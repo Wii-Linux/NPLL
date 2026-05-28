@@ -13,7 +13,7 @@ typedef unsigned int        uint;
 
 typedef unsigned char       u8;
 typedef volatile u8         vu8;
-typedef char                i8;
+typedef signed char         i8;
 typedef volatile i8         vi8;
 
 typedef unsigned short      u16;
