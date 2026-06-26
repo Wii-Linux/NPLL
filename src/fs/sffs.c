@@ -19,7 +19,6 @@
 #define MAX_FILES 16
 
 /* relative to start of SFFS partition, in pages */
-#define SFFS_SUPERBLOCK_OFFSET 0x3f600u
 #define SFFS_SUPERBLOCK_PAGES (sizeof(struct sffs_superblock) / NAND_PAGE_SIZE)
 #define NAND_PAGE_SIZE 2048
 #define SFFS_PAGES_PER_CLUSTER 8u
@@ -44,6 +43,23 @@
 #define CLUSTER_FREE         0xfffeu
 #define CLUSTER_END          0xffffu
 
+enum sffsModeFormat {
+	SFFS_MODE_FORMAT_WII,
+	SFFS_MODE_FORMAT_WII_U
+};
+
+enum sffsKeySource {
+	SFFS_KEY_WII_NAND,
+	SFFS_KEY_WII_U_SLC
+};
+
+struct sffsLayout {
+	char magic[4];
+	u32 superblockOffset;
+	enum sffsModeFormat modeFormat;
+	enum sffsKeySource keySource;
+};
+
 struct sffs_fst_entry {
 	char fileName[12];
 	u8 mode;
@@ -66,6 +82,7 @@ struct sffs_superblock {
 } __attribute__((packed));
 
 static struct partition *mountedPart = NULL;
+static const struct sffsLayout *mountedLayout = NULL;
 static struct sffs_superblock sb ALIGN(32);
 struct sffsFdInfo {
 	bool open;
@@ -75,6 +92,22 @@ struct sffsFdInfo {
 };
 static struct sffsFdInfo files[MAX_FILES];
 #define VALIDATE_FD(ret) if (fd < 0 || fd >= MAX_FILES || !files[fd].open) { return ret; }
+
+static const struct sffsLayout layouts[] = {
+	{
+		.magic = { 'S', 'F', 'F', 'S' },
+		.superblockOffset = 0x3f600u,
+		.modeFormat = SFFS_MODE_FORMAT_WII,
+		.keySource = SFFS_KEY_WII_NAND
+	},
+	{
+		.magic = { 'S', 'F', 'S', '!' },
+		.superblockOffset = 0x3e000u,
+		.modeFormat = SFFS_MODE_FORMAT_WII_U,
+		.keySource = SFFS_KEY_WII_U_SLC
+	}
+};
+
 static int allocateFd(void) {
 	int i;
 
@@ -86,13 +119,34 @@ static int allocateFd(void) {
 	return -1;
 }
 
-static int findNewestSuperblock(struct partition *part, uint *off) {
+static bool sffsModeIsFile(const struct sffs_fst_entry *entry) {
+	if (mountedLayout && mountedLayout->modeFormat == SFFS_MODE_FORMAT_WII_U)
+		return (entry->mode & 1) == 1;
+
+	return MODE_IS_FILE(entry->mode);
+}
+
+static bool sffsModeIsDir(const struct sffs_fst_entry *entry) {
+	if (mountedLayout && mountedLayout->modeFormat == SFFS_MODE_FORMAT_WII_U)
+		return (entry->mode & 1) == 0;
+
+	return MODE_IS_DIR(entry->mode);
+}
+
+static void sffsGetKey(u32 key[4]) {
+	if (mountedLayout && mountedLayout->keySource == SFFS_KEY_WII_U_SLC)
+		memcpy(key, H_OTPContents.wiiu.bank2.slcNANDKey, sizeof(H_OTPContents.wiiu.bank2.slcNANDKey));
+	else
+		memcpy(key, H_OTPContents.wii.nandKey, sizeof(H_OTPContents.wii.nandKey));
+}
+
+static int findNewestSuperblock(struct partition *part, const struct sffsLayout *layout, uint *off) {
 	uint offset, bestOffset = 0, bestGen = 0, i;
 	bool found = false;
 	ssize_t ret;
 
 	for (i = 0; i < 16; i++) {
-		offset = SFFS_SUPERBLOCK_OFFSET + i * SFFS_SUPERBLOCK_PAGES;
+		offset = layout->superblockOffset + i * SFFS_SUPERBLOCK_PAGES;
 
 		ret = nandReadPage(part, &sb, NAND_PAGE_SIZE, offset);
 		if (ret != NAND_PAGE_SIZE) {
@@ -100,7 +154,7 @@ static int findNewestSuperblock(struct partition *part, uint *off) {
 			return -EIO;
 		}
 
-		if (memcmp(sb.magic, "SFFS", 4) != 0)
+		if (memcmp(sb.magic, layout->magic, 4) != 0)
 			continue;
 
 		if (!found || sb.genNum > bestGen) {
@@ -115,6 +169,25 @@ static int findNewestSuperblock(struct partition *part, uint *off) {
 
 	*off = bestOffset;
 	return 0;
+}
+
+static const struct sffsLayout *findLayout(struct partition *part, uint *off) {
+	uint i;
+	int ret;
+
+	if (!(part->bdev->flags & BLOCK_FLAG_HLWD_NAND))
+		return NULL;
+
+	for (i = 0; i < sizeof(layouts) / sizeof(layouts[0]); i++) {
+		ret = findNewestSuperblock(part, &layouts[i], off);
+		if (ret < 0 && ret != -ENODEV)
+			return NULL;
+
+		if (ret == 0)
+			return &layouts[i];
+	}
+
+	return NULL;
 }
 
 static u16 sffsWalkChain(u16 first, u32 n) {
@@ -147,7 +220,7 @@ static int sffsLookupEntry(const char *path, struct sffs_fst_entry **out) {
 		memcpy(tmp, current->fileName, 12);
 		tmp[12] = 0;
 		/* current must be a dir if we're going to descend into it */
-		if (!MODE_IS_DIR(current->mode))
+		if (!sffsModeIsDir(current))
 			return -ENOTDIR;
 		if (current->sub >= SFFS_FST_LEN)
 			return -ENOENT; /* CLUSTER_END (empty dir) or corrupt index */
@@ -185,23 +258,21 @@ static bool sffsProbe(struct filesystem *fs, struct partition *part) {
 	uint off;
 	(void)fs;
 
-	if (strcmp(part->bdev->name, "nand0") || part->index != 2)
-		return false;
-
-	return findNewestSuperblock(part, &off) == 0;
+	return findLayout(part, &off) != NULL;
 }
 
 static int sffsMount(struct filesystem *fs, struct partition *part) {
+	const struct sffsLayout *layout;
 	uint off;
 	int ret;
 	uint i;
 	(void)fs;
 
-	ret = findNewestSuperblock(part, &off);
-	if (ret)
-		return ret;
+	layout = findLayout(part, &off);
+	if (!layout)
+		return -ENODEV;
 
-	log_printf("sffsMount: off=%u, sb.genNum=%u\r\n", off, sb.genNum);
+	log_printf("sffsMount: magic=%.4s off=%u, sb.genNum=%u\r\n", layout->magic, off, sb.genNum);
 	/* read the rest of it */
 	for (i = 0; i < 128; i++) {
 		ret = nandReadPage(part, ((void *)&sb) + (i * NAND_PAGE_SIZE), NAND_PAGE_SIZE, off + i);
@@ -213,6 +284,7 @@ static int sffsMount(struct filesystem *fs, struct partition *part) {
 
 	memset(files, 0, sizeof(files));
 	mountedPart = part;
+	mountedLayout = layout;
 
 	return 0;
 }
@@ -221,6 +293,7 @@ static void sffsUnmount(struct filesystem *fs) {
 	(void)fs;
 	memset(files, 0, sizeof(files));
 	mountedPart = NULL;
+	mountedLayout = NULL;
 }
 
 static int sffsOpen(struct filesystem *fs, const char *path) {
@@ -236,7 +309,7 @@ static int sffsOpen(struct filesystem *fs, const char *path) {
 	if (ret < 0)
 		return ret;
 
-	if (!MODE_IS_FILE(entry->mode))
+	if (!sffsModeIsFile(entry))
 		return -EISDIR;
 
 	files[fd].open = true;
@@ -279,7 +352,7 @@ static ssize_t sffsRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 	if (len > (size_t)(file->size - file->pos))
 		len = file->size - file->pos;
 
-	memcpy(key, H_OTPContents.wii.nandKey, sizeof(key));
+	sffsGetKey(key);
 	memset(iv, 0, sizeof(iv));
 
 	while (total < len) {
