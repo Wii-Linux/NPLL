@@ -45,9 +45,7 @@ static u32 ticksPerUsec;
 /* spin waiting for [ticks] ticks of the timebase */
 static void spinOnTB(u64 ticks) {
 	u64 start = mftb();
-	while ((mftb() - start) < ticks) {
-		/* TODO: would do real work here if it were more advanced */
-	}
+	while ((mftb() - start) < ticks);
 }
 
 bool T_HasElapsed(u64 startTB, u32 usecSince) {
