@@ -204,6 +204,12 @@ enum si_device_type {
 #define GCN_KBD_SCANCODE_RIGHT 0x5f
 #define GCN_KBD_SCANCODE_ENTER 0x61
 
+/*
+ * Repeat values
+ */
+#define REPEAT_DELAY_USEC 500000
+#define REPEAT_RATE_USEC 150000
+
 struct gcn_pad_state {
 	u16 buttons;
 	u8 lstickX;
@@ -212,6 +218,9 @@ struct gcn_pad_state {
 	u8 cstickY;
 	u8 ltrig;
 	u8 rtrig;
+	u32 heldDirs;
+	u64 heldSinceTB;
+	bool repeating;
 };
 
 struct n64_pad_state {
@@ -219,6 +228,9 @@ struct n64_pad_state {
 	u8 stickX;
 	u8 stickY;
 	u64 lastTB;
+	u32 heldDirs;
+	u64 heldSinceTB;
+	bool repeating;
 };
 
 struct gcn_kbd_state {
@@ -502,8 +514,41 @@ static void checkConnected(void) {
 	regs->comcsr = SI_COMCSR_TCINT | SI_COMCSR_RDSTINT;
 }
 
+static u32 checkPadRepeat(u32 held, u32 *heldDirs, u64 *heldSinceTB, bool *repeating) {
+	u64 now = mftb();
+
+	if (!held) {
+		*heldDirs = 0;
+		*repeating = false;
+		return 0;
+	}
+
+	/* newly pressed or the held set changed */
+	if (held != *heldDirs) {
+		*heldDirs = held;
+		*heldSinceTB = now;
+		*repeating = false;
+		return 0;
+	}
+
+	if (!*repeating) {
+		if (!T_HasElapsed(*heldSinceTB, REPEAT_DELAY_USEC))
+			return 0;
+
+		*repeating = true;
+		*heldSinceTB = now;
+		return held;
+	}
+
+	if (!T_HasElapsed(*heldSinceTB, REPEAT_RATE_USEC))
+		return 0;
+
+	*heldSinceTB = now;
+	return held;
+}
+
 static void probeGCNPad(uint chan) {
-	u32 inbufh, inbufl, prevButtons, buttons, pressed;
+	u32 inbufh, inbufl, prevButtons, buttons, pressed, repeatable, fire;
 	u8 lstickX, lstickY, prevLstickX, prevLstickY, cstickX, cstickY, ltrig, rtrig;
 
 	inbufh = regs->chan[chan].inbufh; /* buttons, main stick */
@@ -529,16 +574,23 @@ static void probeGCNPad(uint chan) {
 	idle = ~(buttons | prevButtons);
 	#endif
 
-	/* TODO: repeat if held for a certain amount of time */
-	if (pressed & GCN_CONTROLLER_DIRECT_A)
+	repeatable = buttons & (GCN_CONTROLLER_DIRECT_A |
+			GCN_CONTROLLER_DIRECT_DPAD_UP | GCN_CONTROLLER_DIRECT_DPAD_DOWN |
+			GCN_CONTROLLER_DIRECT_DPAD_LEFT | GCN_CONTROLLER_DIRECT_DPAD_RIGHT);
+	fire = pressed | checkPadRepeat(
+		repeatable, &devices[chan].gcn_pad.heldDirs,
+		&devices[chan].gcn_pad.heldSinceTB, &devices[chan].gcn_pad.repeating
+	);
+
+	if (fire & GCN_CONTROLLER_DIRECT_A)
 		IN_NewEvent(INPUT_EV_SELECT);
-	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_UP)
+	if (fire & GCN_CONTROLLER_DIRECT_DPAD_UP)
 		IN_NewEvent(INPUT_EV_UP);
-	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_DOWN)
+	if (fire & GCN_CONTROLLER_DIRECT_DPAD_DOWN)
 		IN_NewEvent(INPUT_EV_DOWN);
-	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_LEFT)
+	if (fire & GCN_CONTROLLER_DIRECT_DPAD_LEFT)
 		IN_NewEvent(INPUT_EV_LEFT);
-	if (pressed & GCN_CONTROLLER_DIRECT_DPAD_RIGHT)
+	if (fire & GCN_CONTROLLER_DIRECT_DPAD_RIGHT)
 		IN_NewEvent(INPUT_EV_RIGHT);
 
 	if (lstickY > GCN_STICK_CENTER + GCN_STICK_DEADZONE && prevLstickY < GCN_STICK_CENTER + GCN_STICK_DEADZONE)
@@ -620,7 +672,7 @@ static void probeGCNKbd(uint chan) {
 
 static void probeN64Pad(uint chan) {
 	u64 startTB, lastTB;
-	u32 inbuf, prevButtons, buttons, pressed;
+	u32 inbuf, prevButtons, buttons, pressed, repeatable, fire;
 	u8 stickX, stickY, prevStickX, prevStickY;
 	uint i;
 
@@ -681,16 +733,23 @@ static void probeN64Pad(uint chan) {
 	idle = ~(buttons | prevButtons);
 	#endif
 
-	/* TODO: repeat if held for a certain amount of time */
-	if (pressed & N64_CONTROLLER_DIRECT_A)
+	repeatable = buttons & (N64_CONTROLLER_DIRECT_A |
+			N64_CONTROLLER_DIRECT_DPAD_UP | N64_CONTROLLER_DIRECT_DPAD_DOWN |
+			N64_CONTROLLER_DIRECT_DPAD_LEFT | N64_CONTROLLER_DIRECT_DPAD_RIGHT);
+	fire = pressed | checkPadRepeat(
+		repeatable, &devices[chan].n64_pad.heldDirs,
+		&devices[chan].n64_pad.heldSinceTB, &devices[chan].n64_pad.repeating
+	);
+
+	if (fire & N64_CONTROLLER_DIRECT_A)
 		IN_NewEvent(INPUT_EV_SELECT);
-	if (pressed & N64_CONTROLLER_DIRECT_DPAD_UP)
+	if (fire & N64_CONTROLLER_DIRECT_DPAD_UP)
 		IN_NewEvent(INPUT_EV_UP);
-	if (pressed & N64_CONTROLLER_DIRECT_DPAD_DOWN)
+	if (fire & N64_CONTROLLER_DIRECT_DPAD_DOWN)
 		IN_NewEvent(INPUT_EV_DOWN);
-	if (pressed & N64_CONTROLLER_DIRECT_DPAD_LEFT)
+	if (fire & N64_CONTROLLER_DIRECT_DPAD_LEFT)
 		IN_NewEvent(INPUT_EV_LEFT);
-	if (pressed & N64_CONTROLLER_DIRECT_DPAD_RIGHT)
+	if (fire & N64_CONTROLLER_DIRECT_DPAD_RIGHT)
 		IN_NewEvent(INPUT_EV_RIGHT);
 
 	if (stickY > N64_STICK_CENTER + N64_STICK_DEADZONE && prevStickY < N64_STICK_CENTER + N64_STICK_DEADZONE)
