@@ -46,7 +46,8 @@ static u32 ticksPerUsec;
 static void spinOnTB(u64 ticks) {
 	u64 start = mftb();
 	while ((mftb() - start) < ticks) {
-		/* TODO: would do real work here if it were more advanced */
+		if (eventsEnabled && events[0].callback && mftb() >= events[0].fireTB)
+			T_DECHandler();
 	}
 }
 
