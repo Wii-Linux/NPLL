@@ -20,9 +20,10 @@ static REGISTER_DRIVER(gpioDrv);
 
 static u32 prevIn = 0;
 static const u32 gpioIrqMask = GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN;
+static const u32 gpioButtonMask = GPIO_POWER | GPIO_EJECT_BTN;
 
 static void gpioIRQHandler(enum irqDev dev) {
-	u32 in, mask, set, clearred;
+	u32 in, mask, set, clearred, setLog, clearredLog;
 	u8 i, numSet, numClearred, setIdx[32], clearredIdx[32];
 	inputEvent_t ev;
 	bool irqs;
@@ -37,24 +38,22 @@ static void gpioIRQHandler(enum irqDev dev) {
 	numSet = numClearred = 0;
 	ev = 0;
 
-	if (set & GPIO_POWER) {
-		log_puts("Power button pressed");
+	if (set & GPIO_POWER)
 		ev |= INPUT_EV_DOWN;
-	}
-	if (set & GPIO_EJECT_BTN) {
-		log_puts("Eject button pressed");
+	if (set & GPIO_EJECT_BTN)
 		ev |= INPUT_EV_SELECT;
-	}
 	if (set & GPIO_SLOT_IN)
 		log_puts("Disc inserted");
 	else if (clearred & GPIO_SLOT_IN)
 		log_puts("Disc removed");
 
-	if (in != prevIn) {
+	setLog = set & ~gpioButtonMask;
+	clearredLog = clearred & ~gpioButtonMask;
+	if (setLog || clearredLog) {
 		for (i = 0; i < 32; i++) {
 			mask = 1u << i;
-			if (set & mask)      setIdx[numSet++] = i;
-			if (clearred & mask) clearredIdx[numClearred++] = i;
+			if (setLog & mask)      setIdx[numSet++] = i;
+			if (clearredLog & mask) clearredIdx[numClearred++] = i;
 		}
 
 		/* ensure that this looks right */
