@@ -103,6 +103,7 @@ struct WiiUOTPBank7 {
 } __attribute__((packed));
 
 struct WiiUOTP {
+	struct WiiOTP bank0;
 	struct WiiUOTPBank1 bank1;
 	struct WiiUOTPBank2 bank2;
 	struct WiiUOTPBank3 bank3;
