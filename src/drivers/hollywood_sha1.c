@@ -68,7 +68,7 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	ctrl = SHA_CTRL_EXEC | ((u32)(size / 64) - 1);
 	irqs = IRQ_DisableSave();
 
-	if (size < 64 || size & 64) {
+	if (size < 64 || size & 63) {
 		log_printf("H_SHA1Process: invalid size: %u\r\n", size);
 		IRQ_Restore(irqs);
 		return -EINVAL;
@@ -98,7 +98,6 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	barrier(); regs->h[4] = iv[4]; barrier();
 
 	dcache_flush(in, (u32)size);
-	dcache_invalidate(out, SHA1_DIGEST_SIZE);
 
 	regs->src = (u32)virtToPhys(in); barrier();
 	regs->ctrl = ctrl;
@@ -118,7 +117,6 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	barrier(); out[4] = regs->h[4]; barrier();
 
 	IRQ_Restore(irqs);
-	dcache_invalidate(out, (u32)size);
 	return 0;
 }
 
