@@ -4,7 +4,6 @@
  * Copyright (C) 2025-2026 Techflash
  */
 
-#include <assert.h>
 #include <string.h>
 #include <npll/input.h>
 #include <npll/irq.h>
