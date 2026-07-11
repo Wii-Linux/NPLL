@@ -24,7 +24,7 @@
 #define _CACHE_H
 
 #include <npll/types.h>
-static inline void dcache_flush(const void *p, u32 len) {
+static inline void dcache_flush(const void *p, size_t len) {
 	u32 a, b;
 
 	a = (uintptr_t)p & ~0x1fu;
@@ -36,7 +36,7 @@ static inline void dcache_flush(const void *p, u32 len) {
 	asm("sync ; isync");
 }
 
-static inline void dcache_invalidate(void *p, u32 len) {
+static inline void dcache_invalidate(void *p, size_t len) {
 	u32 a, b;
 
 	a = (uintptr_t)p & ~0x1fu;
@@ -48,7 +48,7 @@ static inline void dcache_invalidate(void *p, u32 len) {
 	asm("sync ; isync");
 }
 
-static inline void dcache_flush_invalidate(void *p, u32 len) {
+static inline void dcache_flush_invalidate(void *p, size_t len) {
 	u32 a, b;
 
 	a = (uintptr_t)p & ~0x1fu;
@@ -61,7 +61,7 @@ static inline void dcache_flush_invalidate(void *p, u32 len) {
 }
 
 
-static inline void dcache_flush_icache_invalidate(const void *p, u32 len) {
+static inline void dcache_flush_icache_invalidate(const void *p, size_t len) {
 	u32 a, b;
 
 	a = (uintptr_t)p & ~0x1fu;

@@ -19,7 +19,7 @@ enum wiiuRev H_WiiURev;
 static void wiiuDebugChar(const char c) {
 	u32 msg;
 
-	msg = LATTE_IPC_CMD_PRINT | (c << 16);
+	msg = LATTE_IPC_CMD_PRINT | ((u32)c << 16);
 
 	/* linux-loader sits on the "legacy" Hollywood IPC block */
 	HW_IPC_PPCMSG = msg; /* set our data */

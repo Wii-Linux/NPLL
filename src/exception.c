@@ -37,7 +37,7 @@ static void dump_stack_trace(u32 *sp) {
 		if (prev_sp <= (uintptr_t)sp || prev_sp == 0 || prev_sp == 0xffffffff)
 			break;
 
-		sp = (u32 *)prev_sp;
+		sp = (u32 *)(uintptr_t)prev_sp;
 	}
 }
 
@@ -99,7 +99,8 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 }
 
 void E_Init(void) {
-	u32 vector, len_2200, *insn;
+	u32 len_2200, *insn;
+	uintptr_t vector;
 	TRACE();
 
 	for (vector = 0x100; vector < 0x1800; vector += 0x10) {
@@ -112,7 +113,7 @@ void E_Init(void) {
 	}
 	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
 
-	len_2200 = (uintptr_t)&exception_2200_end - (uintptr_t)&exception_2200_start;
+	len_2200 = (u32)((uintptr_t)&exception_2200_end - (uintptr_t)&exception_2200_start);
 	memcpy(physToCached(0x2200), &exception_2200_start, len_2200);
 	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
 }

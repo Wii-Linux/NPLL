@@ -91,7 +91,8 @@ static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint
  * I make one....
  */
 int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
-	int fd, ret, size;
+	int fd;
+	ssize_t size, ret;
 	uint lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
 	uint entryCapacity = 0;
 	char *file, *curLine, *cur, *end, entryTitle[64], entryPath[128];

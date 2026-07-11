@@ -22,6 +22,8 @@
 
 #define IPC_TIMEOUT (250 * 1000)
 
+#define IPC_PTR(x) ((u32)(uintptr_t)(void *)(x))
+
 static void ipc_bell(u32 w) {
 	HW_IPC_PPCCTRL = (HW_IPC_PPCCTRL & 0x30) | w;
 }
@@ -70,7 +72,7 @@ static int ipc_send_request(void) {
 
 	dcache_flush(&ipc, 0x40);
 
-	HW_IPC_PPCMSG = (uintptr_t)virtToPhys(&ipc);
+	HW_IPC_PPCMSG = IPC_PTR(&ipc);
 	ipc_bell(1);
 
 	ret = ipc_wait_ack();
@@ -87,7 +89,7 @@ static int ipc_send_twoack(void) {
 
 	dcache_flush(&ipc, 0x40);
 
-	HW_IPC_PPCMSG = (uintptr_t)virtToPhys(&ipc);
+	HW_IPC_PPCMSG = IPC_PTR(&ipc);
 	ipc_bell(1);
 
 	ret = ipc_wait_ack();
@@ -108,10 +110,9 @@ static int ipc_send_twoack(void) {
 
 static int ipc_recv_reply(void) {
 	int ret;
+	uintptr_t reply;
 
 	for (;;) {
-		u32 reply;
-
 		ret = ipc_wait_reply();
 		if (ret)
 			return ret;
@@ -143,7 +144,7 @@ int IOS_Open(const char *filename, u32 mode) {
 
 	ipc.cmd = 1;
 	ipc.fd = 0;
-	ipc.arg[0] = (uintptr_t)virtToPhys((void *)filename);
+	ipc.arg[0] = IPC_PTR(filename);
 	ipc.arg[1] = mode;
 
 	ret = ipc_send_request();
@@ -197,7 +198,7 @@ static int _ios_ioctlv(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_
 	ipc.arg[0] = cmd;
 	ipc.arg[1] = in_count;
 	ipc.arg[2] = out_count;
-	ipc.arg[3] = (uintptr_t)virtToPhys(vec);
+	ipc.arg[3] = IPC_PTR(vec);
 
 	if(reboot)
 		return ipc_send_twoack();

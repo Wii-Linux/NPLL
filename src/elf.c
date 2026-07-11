@@ -59,9 +59,9 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_
 	}
 
 	/* get the address */
-	addr = (void *)phdr->p_paddr;
+	addr = (void *)(uintptr_t)phdr->p_paddr;
 	if (!addr)
-		addr = (void *)phdr->p_vaddr;
+		addr = (void *)(uintptr_t)phdr->p_vaddr;
 	if (!addr) {
 		log_puts("Skipping segment: no address");
 		*bail = 0;
@@ -138,7 +138,7 @@ int ELF_LoadMem(const void *data) {
 	H_PrepareForExecEntry();
 
 	/* lets do this thing */
-	ELF_DoEntry(virtToPhys(ehdr->e_entry));
+	ELF_DoEntry(virtToPhys((uintptr_t)ehdr->e_entry));
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
@@ -152,30 +152,31 @@ int ELF_LoadFile(int fd) {
 	u32 size;
 	uint i;
 	bool load;
-	ssize_t ret;
+	int ret;
+	ssize_t res;
 	size_t off;
 
 	/* read in the ehdr */
-	ret = FS_Seek(fd, 0);
-	if (ret != 0) {
-		log_printf("FS_Seek for ehdr returned: %d\r\n", ret);
+	res = FS_Seek(fd, 0);
+	if (res != 0) {
+		log_printf("FS_Seek for ehdr returned: %d\r\n", res);
 		return ELF_ERR_FS_ERROR;
 	}
-	ret = FS_Read(fd, &ehdr, sizeof(ehdr));
-	if (ret != sizeof(ehdr)) {
-		log_printf("FS_Read for ehdr returned: %d\r\n", ret);
+	res = FS_Read(fd, &ehdr, sizeof(ehdr));
+	if (res != sizeof(ehdr)) {
+		log_printf("FS_Read for ehdr returned: %d\r\n", res);
 		return ELF_ERR_FS_ERROR;
 	}
 
 	for (i = 0; i < ehdr.e_phnum; i++) {
-		ret = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
-		if (ret != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
-			log_printf("FS_Seek for phdr returned: %d\r\n", ret);
+		res = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
+		if (res != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
+			log_printf("FS_Seek for phdr returned: %d\r\n", res);
 			return ELF_ERR_FS_ERROR;
 		}
-		ret = FS_Read(fd, &phdr, sizeof(phdr));
-		if (ret != sizeof(phdr)) {
-			log_printf("FS_Read for phdr returned: %d\r\n", ret);
+		res = FS_Read(fd, &phdr, sizeof(phdr));
+		if (res != sizeof(phdr)) {
+			log_printf("FS_Read for phdr returned: %d\r\n", res);
 			return ELF_ERR_FS_ERROR;
 		}
 
@@ -185,15 +186,15 @@ int ELF_LoadFile(int fd) {
 		else if (!load)
 			continue;
 
-		ret = FS_Seek(fd, (ssize_t)off);
-		if (ret != (ssize_t)off) {
-			log_printf("FS_Seek for segment %d returned: %d\r\n", i, ret);
+		res = FS_Seek(fd, (ssize_t)off);
+		if (res != (ssize_t)off) {
+			log_printf("FS_Seek for segment %d returned: %d\r\n", i, res);
 			return ELF_ERR_FS_ERROR;
 		}
 		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr.p_offset, addr, size);
-		ret = FS_Read(fd, addr, size);
-		if (ret != (ssize_t)size) {
-			log_printf("FS_Read for segment %d returned: %d\r\n", i, ret);
+		res = FS_Read(fd, addr, size);
+		if (res != (ssize_t)size) {
+			log_printf("FS_Read for segment %d returned: %d\r\n", i, res);
 			return ELF_ERR_FS_ERROR;
 		}
 
@@ -213,7 +214,7 @@ int ELF_LoadFile(int fd) {
 	H_PrepareForExecEntry();
 
 	/* lets do this thing */
-	ELF_DoEntry(virtToPhys(ehdr.e_entry));
+	ELF_DoEntry(virtToPhys((uintptr_t)ehdr.e_entry));
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();

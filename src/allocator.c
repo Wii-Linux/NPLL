@@ -154,7 +154,7 @@ static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolA
 		panic("_poolAlloc: out of memory");
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
-	block->size = (uintptr_t)pool->cur_bottom - (uintptr_t)mem; /* to the next block */
+	block->size = (u32)((uintptr_t)pool->cur_bottom - (uintptr_t)mem); /* to the next block */
 	if (_blockCanFree(block))
 		panic("_poolAlloc: bad size");
 
@@ -192,8 +192,8 @@ void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(e
 		if (memcmp(pools[POOL_MEM2].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE))
 			panic("M_PoolAlloc: corrupted MEM2 pool metadata");
 
-		mem1_free = (uintptr_t)pools[POOL_MEM1].cur_bottom - (uintptr_t)pools[POOL_MEM1].bottom;
-		mem2_free = (uintptr_t)pools[POOL_MEM2].cur_bottom - (uintptr_t)pools[POOL_MEM2].bottom;
+		mem1_free = (u32)((uintptr_t)pools[POOL_MEM1].cur_bottom - (uintptr_t)pools[POOL_MEM1].bottom);
+		mem2_free = (u32)((uintptr_t)pools[POOL_MEM2].cur_bottom - (uintptr_t)pools[POOL_MEM2].bottom);
 
 		/*
 		 * MEM2 is either MUCH larger or a good bit larger than MEM1,
@@ -269,8 +269,8 @@ void M_PoolStats(enum pool_idx pool_idx, u32 *total, u32 *used, u32 *free_bytes,
 	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
 		panic("M_PoolStats: nonexistent pool");
 
-	pool_total = (uintptr_t)pool->top - (uintptr_t)pool->bottom;
-	bottom_free = (uintptr_t)pool->cur_bottom - (uintptr_t)pool->bottom;
+	pool_total = (u32)((uintptr_t)pool->top - (uintptr_t)pool->bottom);
+	bottom_free = (u32)((uintptr_t)pool->cur_bottom - (uintptr_t)pool->bottom);
 	pending_free = 0;
 	max_alloc = 0;
 

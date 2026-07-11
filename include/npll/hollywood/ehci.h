@@ -10,7 +10,7 @@
 #include <npll/revle.h>
 #include <npll/utils.h>
 
-#define _EHCI_BASE(i) (i == 0 ? 0xcd040000 : i == 1 ? 0xcd120000 : i == 2 ? 0x0d140000 : -1)
+#define _EHCI_BASE(i) ((uintptr_t)(i == 0 ? 0xcd040000 : i == 1 ? 0xcd120000 : i == 2 ? 0x0d140000 : (uintptr_t)-1))
 #define _EHCI_REG(hcidx, off) *(vu32 *)(_EHCI_BASE((hcidx)) + (off))
 #define EHCI_CAPLENGTH(i) _EHCI_REG(i, 0x00)
 #define _EHCI_OPREG(hcidx, off) _EHCI_REG(hcidx, revLEreadb(&EHCI_CAPLENGTH(hcidx)) + off)

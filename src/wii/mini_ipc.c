@@ -48,7 +48,7 @@ static struct mini_state state;
 static bool initialized = false;
 
 enum MINI_Err MINI_ValidInfoHdr(void) {
-	u32 infohdr_ptr;
+	uintptr_t infohdr_ptr;
 	struct infohdr *infohdr;
 
 	/* read the infohdr pointer from the region we just mapped */
@@ -77,7 +77,8 @@ enum MINI_Err MINI_ValidInfoHdr(void) {
 }
 
 enum MINI_Err MINI_Init(void) {
-	u32 ppcmsg, infohdr_ptr;
+	u32 ppcmsg;
+	uintptr_t infohdr_ptr;
 	struct ipc_request_mini req;
 	struct infohdr *infohdr;
 	enum MINI_Err ret;
@@ -100,10 +101,10 @@ enum MINI_Err MINI_Init(void) {
 	state.out_size = infohdr->ipc_out_size;
 
 	/* map the in queue */
-	state.in_queue = physToUncached((u32)infohdr->ipc_in);
+	state.in_queue = physToUncached(infohdr->ipc_in);
 
 	/* map the out queue */
-	state.out_queue = physToUncached((u32)infohdr->ipc_out);
+	state.out_queue = physToUncached(infohdr->ipc_out);
 
 	/* read in_tail and out_head from IPC hardware registers */
 	ppcmsg = HW_IPC_PPCMSG;
@@ -161,7 +162,7 @@ static void poke_outhead(void) {
 
 	val = HW_IPC_PPCMSG;
 	val &= 0x0000ffff;
-	val |= (state.out_head << 16);
+	val |= ((u32)state.out_head << 16);
 	HW_IPC_PPCMSG = val;
 }
 
