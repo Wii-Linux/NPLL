@@ -7,7 +7,7 @@
  * Copyright (C) 2026 Techflash
  *
  * Based on code from EverythingNet:
- * Copyright (C) 2025 Techflah
+ * Copyright (C) 2025 Techflash
  */
 
 #ifndef _ENDIAN_H
