@@ -59,7 +59,7 @@ enum MINI_Err MINI_ValidInfoHdr(void) {
 		return MINI_BAD_INFOHDR_PTR;
 	}
 
-	infohdr_ptr = (u32)physToCached(infohdr_ptr);
+	infohdr_ptr = (uintptr_t)physToCached(infohdr_ptr);
 	infohdr = (struct infohdr *)infohdr_ptr;
 
 	/* valid infohdr? */
@@ -92,7 +92,7 @@ enum MINI_Err MINI_Init(void) {
 
 	/* read the infohdr pointer from the region we just mapped */
 	infohdr_ptr = *(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4);
-	infohdr_ptr = (u32)physToCached(infohdr_ptr);
+	infohdr_ptr = (uintptr_t)physToCached(infohdr_ptr);
 	infohdr = (struct infohdr *)infohdr_ptr;
 
 	state.infohdr = infohdr;

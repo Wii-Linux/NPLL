@@ -83,9 +83,9 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_
 	/* make it virtual */
 	addr = physToCached(addr);
 
-	if (!(((u32)addr & 0xf0000000) == 0x80000000 && size < MEM1_SIZE_GCN) &&
-	     (((u32)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII && size < MEM2_SIZE_WII) &&
-	     (((u32)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII_U && size < MEM2_SIZE_WIIU)) {
+	if (!(((uintptr_t)addr & 0xf0000000) == 0x80000000 && size < MEM1_SIZE_GCN) &&
+	     (((uintptr_t)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII && size < MEM2_SIZE_WII) &&
+	     (((uintptr_t)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII_U && size < MEM2_SIZE_WIIU)) {
 		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", addr, size);
 		*bail = ELF_ERR_INVALID_EXEC;
 		return false;
@@ -108,19 +108,19 @@ int ELF_LoadMem(const void *data) {
 	size_t off;
 
 	/* get start of phdrs */
-	phdr = (const Elf32_Phdr *)((u32)data + ehdr->e_phoff);
+	phdr = (const Elf32_Phdr *)((uintptr_t)data + ehdr->e_phoff);
 
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		load = ELF_LoadPhdr(phdr, &addr, &size, &off, &ret);
 		if (ret)
 			return ret;
 		else if (!load) {
-			phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
+			phdr = (const Elf32_Phdr *)((uintptr_t)phdr + ehdr->e_phentsize);
 			continue;
 		}
 
 		/* copy it into memory */
-		memcpy(addr, (void *)((u32)data + off), size);
+		memcpy(addr, (void *)((uintptr_t)data + off), size);
 		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, addr, size);
 
 		/* and flush the cache - ELF_DoEntry will turn caches off */
@@ -131,7 +131,7 @@ int ELF_LoadMem(const void *data) {
 			dcache_flush((u8 *)addr + phdr->p_filesz, phdr->p_memsz - phdr->p_filesz);
 		}
 
-		phdr = (const Elf32_Phdr *)((u32)phdr + ehdr->e_phentsize);
+		phdr = (const Elf32_Phdr *)((uintptr_t)phdr + ehdr->e_phentsize);
 	}
 
 	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */

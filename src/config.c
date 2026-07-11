@@ -74,9 +74,9 @@ static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint
 		memset(&entries[numEntries], 0, sizeof(struct menuEntry));				\
 		strcpy(entries[numEntries].name, entryTitle);						\
 		entries[numEntries].selected = selectedCB;						\
-		entries[numEntries].data[DATA_IDX_PART] = (u32)FS_MountedPartition;			\
-		entries[numEntries].data[DATA_IDX_FS] = (u32)FS_Mounted;				\
-		entries[numEntries].data[DATA_IDX_PATH] = (u32)malloc(strlen(entryPath) + 1);		\
+		entries[numEntries].data[DATA_IDX_PART] = (uintptr_t)FS_MountedPartition;		\
+		entries[numEntries].data[DATA_IDX_FS] = (uintptr_t)FS_Mounted;			\
+		entries[numEntries].data[DATA_IDX_PATH] = (uintptr_t)malloc(strlen(entryPath) + 1);	\
 		strcpy((char *)entries[numEntries].data[DATA_IDX_PATH], entryPath);			\
 		numEntries++;										\
 		memset(entryPath, 0, sizeof(entryPath));						\
@@ -204,7 +204,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 			if (*cur == '\r' || *cur == '\n') /* if there's nothing else left in the entry then leave */
 				continue;
 			else if (*cur != '/') {
-				log_printf("Garbage 'root' directive @ line %d:%d (offset %d)\r\n", lineNum, (u32)cur - (u32)curLine, (u32)cur - (u32)file);
+				log_printf("Garbage 'root' directive @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_PATH]);
 				if (entries)
@@ -218,7 +218,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 		else if (isInEntry && !memcmp(curLine, "\tkernel ", 8)) {
 			cur += 8;
 			if (*cur != '/') {
-				log_printf("Garbage 'kernel' directive @ line %d:%d (offset %d)\r\n", lineNum, (u32)cur - (u32)curLine, (u32)cur - (u32)file);
+				log_printf("Garbage 'kernel' directive @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_PATH]);
 				if (entries)
@@ -250,7 +250,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 			continue;
 		}
 		else {
-			log_printf("Garbage in config file @ line %d:%d (offset %d)\r\n", lineNum, (u32)cur - (u32)curLine, (u32)cur - (u32)file);
+			log_printf("Garbage in config file @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
 			while (numEntries)
 				free((char *)entries[--numEntries].data[DATA_IDX_PATH]);
 			if (entries)

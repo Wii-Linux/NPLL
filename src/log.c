@@ -30,7 +30,7 @@ static void memlogWriteChar(const char c) {
 	char *removeEnd;
 	u32 remaining;
 
-	if ((u32)memlogNext >= ((u32)memlogStart + maxSize)) {
+	if ((uintptr_t)memlogNext >= ((uintptr_t)memlogStart + maxSize)) {
 		removeEnd = memlogStart;
 
 		while (removeEnd < memlogNext && *removeEnd != '\n')

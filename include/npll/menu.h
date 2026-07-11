@@ -14,7 +14,7 @@
 struct menuEntry {
 	char name[128];
 	void (*selected)(struct menuEntry *);
-	u32 data[8];
+	uintptr_t data[8];
 };
 
 struct menu {

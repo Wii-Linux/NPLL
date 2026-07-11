@@ -202,12 +202,12 @@ static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, s
 		}
 
 		/* stash the name */
-		if (rec->fileNameLen == 1 && *(u8 *)((u32)rec + sizeof(*rec)) == 0)
+		if (rec->fileNameLen == 1 && *(u8 *)((uintptr_t)rec + sizeof(*rec)) == 0)
 			strcpy(fileName, ".");
-		else if (rec->fileNameLen == 1 && *(u8 *)((u32)rec + sizeof(*rec)) == 1)
+		else if (rec->fileNameLen == 1 && *(u8 *)((uintptr_t)rec + sizeof(*rec)) == 1)
 			strcpy(fileName, "..");
 		else {
-			memcpy(fileName, (void *)((u32)rec + sizeof(*rec)), rec->fileNameLen);
+			memcpy(fileName, (void *)((uintptr_t)rec + sizeof(*rec)), rec->fileNameLen);
 			fileName[rec->fileNameLen] = '\0';
 		}
 

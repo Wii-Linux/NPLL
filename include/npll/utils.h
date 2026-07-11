@@ -25,19 +25,19 @@
 #define UNCACHED_BASE      0xc0000000u
 
 static inline void *_physToCached(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 	addr |= CACHED_BASE;
 	return (void *)addr;
 }
 
 static inline void *_physToUncached(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 	addr |= UNCACHED_BASE;
 	return (void *)addr;
 }
 
 static inline void *_virtToPhys(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 	addr &= ~UNCACHED_BASE; /* works for both cached and uncached */
 	return (void *)addr;
 }
@@ -51,12 +51,12 @@ static inline void *_virtToPhys(void *_addr) {
 #define uncachedToPhys(x) virtToPhys(x)
 
 #define MEM1_PHYS_BASE     0x00000000u
-#define MEM1_CACHED_BASE   ((u32)physToCached(MEM1_PHYS_BASE))
-#define MEM1_UNCACHED_BASE ((u32)physToUncached(MEM1_PHYS_BASE))
+#define MEM1_CACHED_BASE   ((uintptr_t)physToCached(MEM1_PHYS_BASE))
+#define MEM1_UNCACHED_BASE ((uintptr_t)physToUncached(MEM1_PHYS_BASE))
 
 #define MEM2_PHYS_BASE     0x10000000u
-#define MEM2_CACHED_BASE   ((u32)physToCached(MEM2_PHYS_BASE))
-#define MEM2_UNCACHED_BASE ((u32)physToUncached(MEM2_PHYS_BASE))
+#define MEM2_CACHED_BASE   ((uintptr_t)physToCached(MEM2_PHYS_BASE))
+#define MEM2_UNCACHED_BASE ((uintptr_t)physToUncached(MEM2_PHYS_BASE))
 
 #define MEM1_SIZE_GCN      0x01800000u
 #define MEM1_SIZE_WII      MEM1_SIZE_GCN
@@ -70,7 +70,7 @@ static inline void *_virtToPhys(void *_addr) {
 
 
 static inline bool addrIsValidCached(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -89,7 +89,7 @@ static inline bool addrIsValidCached(void *_addr) {
 }
 
 static inline bool addrIsValidUncached(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -109,7 +109,7 @@ static inline bool addrIsValidUncached(void *_addr) {
 
 /* don't check >= MEM1_PHYS_BASE, since it inherently must be at least 0 */
 static inline bool addrIsValidPhys(void *_addr) {
-	u32 addr = (u32)_addr;
+	uintptr_t addr = (uintptr_t)_addr;
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -144,7 +144,7 @@ static inline bool ptrAligned(const void *ptr, u32 align) {
 	if (!align)
 		return true;
 
-	return ((u32)ptr % align) == 0;
+	return ((uintptr_t)ptr % align) == 0;
 }
 
 static inline u64 alignDownU64(u64 val, u32 align) {

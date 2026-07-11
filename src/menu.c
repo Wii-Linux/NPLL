@@ -79,7 +79,7 @@ static struct menuEntry ejectDiscEntry = { .name = "Eject Disc", .selected = roo
 static struct menuEntry rebootEntry = { .name = "Reboot", .selected = rootMenuRebootCB };
 static struct menuEntry shutdownEntry = { .name = "Shutdown", .selected = rootMenuShutdownCB };
 static struct menuEntry retToLdrEntry = { .name = "Exit to Loader", .selected = rootMenuRetToLdrCB };
-static struct menuEntry sysInfoEntry = { .name = "System Information", .selected = UI_SwitchCB, .data = { (u32)&UI_SysInfoMenu } };
+static struct menuEntry sysInfoEntry = { .name = "System Information", .selected = UI_SwitchCB, .data = { (uintptr_t)&UI_SysInfoMenu } };
 
 static struct menuEntry *rootMenuEntries[5] = {
 	&sysInfoEntry,

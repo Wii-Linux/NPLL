@@ -34,12 +34,12 @@ typedef volatile i64        vi64;
 
 
 /* stddef.h compat */
-typedef i32 ssize_t;
-typedef u32 size_t;
-typedef u32 ptrdiff_t;
-typedef u32 uintptr_t;
-typedef i32 intmax_t;
-typedef u32 uintmax_t;
+typedef __PTRDIFF_TYPE__ ssize_t;
+typedef __SIZE_TYPE__ size_t;
+typedef __PTRDIFF_TYPE__ ptrdiff_t;
+typedef __UINTPTR_TYPE__ uintptr_t;
+typedef __INTMAX_TYPE__ intmax_t;
+typedef __UINTMAX_TYPE__ uintmax_t;
 
 #define NULL ((void *)0)
 

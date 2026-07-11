@@ -70,7 +70,7 @@ static int ipc_send_request(void) {
 
 	dcache_flush(&ipc, 0x40);
 
-	HW_IPC_PPCMSG = (u32)virtToPhys(&ipc);
+	HW_IPC_PPCMSG = (uintptr_t)virtToPhys(&ipc);
 	ipc_bell(1);
 
 	ret = ipc_wait_ack();
@@ -87,7 +87,7 @@ static int ipc_send_twoack(void) {
 
 	dcache_flush(&ipc, 0x40);
 
-	HW_IPC_PPCMSG = (u32)virtToPhys(&ipc);
+	HW_IPC_PPCMSG = (uintptr_t)virtToPhys(&ipc);
 	ipc_bell(1);
 
 	ret = ipc_wait_ack();
@@ -143,7 +143,7 @@ int IOS_Open(const char *filename, u32 mode) {
 
 	ipc.cmd = 1;
 	ipc.fd = 0;
-	ipc.arg[0] = (u32)virtToPhys((void *)filename);
+	ipc.arg[0] = (uintptr_t)virtToPhys((void *)filename);
 	ipc.arg[1] = mode;
 
 	ret = ipc_send_request();
@@ -197,7 +197,7 @@ static int _ios_ioctlv(int fd, u32 cmd, u32 in_count, u32 out_count, ios_ioctlv_
 	ipc.arg[0] = cmd;
 	ipc.arg[1] = in_count;
 	ipc.arg[2] = out_count;
-	ipc.arg[3] = (u32)virtToPhys(vec);
+	ipc.arg[3] = (uintptr_t)virtToPhys(vec);
 
 	if(reboot)
 		return ipc_send_twoack();

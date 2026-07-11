@@ -43,7 +43,7 @@ void D_Init(void) {
 		 * In that case it would be beneficial to try to the driver again next time around.
 		 */
 		curDriver = __drivers_start;
-		while ((u32)curDriver < ((u32)__drivers_end) - 1) {
+		while ((uintptr_t)curDriver < ((uintptr_t)__drivers_end) - 1) {
 			/* already ready, we don't have it, borked, or still working - skip */
 			if (curDriver->state == DRIVER_STATE_READY ||
 			    curDriver->state == DRIVER_STATE_NO_HARDWARE ||

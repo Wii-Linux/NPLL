@@ -35,15 +35,15 @@ static uint slot = (uint)-1;
 static vu32 *exi_regs;
 
 static vu32 *EXI_CSR(uint chan) {
-	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x00u);
+	return (vu32 *)((uintptr_t)exi_regs + (0x14u * chan) + 0x00u);
 }
 
 static vu32 *EXI_CR(uint chan) {
-	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x0cu);
+	return (vu32 *)((uintptr_t)exi_regs + (0x14u * chan) + 0x0cu);
 }
 
 static vu32 *EXI_DATA(uint chan) {
-	return (vu32 *)((u32)exi_regs + (0x14u * chan) + 0x10u);
+	return (vu32 *)((uintptr_t)exi_regs + (0x14u * chan) + 0x10u);
 }
 
 static u32 tinyUGTransaction(u32 tx, uint port) {

@@ -319,7 +319,7 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 	regs->cmdbuf[1] = cmdbuf1;
 	regs->cmdbuf[2] = cmdbuf2;
 	dcache_flush_invalidate(data, dataLen);
-	regs->mar = (u32)virtToPhys(data);
+	regs->mar = (uintptr_t)virtToPhys(data);
 	regs->length = dataLen;
 	barrier();
 	regs->cr = DI_CR_TSTART | (data ? DI_CR_DMA : 0);

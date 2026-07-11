@@ -151,7 +151,7 @@ void VIDEO_Init(int VideoMode)
 
 void VIDEO_SetFrameBuffer(void *FrameBufferAddr)
 {
-	u32 fb = (u32)FrameBufferAddr & ~0xc0000000; /* physical addr */
+	u32 fb = (uintptr_t)FrameBufferAddr & ~0xc0000000; /* physical addr */
 
 	R_VIDEO_FRAMEBUFFER_1 = (fb >> 5) | 0x10000000;
 	if(video_mode != VIDEO_640X480_NTSCp_YUV16)
@@ -529,7 +529,7 @@ static void viDrvInit(void) {
 
 	/* rgbFB can go wherever */
 	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
-	viVidInfo.fb = (u32 *)((u32)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
+	viVidInfo.fb = (u32 *)((uintptr_t)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
 
 	clear_fb_rgb(black);
 	V_Register(&viVidInfo);

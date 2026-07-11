@@ -235,9 +235,9 @@ static int nandSendCommand(u32 command, u32 addrMask, u32 flags, u32 len) {
 
 static void nandSetupDMA(void *data, void *ecc) {
 	if (data)
-		regs->databuf = (u32)virtToPhys(data);
+		regs->databuf = (uintptr_t)virtToPhys(data);
 	if (ecc)
-		regs->eccbuf = (u32)virtToPhys(ecc);
+		regs->eccbuf = (uintptr_t)virtToPhys(ecc);
 }
 
 static int nandWait(void) {

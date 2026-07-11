@@ -31,10 +31,10 @@ static void dump_stack_trace(u32 *sp) {
 		prev_sp = sp[0];
 		lr = sp[1];
 
-		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (u32)sp, lr);
+		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (uintptr_t)sp, lr);
 
 		// sanity checks
-		if (prev_sp <= (u32)sp || prev_sp == 0 || prev_sp == 0xffffffff)
+		if (prev_sp <= (uintptr_t)sp || prev_sp == 0 || prev_sp == 0xffffffff)
 			break;
 
 		sp = (u32 *)prev_sp;
@@ -112,7 +112,7 @@ void E_Init(void) {
 	}
 	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
 
-	len_2200 = (u32)&exception_2200_end - (u32)&exception_2200_start;
+	len_2200 = (uintptr_t)&exception_2200_end - (uintptr_t)&exception_2200_start;
 	memcpy(physToCached(0x2200), &exception_2200_start, len_2200);
 	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
 }

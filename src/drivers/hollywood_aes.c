@@ -78,12 +78,12 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}
-	if ((u32)in & 15 || !in) {
+	if ((uintptr_t)in & 15 || !in) {
 		log_printf("%s: invalid source: %08x\r\n", func, in);
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}
-	if ((u32)out & 15 || !out) {
+	if ((uintptr_t)out & 15 || !out) {
 		log_printf("%s: invalid dest: %08x\r\n", func, out);
 		IRQ_Restore(irqs);
 		return -EINVAL;
@@ -115,8 +115,8 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 	dcache_flush(in, (u32)size);
 	dcache_invalidate(out, (u32)size);
 
-	regs->src = (u32)virtToPhys(in);
-	regs->dest = (u32)virtToPhys(out); barrier();
+	regs->src = (uintptr_t)virtToPhys(in);
+	regs->dest = (uintptr_t)virtToPhys(out); barrier();
 	regs->ctrl = ctrl;
 	tb = mftb();
 	while (regs->ctrl & AES_CTRL_EXEC) {

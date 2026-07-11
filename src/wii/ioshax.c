@@ -51,7 +51,7 @@ int IOS_DevShaExploit(void) {
 	u32 *mem1 = (u32 *)MEM1_CACHED_BASE;
 	memcpy(mem1, mem1_prepare, sizeof(mem1_prepare));
 	// set our payload entrypoint
-	mem1[5] = (u32)virtToPhys(arm_payload);
+	mem1[5] = (uintptr_t)virtToPhys(arm_payload);
 	dcache_flush(mem1, 0x20);
 
 	// open /dev/sha
