@@ -159,6 +159,8 @@ static bool bdevRegistered = false;
 static bool usingWiiDVDRRead = false;
 static bool patchedGCNMedia = false;
 static bool mediaValidated = false;
+/* Once set, no path other than shutdown itself may touch the command engine. */
+static volatile bool diStopping = true;
 
 enum diMediaState {
 	DI_MEDIA_EMPTY = 0,
@@ -297,11 +299,22 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 	u64 tb;
 	u32 sr, residual;
 	int ret;
+	bool irqs;
+
+	if (diStopping)
+		return -EINTR;
 
 	ret = diWaitIdle(timeoutUs);
 	if (ret) {
 		log_printf("timed out waiting for DI idle; CR=%08x\r\n", regs->cr);
 		return ret;
+	}
+
+	/* Make the stop check and command launch indivisible with cleanup. */
+	irqs = IRQ_DisableSave();
+	if (diStopping) {
+		IRQ_Restore(irqs);
+		return -EINTR;
 	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
@@ -323,9 +336,12 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 	regs->length = dataLen;
 	barrier();
 	regs->cr = DI_CR_TSTART | (data ? DI_CR_DMA : 0);
+	IRQ_Restore(irqs);
 
 	tb = mftb();
 	while (regs->cr & DI_CR_TSTART) {
+		if (diStopping)
+			return -EINTR;
 		if (T_HasElapsed(tb, timeoutUs)) {
 			log_puts("timed out waiting on cmd");
 			log_printf("cmd: %08x %08x %08x\r\n", cmdbuf0, cmdbuf1, cmdbuf2);
@@ -462,6 +478,8 @@ static int diWaitForStatus(const char *ctx, u32 *status) {
 		ret = diGetStatusRaw(status);
 		if (!ret)
 			return 0;
+		if (diStopping)
+			return -EINTR;
 
 		udelay(10 * 1000);
 	} while (!T_HasElapsed(tb, 30 * 1000 * 1000));
@@ -739,6 +757,8 @@ tryAgain:
 static int diReadMem32(u32 addr, u32 *dat) {
 	int ret;
 
+	if (diStopping)
+		return -EINTR;
 	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
 	if (ret)
 		return ret;
@@ -764,12 +784,20 @@ static int diReadMem32(u32 addr, u32 *dat) {
 
 static int diWriteMem32(u32 addr, u32 dat) {
 	int ret;
+	bool irqs;
 
 	/* Swiss does this jank, and I don't think it could be adapted well into a real command (DMA 0B to address 0?) */
+	if (diStopping)
+		return -EINTR;
 	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
 	if (ret)
 		return ret;
 
+	irqs = IRQ_DisableSave();
+	if (diStopping) {
+		IRQ_Restore(irqs);
+		return -EINTR;
+	}
 	regs->sr = 0x2E;
 	regs->cvr = 0;
 	regs->cmdbuf[0] = DI_CMD_DEBUG_WRITEMEM;
@@ -778,6 +806,7 @@ static int diWriteMem32(u32 addr, u32 dat) {
 	regs->mar = 0;
 	regs->length = 0;
 	regs->cr = DI_CR_TSTART | DI_CR_DMA;
+	IRQ_Restore(irqs);
 	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
 	if (ret) {
 		log_printf("debug writemem setup timeout addr=%08x CR=%08x\r\n", addr, regs->cr);
@@ -785,10 +814,16 @@ static int diWriteMem32(u32 addr, u32 dat) {
 	}
 
 	/* executing it as a command????? */
+	irqs = IRQ_DisableSave();
+	if (diStopping) {
+		IRQ_Restore(irqs);
+		return -EINTR;
+	}
 	regs->sr = 0x2E;
 	regs->cvr = 0;
 	regs->cmdbuf[0] = dat;
 	regs->cr = DI_CR_TSTART;
+	IRQ_Restore(irqs);
 	ret = diWaitIdle(DI_TIMEOUT_PATCH_US);
 	if (ret)
 		log_printf("debug writemem data timeout addr=%08x dat=%08x CR=%08x\r\n", addr, dat, regs->cr);
@@ -917,6 +952,8 @@ static void diCoverPoller(void *dummy) {
 	char statusStr[128];
 	int ret;
 	(void)dummy;
+	if (diStopping)
+		return;
 
 	cvr = regs->cvr;
 	prevState = !!(lastDICVR & DI_CVR_CVR);
@@ -928,6 +965,8 @@ static void diCoverPoller(void *dummy) {
 	log_printf("DI Cover status: %s -> %s\r\n", cvrToStr[prevState], cvrToStr[curState]);
 
 	status = diGetStatus();
+	if (diStopping)
+		return;
 	diStatusToStr(status, statusStr, sizeof(statusStr));
 	log_printf("Drive status: %08x %s\r\n", status, statusStr);
 
@@ -954,11 +993,31 @@ static void diCoverPoller(void *dummy) {
 	}
 }
 
+static void diUnwedge(void) {
+	if (diWaitIdle(DI_TIMEOUT_STATUS_US) == -ETIMEDOUT) {
+		if (diDrv.state == DRIVER_STATE_NOT_READY)
+			log_puts("DI still busy during shutdown!!");
+		else if (diDrv.state == DRIVER_STATE_INITIALIZING ||
+		    diDrv.state == DRIVER_STATE_INITIALIZING_CLEANABLE)
+			log_puts("DI still busy during init!!");
+
+		/* try to force it to go away */
+		regs->sr |= DI_SR_BRK;
+
+		/* welp */
+		if (diWaitIdle(DI_TIMEOUT_STATUS_US) == -ETIMEDOUT)
+			panic("DI is wedged!");
+
+		/* phew, recovered */
+	}
+}
+
 static void diInit(void) {
 	struct diInquiryResponse resp ALIGN(32);
 	char status[128];
 	u32 rawStatus;
 	int ret;
+	bool irqs;
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
 		regs = (volatile struct diRegs *)0xcc006000;
@@ -969,10 +1028,23 @@ static void diInit(void) {
 
 	memset(&resp, 0, sizeof(resp));
 
+	diDrv.state = DRIVER_STATE_INITIALIZING;
+	diStopping = false;
+	/* From this point on, pre-exec cleanup must include us. */
+	diDrv.state = DRIVER_STATE_INITIALIZING_CLEANABLE;
+
+	/* try to clean up already in-flight commands */
+	diUnwedge();
+	if (diStopping)
+		return;
+
 	/* reset the drive */
-	diReset();
+	if (diReset() || diStopping)
+		return;
 
 	if (diWaitForStatus("init reset", &rawStatus)) {
+		if (diStopping)
+			return;
 		log_puts("Failed to get drive status after reset, seems dead / disconnected");
 		diDrv.state = DRIVER_STATE_NO_HARDWARE;
 		return;
@@ -983,6 +1055,8 @@ static void diInit(void) {
 
 	/* get an inquiry */
 	diDoCMDTimeout(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp), DI_TIMEOUT_STATUS_US);
+	if (diStopping)
+		return;
 
 	log_printf("Drive date: (MM/DD/YYYY) %02x/%02x/%04x\r\n", (resp.date & 0x0000ff00) >> 8, resp.date & 0x000000ff, (resp.date & 0xffff0000) >> 16);
 	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
@@ -997,26 +1071,45 @@ static void diInit(void) {
 	IRQ_Unmask(IRQDEV_DI);
 
 	rawStatus = diGetStatus();
+	if (diStopping)
+		return;
 	diStatusToStr(rawStatus, status, 128);
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
 	lastDICVR = regs->cvr;
 	if (!(lastDICVR & DI_CVR_CVR)) {
 		ret = diProbeNewMedia();
+		if (diStopping)
+			return;
 		if (ret == -EAGAIN)
 			log_puts("Initial DI media probe remains ambiguous; leaving media unregistered");
 	}
 
 	T_QueueRepeatingEvent(200 * 1000, diCoverPoller, NULL);
+	if (diStopping) {
+		T_CancelRepeatingEvent(diCoverPoller, NULL);
+		return;
+	}
 
 	rawStatus = diGetStatus();
+	if (diStopping)
+		return;
 	diStatusToStr(rawStatus, status, 128);
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
-	diDrv.state = DRIVER_STATE_READY;
+	/* Do not let cleanup interleave with the final state publication. */
+	irqs = IRQ_DisableSave();
+	if (!diStopping)
+		diDrv.state = DRIVER_STATE_READY;
+	IRQ_Restore(irqs);
 }
 
 static void diCleanup(void) {
+	/* Publish the stop condition before cancelling callbacks or waiting. */
+	diStopping = true;
+	diDrv.state = DRIVER_STATE_NOT_READY;
+	T_CancelRepeatingEvent(diCoverPoller, NULL);
+
 	if (bdevRegistered) {
 		B_Unregister(&diBdev);
 		bdevRegistered = false;
@@ -1026,7 +1119,11 @@ static void diCleanup(void) {
 	usingWiiDVDRRead = false;
 	patchedGCNMedia = false;
 
-	diDrv.state = DRIVER_STATE_NOT_READY;
+	IRQ_Mask(IRQDEV_DI);
+	diUnwedge();
+	diAckSR(DI_SR_INTS);
+	regs->cvr = (regs->cvr & ~DI_CVR_CVRINTMASK) | DI_CVR_CVRINT;
+
 }
 
 static REGISTER_DRIVER(diDrv) = {
