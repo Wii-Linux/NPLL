@@ -150,7 +150,9 @@ static void repeatingEventCB(void *dat) {
 	repEv = (struct repeatingEvent *)dat;
 
 	repEv->callback(repEv->cbData);
-	T_QueueEvent(repEv->periodUsecs, repeatingEventCB, dat);
+	/* The callback may have cancelled itself while it was running. */
+	if (repEv->callback)
+		T_QueueEvent(repEv->periodUsecs, repeatingEventCB, dat);
 }
 
 void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData) {
@@ -159,6 +161,36 @@ void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbDa
 	repeatingEvents[numRepeatingEvents].callback = callback;
 	repeatingEvents[numRepeatingEvents].cbData = cbData;
 	T_QueueEvent(periodUsecs, repeatingEventCB, &repeatingEvents[numRepeatingEvents++]);
+}
+
+void T_CancelRepeatingEvent(void (*callback)(void *), void *cbData) {
+	struct repeatingEvent *repEv;
+	bool irqs;
+	int i, out;
+
+	irqs = IRQ_DisableSave();
+	for (i = 0; i < (int)numRepeatingEvents; i++) {
+		repEv = &repeatingEvents[i];
+		if (repEv->callback != callback || repEv->cbData != cbData)
+			continue;
+
+		/* Stop a currently executing wrapper from rearming itself. */
+		repEv->callback = NULL;
+
+		/* Remove an already queued wrapper, if there is one. */
+		for (out = 0; out < MAX_EVENTS; out++) {
+			if (events[out].callback == repeatingEventCB && events[out].cbData == repEv)
+				break;
+		}
+		if (out != MAX_EVENTS) {
+			memmove(&events[out], &events[out + 1],
+			    (uint)(MAX_EVENTS - out - 1) * sizeof(struct timedEvent));
+			memset(&events[MAX_EVENTS - 1], 0, sizeof(struct timedEvent));
+		}
+	}
+	if (eventsEnabled)
+		programNextDEC(mftb());
+	IRQ_Restore(irqs);
 }
 
 void T_DECHandler(void) {
