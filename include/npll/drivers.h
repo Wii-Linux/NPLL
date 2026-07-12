@@ -12,6 +12,8 @@
 enum driverState {
 	DRIVER_STATE_NOT_READY,
 	DRIVER_STATE_INITIALIZING,
+	/* Initialization has acquired resources and cleanup is safe and required. */
+	DRIVER_STATE_INITIALIZING_CLEANABLE,
 	DRIVER_STATE_FAULTED,
 	DRIVER_STATE_NO_HARDWARE,
 	DRIVER_STATE_NEED_DEP,

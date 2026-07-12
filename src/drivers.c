@@ -17,6 +17,7 @@ static inline const char *D_StateToStr(enum driverState state) {
 	switch (state) {
 	case DRIVER_STATE_NOT_READY: return "Not Ready";
 	case DRIVER_STATE_INITIALIZING: return "Initializing";
+	case DRIVER_STATE_INITIALIZING_CLEANABLE: return "Initializing (cleanup capable)";
 	case DRIVER_STATE_FAULTED: return "Faulted";
 	case DRIVER_STATE_NO_HARDWARE: return "No Hardware";
 	case DRIVER_STATE_NEED_DEP: return  "Needs Dependencies";
@@ -48,7 +49,8 @@ void D_Init(void) {
 			if (curDriver->state == DRIVER_STATE_READY ||
 			    curDriver->state == DRIVER_STATE_NO_HARDWARE ||
 			    curDriver->state == DRIVER_STATE_FAULTED ||
-			    curDriver->state == DRIVER_STATE_INITIALIZING) {
+			    curDriver->state == DRIVER_STATE_INITIALIZING ||
+			    curDriver->state == DRIVER_STATE_INITIALIZING_CLEANABLE) {
 				goto noload;
 			}
 
