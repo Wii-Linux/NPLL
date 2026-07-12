@@ -42,7 +42,8 @@ void H_PrepareForExecEntry(void) {
 	for (; curType >= lastType; curType--) {
 		curDriver = __drivers_start;
 		while ((uintptr_t)curDriver < ((uintptr_t)__drivers_end) - 1) {
-			if (curDriver->state == DRIVER_STATE_READY &&
+			if ((curDriver->state == DRIVER_STATE_READY ||
+			     curDriver->state == DRIVER_STATE_INITIALIZING_CLEANABLE) &&
 			    curDriver->type == (uint)curType && curDriver->cleanup)
 				curDriver->cleanup();
 
@@ -60,7 +61,8 @@ void H_PrepareForExecEntry(void) {
 	for (; curType >= lastType; curType--) {
 		curDriver = __drivers_start;
 		while ((uintptr_t)curDriver < ((uintptr_t)__drivers_end) - 1) {
-			if (curDriver->state == DRIVER_STATE_READY &&
+			if ((curDriver->state == DRIVER_STATE_READY ||
+			     curDriver->state == DRIVER_STATE_INITIALIZING_CLEANABLE) &&
 			    curDriver->type == (uint)curType && curDriver->cleanup)
 				curDriver->cleanup();
 
