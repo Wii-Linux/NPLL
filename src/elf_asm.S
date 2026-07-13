@@ -50,12 +50,13 @@ ELF_DoEntry:
 	ori r11, r11, (0xffff & ~(MSR_EE | MSR_IR | MSR_DR))
 	and r7, r7, r11
 
-	# calculate the address of _elfEntryStep2
-	lis r11, 0x7fff # mask
-	ori r11, r11, 0xffff
-	lis r12, _elfEntryStep2@h # virt address
-	ori r12, r12, _elfEntryStep2@l
-	and r12, r12, r11 # mask MSB to get phys
+	# Calculate the current (relocated) address of _elfEntryStep2 without an
+	# absolute text relocation, then strip the cached alias to get physical.
+	bcl 20, 31, 1f
+1:
+	mflr r12
+	addi r12, r12, _elfEntryStep2-1b
+	clrlwi r12, r12, 2
 
 	# set up SRR0/SRR1 so we can return with our new MSR and entry
 	mtsrr0 r12
@@ -67,7 +68,7 @@ ELF_DoEntry:
 _elfEntryStep2:
 	# Address translation is off and we are executing at the physical address.
 
-	# NPLL's stack uses its 0x8xxxxxxx cached MEM1 alias.  Linux calls C code
+	# NPLL's stack uses a standard cached MEM1 or MEM2 alias. Linux calls C code
 	# before installing its own stack/MMU mappings, so give it the underlying
 	# physical stack rather than an unmapped effective address.
 	cmpwi r10, 0

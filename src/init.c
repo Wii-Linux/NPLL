@@ -94,9 +94,10 @@ detectedWii:
 	/* it's a Wii U */
 	/* check if LT_PIMCOMPAT is non-zero, if it is, we must be in native mode, else it's vWii */
 	if (LT_PIMCOMPAT) {
-		_log_puts("Detected hardware: Nintendo Wii U (native)");
 		H_ConsoleType = CONSOLE_TYPE_WII_U;
 		H_WiiURev = lt_chiprevid;
+		L_MoveToWiiUMEM2();
+		_log_puts("Detected hardware: Nintendo Wii U (native)");
 		T_Init();
 		CPU_Init();
 		H_InitWiiU();

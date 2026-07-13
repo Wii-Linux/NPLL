@@ -16,8 +16,8 @@
 
 enum logMethod L_Method = LOG_METHOD_ALL_ODEV;
 
-#define memlogStart (char *)(MEM1_CACHED_BASE + 0x017c0000)
-static char *memlogNext = memlogStart;
+static char *memlogStart = (char *)(MEM1_CACHED_BASE + 0x017c0000);
+static char *memlogNext = (char *)(MEM1_CACHED_BASE + 0x017c0000);
 static u32 maxSize = 0x00040000;
 
 void L_GetMemlogBounds(const char **start, const char **end) {
@@ -138,4 +138,17 @@ void _log_printf(const char *fmt, ...) {
 void L_Init(void) {
 	/*memlogWriteStr("In-Memory logger is now active\r\n"); */
 	memset(memlogStart, 0, maxSize);
+}
+
+void L_MoveToWiiUMEM2(void) {
+	u32 used = (u32)(memlogNext - memlogStart);
+	char *newStart = (char *)NPLL_WIIU_MEMLOG_BASE;
+
+	if (used > maxSize)
+		used = maxSize;
+	memcpy(newStart, memlogStart, used);
+	memlogStart = newStart;
+	memlogNext = newStart + used;
+	if (used < maxSize)
+		memset(memlogNext, 0, maxSize - used);
 }

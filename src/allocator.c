@@ -334,15 +334,15 @@ void M_Init(void) {
 		break;
 	}
 	case CONSOLE_TYPE_WII_U: {
-		/* MEM1 below our binary */
-		pools[0].top = &__reloc_dest_start;
+		/* NPLL itself is in MEM2, so all non-vector MEM1 is available. */
+		pools[0].top = (void *)(MEM1_CACHED_BASE + MEM1_SIZE_WIIU);
 		pools[0].bottom = (void *)(MEM1_CACHED_BASE + 0x4000);
 		pools[0].cur_bottom = pools[0].top;
 		pools[0].name = "MEM1";
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
 
 		/* MEM2 */
-		pools[1].top = (void *)(MEM2_CACHED_BASE + MEM2_SIZE_WIIU);
+		pools[1].top = (void *)NPLL_WIIU_MEMLOG_BASE;
 		pools[1].bottom = (void *)MEM2_CACHED_BASE;
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";

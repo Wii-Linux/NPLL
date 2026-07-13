@@ -10,11 +10,6 @@
 
 # these shouldn't need to be marked as global but some toolchains break w/o it
 .global setupBATs
-.global clearBSS
-.global _bssLoop
-.global clearSBSS
-.global _sbssLoop
-.global setupStack
 .global relocate
 .global _copyLoop
 .global _copyDone
@@ -22,7 +17,6 @@
 .global _flushDcacheDone
 .global _invalidateIcacheLoop
 .global _invalidateIcacheDone
-.global setupSDA
 #define __ASSEMBLY__
 #include <npll/cpu.h>
 # NOTE: Reminder that "bit [n]" follows the official PowerPC naming scheme throughout this code  - reversed compared to how one may think about them.  "bit 0 is set" = 0x80000000.  "bit 31 is set" = 0x00000001.
@@ -157,112 +151,72 @@ setupBATs:
 	ori r0, r0, MSR_IR | MSR_DR
 	mtsrr1 r0
 
-	# Alright, we've made the hardware sane, lets get back to real code
-	lis r0, clearBSS@h
-	ori r0, r0, clearBSS@l
+	# Alright, we've made the hardware sane, lets get back to the bootstrap
+	lis r0, relocate@h
+	ori r0, r0, relocate@l
 	mtsrr0 r0
 
 	rfi # no need to flip address bits - it's already correct
 
-clearBSS:
-	# We now have virtual memory flipped *on*,
-	# only a few more steps and we can get out of manual asm hell!
-	# Next up we need to clear the BSS.
-	#
-	# Asumptions:
-	# - __bss_start and __bss_end are 4-byte aligned
-	# - __bss_end is at least 4 bytes after __bss_start
-	#
-	# Registers:
-	# - r0: zero
-	# - r3: bss start / current bss pointer
-	# - r4: bss end
-	li r0, 0
-	lis r3, __bss_start@h
-	ori r3, r3, __bss_start@l
-	lis r4, __bss_end@h
-	ori r4, r4, __bss_end@l
-
-_bssLoop:
-	# store 0 at r3
-	stw r0, 0(r3)
-
-	# move forward 4 bytes
-	addi r3, r3, 4
-
-	# are we done?
-	cmplw r3, r4
-
-	# yes!
-	bge clearSBSS
-
-	# nope
-	b _bssLoop
-
-clearSBSS:
-	# Same thing as above but for SBSS
-	lis r3, __sbss_start@h
-	ori r3, r3, __sbss_start@l
-	lis r4, __sbss_end@h
-	ori r4, r4, __sbss_end@l
-
-_sbssLoop:
-	# store 0 at r3
-	stw r0, 0(r3)
-
-	# move forward 4 bytes
-	addi r3, r3, 4
-
-	# are we done?
-	cmplw r3, r4
-
-	# yes!
-	bge setupStack
-
-	# nope
-	b _sbssLoop
-
-
-setupStack:
-	# set r1 (sp) to the top of the stack
-	lis r1, __stack_top@h
-	ori r1, r1, __stack_top@l
-
 relocate:
-	# Here goes nothing.  About to relocate
-	# from __reloc_source_start until __reloc_source_end,
-	# to __reloc_dest_start until __reloc_dest_end.
+	# Select a load bias.  GC, Wii, and vWii retain the linked high-MEM1
+	# address.  Native Wii U uses the final 1 MiB of the lower 256 MiB MEM2
+	# mapping (cached EA 0x9ff00000, physical 0x1ff00000).
 	#
-	# Assumptions:
-	# - (source_start - source_end) == (dest_start - dest_end)
-	# - both starts and ends are 32-byte aligned
-	# - we've enabled the caches (as performed above)
-	#
-	# Registers:
-	# - r0 = scratch
-	# - r3 = cur source
-	# - r4 = source end
-	# - r5 = cur dest
-	# - r6 = dest end
-	# - r7 = mask to convert phys->virt
+	# r31 remains the load bias until the runtime stack is established.
+	li r31, 0
 
-	# mask to convert phys -> virt addr
-	lis r7, 0x8000
+	# A native Wii U has a production Hollywood version, Latte's CAFE chip
+	# signature, and a non-zero PIMCOMPAT register.  vWii fails the last test.
+	lis r8, 0xcd80
+	lwz r9, 0x0214(r8)       # HW_VERSION
+	cmpwi r9, 0x11
+	beq 1f
+	cmpwi r9, 0x21
+	bne 2f
+1:
+	lwz r9, 0x05a0(r8)       # LT_CHIPREVID
+	srwi r9, r9, 16
+	cmplwi r9, 0xcafe
+	bne 2f
+	lwz r9, 0x05b0(r8)       # LT_PIMCOMPAT
+	cmpwi r9, 0
+	beq 2f
+
+	# Expose lower MEM2 at its normal cached alias before copying there.
+	lis r9, 0x1000
+	ori r9, r9, 2
+	lis r10, 0x9000
+	ori r10, r10, 0x1fff
+	mtspr IBAT2L, r9
+	mtspr DBAT2L, r9
+	mtspr IBAT2U, r10
+	mtspr DBAT2U, r10
+	sync
+	isync
+
+	lis r31, 0x9ff0
+	lis r9, __reloc_dest_start@h
+	ori r9, r9, __reloc_dest_start@l
+	subf r31, r9, r31
+2:
 
 	# load and convert addresses
 	lis r3, __reloc_source_start@h
 	ori r3, r3, __reloc_source_start@l
-	or  r3, r3, r7 # convert to virt
+	oris r3, r3, 0x8000       # physical load address -> cached MEM1
 
 	lis r4, __reloc_source_end@h
 	ori r4, r4, __reloc_source_end@l
-	or  r4, r4, r7 # convert to virt
+	oris r4, r4, 0x8000
 
 	lis r5, __reloc_dest_start@h
 	ori r5, r5, __reloc_dest_start@l
+	add r5, r5, r31
 
 	lis r6, __reloc_dest_end@h
 	ori r6, r6, __reloc_dest_end@l
+	add r6, r6, r31
 
 _copyLoop:
 	# start copying data
@@ -275,9 +229,44 @@ _copyLoop:
 	b _copyLoop
 
 _copyDone:
+	# Relocate the embedded-PPC GOT and every absolute pointer slot named by
+	# GCC's .fixup table.  With a zero bias these loops are harmless.
+	lis r3, __got2_start@h
+	ori r3, r3, __got2_start@l
+	add r3, r3, r31
+	lis r4, __got2_end@h
+	ori r4, r4, __got2_end@l
+	add r4, r4, r31
+3:
+	cmplw r3, r4
+	bge 4f
+	lwz r0, 0(r3)
+	add r0, r0, r31
+	stw r0, 0(r3)
+	addi r3, r3, 4
+	b 3b
+4:
+	lis r3, __fixup_start@h
+	ori r3, r3, __fixup_start@l
+	add r3, r3, r31
+	lis r4, __fixup_end@h
+	ori r4, r4, __fixup_end@l
+	add r4, r4, r31
+5:
+	cmplw r3, r4
+	bge 6f
+	lwz r7, 0(r3)            # linked address of the pointer slot
+	add r7, r7, r31
+	lwz r0, 0(r7)
+	add r0, r0, r31
+	stw r0, 0(r7)
+	addi r3, r3, 4
+	b 5b
+6:
 	# flush D$ for dest
 	lis r5, __reloc_dest_start@h     # reload start of dest
 	ori r5, r5, __reloc_dest_start@l
+	add r5, r5, r31
 
 _flushDcacheLoop:
 	cmpw r5, r6
@@ -292,6 +281,7 @@ _flushDcacheDone:
 	# start I$ invalidate
 	lis r5, __reloc_dest_start@h     # reload start of dest
 	ori r5, r5, __reloc_dest_start@l
+	add r5, r5, r31
 
 _invalidateIcacheLoop:
 	cmpw r5, r6
@@ -304,20 +294,38 @@ _invalidateIcacheDone:
 	sync
 	isync
 
+	# Clear relocated BSS/SBSS, then install the relocated stack.
+	li r0, 0
+	lis r3, __bss_start@h
+	ori r3, r3, __bss_start@l
+	add r3, r3, r31
+	lis r4, __sbss_end@h
+	ori r4, r4, __sbss_end@l
+	add r4, r4, r31
+7:
+	cmplw r3, r4
+	bge 8f
+	stw r0, 0(r3)
+	addi r3, r3, 4
+	b 7b
+8:
+	lis r1, __stack_top@h
+	ori r1, r1, __stack_top@l
+	add r1, r1, r31
 
-setupSDA:
-	# set r2 (Small Data Area 2 pointer) to the start of SDA2
-	lis r2, __sda2_start@h
-	ori r2, r2, __sda2_start@l
+	# Branch to the relocated continuation.  The bootstrap itself is not
+	# copied, so form the target explicitly rather than using a relative bl.
+	lis r12, clearRegs@h
+	ori r12, r12, clearRegs@l
+	add r12, r12, r31
+	mtctr r12
+	bctr
 
-	# set r13 (Small Data Area pointer) to the start of SDA
-	lis r13, __sda_start@h
-	ori r13, r13, __sda_start@l
-
+.section .text
 clearRegs:
 	li r0, 0
 	# don't clear r1, or r2, we just set them above
-	li r3, 0 # args for init would go heere if it took any, but it doesn't.
+	li r3, 0
 	li r4, 0
 	li r5, 0
 	li r6, 0

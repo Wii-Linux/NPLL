@@ -99,6 +99,27 @@ SECTIONS
 	} > HIVIRT :data
 	_lma = _lma + SIZEOF(.sdata2);
 
+	/*
+	 * GCC's embedded PowerPC -mrelocatable ABI puts load-bias-sensitive
+	 * pointers in .got2 and the addresses of all other pointer slots in
+	 * .fixup.  The low-MEM1 bootstrap adjusts both after copying the image.
+	 */
+	.got2 : AT(_lma) {
+		PROVIDE(__got2_start = .);
+		*(.got2)
+		PROVIDE(__got2_end = .);
+		. = ALIGN(32);
+	} > HIVIRT :data
+	_lma = _lma + SIZEOF(.got2);
+
+	.fixup : AT(_lma) {
+		PROVIDE(__fixup_start = .);
+		KEEP(*(.fixup))
+		PROVIDE(__fixup_end = .);
+		. = ALIGN(32);
+	} > HIVIRT :data
+	_lma = _lma + SIZEOF(.fixup);
+
 	.drivers : AT(_lma) {
 		PROVIDE(__drivers_start = .);
 		KEEP(*(.drivers))
@@ -149,7 +170,6 @@ SECTIONS
 		*(.dynstr)
 		*(.gnu.hash)
 		*(.got)
-		*(.got2)
 	}
 }
 
@@ -165,3 +185,4 @@ ASSERT(__reloc_source_end % 32 == 0, "cache-align __reloc_source_end");
 ASSERT(__reloc_dest_start % 32 == 0, "cache-align __reloc_dest_start");
 ASSERT(__reloc_dest_end % 32 == 0, "cache-align __reloc_dest_end");
 ASSERT(__reloc_dest_end - __reloc_dest_start == __reloc_source_end - __reloc_source_start, "fix relocation size");
+ASSERT(__stack_top <= ORIGIN(HIVIRT) + LENGTH(HIVIRT), "runtime image and stack exceed relocation reservation");

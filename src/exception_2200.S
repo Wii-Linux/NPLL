@@ -12,6 +12,7 @@
  */
 
 .globl exception_2200_start, exception_2200_end
+.globl exception_2200_handler_hi, exception_2200_handler_lo
 
 exception_2200_start:
 	# store all interesting regs
@@ -28,7 +29,11 @@ exception_2200_start:
 	mfmsr 0 ; ori 0,0,0x2030 ; mtsrr1 0
 
 	# go to C handler
-	lis 0,E_Handler@h ; ori 0,0,E_Handler@l ; mtsrr0 0
+exception_2200_handler_hi:
+	.long 0x3c000000              # lis r0, patched E_Handler@h
+exception_2200_handler_lo:
+	.long 0x60000000              # ori r0,r0, patched E_Handler@l
+	mtsrr0 0
 	rfi
 exception_2200_end:
 

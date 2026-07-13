@@ -21,6 +21,7 @@
 #include <npll/utils.h>
 
 extern char exception_2200_start, exception_2200_end;
+extern char exception_2200_handler_hi, exception_2200_handler_lo;
 
 static void dump_stack_trace(u32 *sp) {
 	u32 prev_sp, lr;
@@ -99,7 +100,7 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 }
 
 void E_Init(void) {
-	u32 len_2200, *insn;
+	u32 handler, len_2200, *insn, *stub;
 	uintptr_t vector;
 	TRACE();
 
@@ -114,6 +115,10 @@ void E_Init(void) {
 	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
 
 	len_2200 = (u32)((uintptr_t)&exception_2200_end - (uintptr_t)&exception_2200_start);
-	memcpy(physToCached(0x2200), &exception_2200_start, len_2200);
+	stub = physToCached(0x2200);
+	memcpy(stub, &exception_2200_start, len_2200);
+	handler = (u32)(uintptr_t)E_Handler;
+	stub[((uintptr_t)&exception_2200_handler_hi - (uintptr_t)&exception_2200_start) / 4] |= handler >> 16;
+	stub[((uintptr_t)&exception_2200_handler_lo - (uintptr_t)&exception_2200_start) / 4] |= handler & 0xffff;
 	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
 }

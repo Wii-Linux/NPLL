@@ -21,6 +21,7 @@ LD := $(CROSS_PREFIX)ld
 AR := $(CROSS_PREFIX)ar
 OBJCOPY := $(CROSS_PREFIX)objcopy
 NM := $(CROSS_PREFIX)nm
+READELF := $(CROSS_PREFIX)readelf
 endif
 endif
 
@@ -68,6 +69,7 @@ export ARM_TOOLCHAIN_PREFIX
 LD ?= ld
 OBJCOPY ?= objcopy
 NM ?= nm
+READELF ?= readelf
 ELF2DOL ?= elf2dol
 ifeq ($(shell command -v $(ELF2DOL)),)
 $(warning WARNING $(ELF2DOL) not found, you can get elf2dol from devkitPro gamecube-tools, will skip building DOL)
@@ -86,12 +88,16 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -meabi -Iinclude -Iexternal/dtc/libfdt -ggdb3 -nostdinc -ffreestanding -fno-pic -fno-pie -Wl,-no-pie -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -mcpu=750 -meabi -mrelocatable -msdata=none -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
 CFLAGS  += -O3 -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
-LDFLAGS := -nostdlib -nostartfiles -T src/linkerscript.ld
+LDFLAGS := -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -T src/linkerscript.ld
+
+# The fixed-address bootstrap deliberately uses absolute linker symbols while
+# it copies and fixes the relocatable runtime image.
+build/bs1.o build/entry.o: CFLAGS := $(filter-out -mrelocatable,$(CFLAGS))
 
 # Bootstrap
 SOURCE  := bs1.S entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c wii/ioshax.c wii/mini_ipc.c wiiu/init.c init.c tiny_usbgecko.c platOps_debug.c
@@ -147,6 +153,7 @@ $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(HIDE)sh utils/verify-relocatable.sh $@ $(READELF) $(NM)
 	$(HIDE)start=$$($(NM) $@ | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
 	  end=$$($(NM) $@ | awk '$$3=="__sbss_end"{print $$1; exit}'); \
 	  if [ -n "$$start" ] && [ -n "$$end" ]; then \
