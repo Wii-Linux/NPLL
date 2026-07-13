@@ -31,9 +31,9 @@ static inline void dcache_flush(const void *p, size_t len) {
 	b = ((uintptr_t)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
-		asm("dcbst 0,%0" : : "b"(a));
+		asm volatile("dcbst 0,%0" : : "b"(a) : "memory");
 
-	asm("sync ; isync");
+	asm volatile("sync ; isync" ::: "memory");
 }
 
 static inline void dcache_invalidate(void *p, size_t len) {
@@ -43,9 +43,9 @@ static inline void dcache_invalidate(void *p, size_t len) {
 	b = ((uintptr_t)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
-		asm("dcbi 0,%0" : : "b"(a));
+		asm volatile("dcbi 0,%0" : : "b"(a) : "memory");
 
-	asm("sync ; isync");
+	asm volatile("sync ; isync" ::: "memory");
 }
 
 static inline void dcache_flush_invalidate(void *p, size_t len) {
@@ -55,9 +55,9 @@ static inline void dcache_flush_invalidate(void *p, size_t len) {
 	b = ((uintptr_t)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
-		asm("dcbst 0,%0; dcbi 0,%0" : : "b"(a));
+		asm volatile("dcbst 0,%0; dcbi 0,%0" : : "b"(a) : "memory");
 
-	asm("sync ; isync");
+	asm volatile("sync ; isync" ::: "memory");
 }
 
 
@@ -68,9 +68,9 @@ static inline void dcache_flush_icache_invalidate(const void *p, size_t len) {
 	b = ((uintptr_t)p + len + 0x1fu) & ~0x1fu;
 
 	for ( ; a < b; a += 32)
-		asm("dcbst 0,%0 ; sync ; icbi 0,%0" : : "b"(a));
+		asm volatile("dcbst 0,%0 ; sync ; icbi 0,%0" : : "b"(a) : "memory");
 
-	asm("sync ; isync");
+	asm volatile("sync ; isync" ::: "memory");
 }
 
 
