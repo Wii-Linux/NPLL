@@ -9,6 +9,7 @@
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/console.h>
+#include <npll/cpu.h>
 #include <npll/dol.h>
 #include <npll/fs.h>
 #include <npll/log.h>
@@ -128,7 +129,10 @@ int DOL_LoadFile(int fd) {
 			return DOL_ERR_FS_ERROR;
 		}
 
-		dcache_flush(addr, size);
+		if (i < DOL_NUM_TEXT)
+			dcache_flush_icache_invalidate(addr, size);
+		else
+			dcache_flush(addr, size);
 	}
 
 	/* zero BSS if present */
@@ -145,6 +149,8 @@ int DOL_LoadFile(int fd) {
 
 	if (H_PreEntryHook)
 		H_PreEntryHook();
+
+	CPU_DCacheFlushAll();
 
 	ELF_DoEntry(virtToPhys(entry));
 	__builtin_unreachable();
