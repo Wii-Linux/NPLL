@@ -115,7 +115,7 @@ static void armbootnow(void) {
 	else
 		_log_puts("");
 
-	sram = (vu32 *)(UNCACHED_BASE + 0x0d410000);
+	sram = (vu32 *)(HOLLYWOOD_SRAM_BASE + 0x10000);
 	armbuf = (vu32 *)(MEM2_CACHED_BASE + 0x01000000);
 
 	/* copy it into MEM2 */

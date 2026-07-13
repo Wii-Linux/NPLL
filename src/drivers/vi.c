@@ -181,7 +181,7 @@ void VIDEO_BlackOut(void)
 	R_VIDEO_VTIMING &= ~0xfffffff0;
 }
 
-//static vu16* const _viReg = (u16*)0xCC002000;
+//static vu16* const _viReg = (u16*)MEM_VIDEO_BASE;
 
 void VIDEO_Shutdown(void)
 {

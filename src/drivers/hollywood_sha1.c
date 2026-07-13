@@ -24,7 +24,7 @@ struct sha1Regs {
 	vu32 h[5];
 };
 
-static volatile struct sha1Regs *const regs = (volatile struct sha1Regs *)0xcd030000;
+static volatile struct sha1Regs *const regs = (volatile struct sha1Regs *)(AHB_BASE + 0x030000);
 static const u32 iv[5] = { 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0 };
 
 #define SHA_CTRL_EXEC BIT(31)

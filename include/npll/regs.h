@@ -10,11 +10,11 @@
 #include <npll/utils.h>
 #include <npll/types.h>
 
-#define _FLIPPER_REG(x) (*(vu32 *)(0xcc000000 + x))
+#define _FLIPPER_REG(x) (*(vu32 *)(FLIPPER_MMIO_BASE + (x)))
 #define _FLIPPER_PI_REG(x) _FLIPPER_REG(0x3000 + x)
-#define _HOLLYWOOD_REG(x) (*(vu32 *)(0xcd800000 + x))
-#define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(0xcd8b4200 + x))
-#define _LATTE_REG(x) (*(vu32 *)(0xcd800400 + x))
+#define _HOLLYWOOD_REG(x) (*(vu32 *)(AHB_BASE + (x)))
+#define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(AHB_BASE + 0x0b4200 + (x)))
+#define _LATTE_REG(x) (*(vu32 *)(AHB_BASE + 0x400 + (x)))
 
 /* Flipper Registers */
 #define PI_INTSR             _FLIPPER_PI_REG(0x00)

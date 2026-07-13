@@ -10,7 +10,7 @@
 #include <npll/regs.h>
 #include <npll/utils.h>
 
-#define _OHCI_REG(hcidx, off) *(vu32 *)(0xcd850000 + (0x10000 * (hcidx)) + (off))
+#define _OHCI_REG(hcidx, off) *(vu32 *)(AHB_BASE + 0x50000 + (0x10000 * (hcidx)) + (off))
 #define OHCI_HC_COMMAND_STATUS(i)    _OHCI_REG(i, 0x08)
 #define     OHCI_HC_COMMAND_STATUS_HCR    BIT(0)
 #define OHCI_HC_INTERRUPT_STATUS(i)  _OHCI_REG(i, 0x0c)

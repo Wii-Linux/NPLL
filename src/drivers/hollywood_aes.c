@@ -25,7 +25,7 @@ struct aesRegs {
 	vu32 iv;
 };
 
-static volatile struct aesRegs *const regs = (volatile struct aesRegs *)0xcd020000;
+static volatile struct aesRegs *const regs = (volatile struct aesRegs *)(AHB_BASE + 0x020000);
 
 #define AES_CTRL_IV   BIT(12)
 #define AES_CTRL_DEC  BIT(27)

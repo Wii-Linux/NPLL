@@ -807,12 +807,12 @@ static void siInit(void) {
 	/* figure out where the SI regs are actually at on this hardware */
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		regs = (struct si_regs *)0xcc006400;
+		regs = (struct si_regs *)(FLIPPER_MMIO_BASE + 0x6400);
 		break;
 	}
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
-		regs = (struct si_regs *)0xcd806400;
+		regs = (struct si_regs *)(AHB_BASE + 0x6400);
 		break;
 	}
 	default:

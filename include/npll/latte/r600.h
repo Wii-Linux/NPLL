@@ -16,7 +16,7 @@
 #define _LATTE_R600_H
 
 #include <npll/utils.h>
-#define R600_BASE (UNCACHED_BASE + 0x0c200000)
+#define R600_BASE (FLIPPER_MMIO_BASE + 0x200000)
 #define D1(x) (*(vu32 *)(R600_BASE + 0x6100 + x))
 
 #define DGRPH_ENABLE D1(0x0000)

@@ -20,7 +20,9 @@
 #ifndef _FLIPPER_VI_H
 #define _FLIPPER_VI_H
 
-#define MEM_VIDEO_BASE               (0xCC002000)           ///< Memory address of Video Interface
+#include <npll/utils.h>
+
+#define MEM_VIDEO_BASE               (FLIPPER_MMIO_BASE + 0x2000) ///< Memory address of Video Interface
 #define MEM_VIDEO_BASE_PTR           (void *)MEM_VIDEO_BASE   ///< Pointer to Video Interface
 
 // 32-bit-wide registers

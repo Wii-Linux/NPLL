@@ -34,6 +34,7 @@
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
+#include <npll/utils.h>
 
 static REGISTER_DRIVER(nandDrv);
 #define NAND_ECC_SIZE 64
@@ -101,7 +102,7 @@ struct nandDevInfo {
 
 static ssize_t nandRead(struct blockDevice *bdev, void *dest, size_t len, u64 off);
 
-static volatile struct nandRegs *const regs = (volatile struct nandRegs *)0xcd010000;
+static volatile struct nandRegs *const regs = (volatile struct nandRegs *)(AHB_BASE + 0x010000);
 static const struct blockTransfer nandTransfers[] = {
 	/* ECC only; ECC needs insane alignment */
 	{
