@@ -10,6 +10,7 @@
 #include <npll/drivers.h>
 #include <npll/latte/r600.h>
 #include <npll/types.h>
+#include <npll/utils.h>
 #include <npll/video.h>
 
 static REGISTER_DRIVER(fbDrv);
@@ -17,10 +18,10 @@ static REGISTER_DRIVER(fbDrv);
 static void fbFlush(void);
 
 /* TV */
-#define REAL_FB (u32 *)0x97500000
+#define REAL_FB (u32 *)(MEM2_CACHED_BASE + 0x07500000)
 #if 0
 /* DRC/Gamepad */
-#define REAL_FB (u32 *)0x978c0000
+#define REAL_FB (u32 *)(MEM2_CACHED_BASE + 0x078c0000)
 #endif
 
 #define FB_SIZE (uint)(fbVidInfo.width * fbVidInfo.height * (uint)sizeof(u32))

@@ -12,10 +12,11 @@
 #include <npll/log_internal.h>
 #include <npll/menu.h>
 #include <npll/output.h>
+#include <npll/utils.h>
 
 enum logMethod L_Method = LOG_METHOD_ALL_ODEV;
 
-#define memlogStart (char *)0x817c0000
+#define memlogStart (char *)(MEM1_CACHED_BASE + 0x017c0000)
 static char *memlogNext = memlogStart;
 static u32 maxSize = 0x00040000;
 
