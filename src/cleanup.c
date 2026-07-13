@@ -17,6 +17,8 @@
 #include <npll/soc.h>
 #include <npll/video.h>
 
+void (*H_PreEntryHook)(void) = NULL;
+
 /*
  * We work backwards to give us the best shot at freeing any allocations made,
  * since the allocator can only free the most recent allocation

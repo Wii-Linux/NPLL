@@ -265,20 +265,10 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	wiiReboot();
 }
 
-static void __attribute__((noreturn)) wiiExit(void) {
-	u32 iosVer = (u32)H_WiiBootIOS;
+void H_WiiReloadIOS(u32 iosVer) {
 	int i = 0, ret;
-	void (*stub)(void);
 	u64 tb;
 	struct ipc_request_mini req;
-
-	IRQ_Disable();
-	L_Method = LOG_METHOD_ALL_ODEV;
-	log_printf("\x1b[1;1H\x1b[2JReloading...\r\n");
-	H_PrepareForExecEntry();
-	V_Flush();
-	if (iosVer <= 0)
-		iosVer = IOS_VALID_GUESS;
 
 	log_printf("Trying to reload into IOS%d\r\n", iosVer);
 	*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) = 0;
@@ -313,12 +303,39 @@ static void __attribute__((noreturn)) wiiExit(void) {
 			panic("IOS reload succeeded and IPC is ready but IPC init failed");
 	}
 	udelay(500 * 1000);
+}
+
+static void __attribute__((noreturn)) wiiExit(void) {
+	u32 iosVer = (u32)H_WiiBootIOS;
+	void (*stub)(void);
+
+	IRQ_Disable();
+	L_Method = LOG_METHOD_ALL_ODEV;
+	log_printf("\x1b[1;1H\x1b[2JReloading...\r\n");
+	H_PrepareForExecEntry();
+	V_Flush();
+	if (iosVer <= 0)
+		iosVer = IOS_VALID_GUESS;
+
+	H_WiiReloadIOS(iosVer);
 
 	/* IOS is reloaded and ready, hand off to the stub! */
 	log_puts("Handing off to stub...");
 	stub = (void (*)(void))(MEM1_CACHED_BASE + 0x1800);
 	stub();
 	__builtin_unreachable();
+}
+
+void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo) {
+	struct ipc_request_mini req;
+
+	log_printf("Booting title %08x-%08x via MINI BOOT2_RUN\r\n", titleHi, titleLo);
+
+	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, titleHi, titleLo);
+
+	/* the title will take over from here; if it doesn't, just hang */
+	while (1)
+		udelay(1000 * 1000);
 }
 
 static void wiiEject(void) {

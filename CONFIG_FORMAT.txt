@@ -73,9 +73,8 @@
 - Modifiers may require further keys:
   - `ios` (only valid in `type_wii`)
     - `ios`: IOS version to reload into (only applies on Wii)
-  - `mini` (only valid in `type_wii`)
-    - `mini`: Path to the new MINI armboot.bin to load
 - Modifiers may also modify behavior:
+  - `minisd` (only valid in `type_wii`): ask MINI to initialize the SD Card right before exec entry
   - `dkp_cmdline` will check for DevkitPro-style cmdline magic in the first executable section and put the cmdline there if so
   - `linux_loader_cmdline` will check for linux-loader magic in MEM2 and put the cmdline there if so
 

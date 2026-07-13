@@ -139,6 +139,9 @@ int ELF_LoadMem(const void *data) {
 	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
 	H_PrepareForExecEntry();
 
+	if (H_PreEntryHook)
+		H_PreEntryHook();
+
 	/* lets do this thing */
 	ELF_DoEntry(virtToPhys((uintptr_t)ehdr->e_entry));
 
@@ -219,6 +222,9 @@ int ELF_LoadFile(int fd) {
 
 	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
 	H_PrepareForExecEntry();
+
+	if (H_PreEntryHook)
+		H_PreEntryHook();
 
 	/* lets do this thing */
 	ELF_DoEntry(virtToPhys((uintptr_t)ehdr.e_entry));

@@ -11,4 +11,7 @@
 
 extern int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut);
 
+/* Free any heap-allocated state behind a menuEntry produced by C_Probe. */
+extern void C_FreeEntryData(struct menuEntry *entry);
+
 #endif /* _CONFIG_H */

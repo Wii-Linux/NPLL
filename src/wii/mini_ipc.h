@@ -38,6 +38,9 @@
 
 #define IPC_MINI_CODE_BOOT2_RUN     0x00050000
 
+#define IPC_MINI_CODE_SDHC_DISCOVER 0x00020000
+#define IPC_MINI_CODE_SDHC_EXIT     0x00020001
+
 
 /*
  * IPC request structure

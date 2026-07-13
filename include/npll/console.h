@@ -71,4 +71,8 @@ extern enum wiiuRev H_WiiURev;
 extern struct platOps *H_PlatOps;
 extern void H_PrepareForExecEntry(void);
 
+extern void (*H_PreEntryHook)(void);
+extern void H_WiiReloadIOS(u32 iosVer);
+extern void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo);
+
 #endif /* _CONSOLE_H */
