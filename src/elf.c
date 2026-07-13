@@ -235,6 +235,9 @@ int ELF_LoadMem(const void *data) {
 	if (H_PreEntryHook)
 		H_PreEntryHook();
 
+	/* Do not let the entry stub's L1 invalidation discard dirty handoff data. */
+	CPU_DCacheFlushAll();
+
 	/* lets do this thing */
 	ELF_DoEntry(0, 0, 0, virtToPhys((uintptr_t)ehdr->e_entry), false);
 
@@ -333,6 +336,9 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 	if (H_PreEntryHook)
 		H_PreEntryHook();
+
+	/* Do not let the entry stub's L1 invalidation discard dirty handoff data. */
+	CPU_DCacheFlushAll();
 
 	/* lets do this thing */
 	if (dtb) {
