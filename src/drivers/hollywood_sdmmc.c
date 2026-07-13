@@ -51,10 +51,10 @@ static inline sdio_host_dev_t *irqToSDIO(enum irqDev dev) {
 }
 
 static const void *sdhcAddrs[4] = {
-	SDHC0_ADDR,
-	SDHC1_ADDR,
-	SDHC2_ADDR,
-	SDHC3_ADDR
+	(void *)HOLLYWOOD_SDHC0_BASE,
+	(void *)HOLLYWOOD_SDHC1_BASE,
+	(void *)LATTE_SDHC2_BASE,
+	(void *)LATTE_SDHC3_BASE
 };
 
 static const int sdhcToBdevIdx[4] = {

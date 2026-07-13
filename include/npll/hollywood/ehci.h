@@ -8,9 +8,9 @@
 #define _EHCI_H
 
 #include <npll/revle.h>
-#include <npll/utils.h>
+#include <npll/soc.h>
 
-#define _EHCI_BASE(i) ((uintptr_t)(i == 0 ? AHB_BASE + 0x40000 : i == 1 ? AHB_BASE + 0x120000 : i == 2 ? AHB_BASE + 0x140000 : (uintptr_t)-1))
+#define _EHCI_BASE(i) ((uintptr_t)(i == 0 ? HOLLYWOOD_EHCI0_BASE : i == 1 ? LATTE_EHCI1_BASE : i == 2 ? LATTE_EHCI2_BASE : (uintptr_t)-1))
 #define _EHCI_REG(hcidx, off) *(vu32 *)(_EHCI_BASE((hcidx)) + (off))
 #define EHCI_CAPLENGTH(i) _EHCI_REG(i, 0x00)
 #define _EHCI_OPREG(hcidx, off) _EHCI_REG(hcidx, revLEreadb(&EHCI_CAPLENGTH(hcidx)) + off)

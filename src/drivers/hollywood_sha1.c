@@ -13,6 +13,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include <npll/hollywood/sha1.h>
@@ -24,7 +25,7 @@ struct sha1Regs {
 	vu32 h[5];
 };
 
-static volatile struct sha1Regs *const regs = (volatile struct sha1Regs *)(AHB_BASE + 0x030000);
+static volatile struct sha1Regs *const regs = (volatile struct sha1Regs *)HOLLYWOOD_SHA1_BASE;
 static const u32 iv[5] = { 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0 };
 
 #define SHA_CTRL_EXEC BIT(31)

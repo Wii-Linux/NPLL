@@ -1020,9 +1020,9 @@ static void diInit(void) {
 	bool irqs;
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-		regs = (volatile struct diRegs *)(FLIPPER_MMIO_BASE + 0x6000);
+		regs = (volatile struct diRegs *)FLIPPER_DI_BASE;
 	else {
-		regs = (volatile struct diRegs *)(AHB_BASE + 0x6000);
+		regs = (volatile struct diRegs *)HOLLYWOOD_DI_BASE;
 		HW_COMPAT &= ~HW_COMPAT_DVDVIDEO;
 	}
 

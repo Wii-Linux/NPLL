@@ -6,15 +6,14 @@
 
 #ifndef _REGS_H
 #define _REGS_H
-
-#include <npll/utils.h>
+/* FIXME: merge with soc.h at some point */
+#include <npll/soc.h>
 #include <npll/types.h>
 
-#define _FLIPPER_REG(x) (*(vu32 *)(FLIPPER_MMIO_BASE + (x)))
-#define _FLIPPER_PI_REG(x) _FLIPPER_REG(0x3000 + x)
-#define _HOLLYWOOD_REG(x) (*(vu32 *)(AHB_BASE + (x)))
-#define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(AHB_BASE + 0x0b4200 + (x)))
-#define _LATTE_REG(x) (*(vu32 *)(AHB_BASE + 0x400 + (x)))
+#define _FLIPPER_PI_REG(x) (*(vu32 *)(FLIPPER_PI_BASE + (x)))
+#define _HOLLYWOOD_REG(x) (*(vu32 *)(HOLLYWOOD_REGS_BASE + (x)))
+#define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(HOLLYWOOD_MEMCTRL_BASE + (x)))
+#define _LATTE_REG(x) (*(vu32 *)(LATTE_REGS_BASE + (x)))
 
 /* Flipper Registers */
 #define PI_INTSR             _FLIPPER_PI_REG(0x00)
@@ -40,14 +39,14 @@
 #  define PI_RESET_DI            BIT(2)
 
 /* the weird Latte PI that got stuffed into the base of the Flipper reg space, where the GX CP used to be */
-#define LATTE_PI_INTSR       _FLIPPER_REG(0x00)
-#define LATTE_PI_INTMR       _FLIPPER_REG(0x04)
-#define LATTE_PI_INTSR0      _FLIPPER_REG(0x78)
-#define LATTE_PI_INTMR0      _FLIPPER_REG(0x7c)
-#define LATTE_PI_INTSR1      _FLIPPER_REG(0x80)
-#define LATTE_PI_INTMR1      _FLIPPER_REG(0x84)
-#define LATTE_PI_INTSR2      _FLIPPER_REG(0x88)
-#define LATTE_PI_INTMR2      _FLIPPER_REG(0x8c)
+#define LATTE_PI_INTSR       (*(vu32 *)(LATTE_PI_BASE + 0x00))
+#define LATTE_PI_INTMR       (*(vu32 *)(LATTE_PI_BASE + 0x04))
+#define LATTE_PI_INTSR0      (*(vu32 *)(LATTE_PI_BASE + 0x78))
+#define LATTE_PI_INTMR0      (*(vu32 *)(LATTE_PI_BASE + 0x7c))
+#define LATTE_PI_INTSR1      (*(vu32 *)(LATTE_PI_BASE + 0x80))
+#define LATTE_PI_INTMR1      (*(vu32 *)(LATTE_PI_BASE + 0x84))
+#define LATTE_PI_INTSR2      (*(vu32 *)(LATTE_PI_BASE + 0x88))
+#define LATTE_PI_INTMR2      (*(vu32 *)(LATTE_PI_BASE + 0x8c))
 
 /*
  * The chipid register is _weird_, super undocumented.

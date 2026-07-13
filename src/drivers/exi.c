@@ -722,12 +722,12 @@ static void exiInit(void) {
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		regs = (struct exi_regs *)(FLIPPER_MMIO_BASE + 0x6800);
+		regs = (struct exi_regs *)FLIPPER_EXI_BASE;
 		break;
 	}
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
-		regs = (struct exi_regs *)(AHB_BASE + 0x6800);
+		regs = (struct exi_regs *)HOLLYWOOD_EXI_BASE;
 		HW_AIPROT |= BIT(0);
 		break;
 	}

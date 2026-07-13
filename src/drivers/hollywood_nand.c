@@ -33,7 +33,7 @@
 #include <npll/log.h>
 #include <npll/timer.h>
 #include <npll/types.h>
-#include <npll/utils.h>
+#include <npll/soc.h>
 #include <npll/utils.h>
 
 static REGISTER_DRIVER(nandDrv);
@@ -102,7 +102,7 @@ struct nandDevInfo {
 
 static ssize_t nandRead(struct blockDevice *bdev, void *dest, size_t len, u64 off);
 
-static volatile struct nandRegs *const regs = (volatile struct nandRegs *)(AHB_BASE + 0x010000);
+static volatile struct nandRegs *const regs = (volatile struct nandRegs *)HOLLYWOOD_NAND_BASE;
 static const struct blockTransfer nandTransfers[] = {
 	/* ECC only; ECC needs insane alignment */
 	{

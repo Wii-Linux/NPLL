@@ -13,6 +13,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 
@@ -25,7 +26,7 @@ struct aesRegs {
 	vu32 iv;
 };
 
-static volatile struct aesRegs *const regs = (volatile struct aesRegs *)(AHB_BASE + 0x020000);
+static volatile struct aesRegs *const regs = (volatile struct aesRegs *)HOLLYWOOD_AES_BASE;
 
 #define AES_CTRL_IV   BIT(12)
 #define AES_CTRL_DEC  BIT(27)

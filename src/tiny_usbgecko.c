@@ -93,12 +93,12 @@ void H_TinyUGInit(void) {
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		exi_regs = (vu32 *)(FLIPPER_MMIO_BASE + 0x6800);
+		exi_regs = (vu32 *)FLIPPER_EXI_BASE;
 		break;
 	}
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
-		exi_regs = (vu32 *)(AHB_BASE + 0x6800);
+		exi_regs = (vu32 *)HOLLYWOOD_EXI_BASE;
 		HW_AIPROT |= BIT(0);
 		break;
 	}

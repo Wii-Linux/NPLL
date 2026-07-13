@@ -13,6 +13,7 @@
 #include <npll/drivers.h>
 #include <npll/input.h>
 #include <npll/log.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 
 struct si_channel_regs {
@@ -807,12 +808,12 @@ static void siInit(void) {
 	/* figure out where the SI regs are actually at on this hardware */
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		regs = (struct si_regs *)(FLIPPER_MMIO_BASE + 0x6400);
+		regs = (struct si_regs *)FLIPPER_SI_BASE;
 		break;
 	}
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
-		regs = (struct si_regs *)(AHB_BASE + 0x6400);
+		regs = (struct si_regs *)HOLLYWOOD_SI_BASE;
 		break;
 	}
 	default:

@@ -20,25 +20,24 @@
 #ifndef _FLIPPER_VI_H
 #define _FLIPPER_VI_H
 
-#include <npll/utils.h>
+#include <npll/soc.h>
 
-#define MEM_VIDEO_BASE               (FLIPPER_MMIO_BASE + 0x2000) ///< Memory address of Video Interface
-#define MEM_VIDEO_BASE_PTR           (void *)MEM_VIDEO_BASE   ///< Pointer to Video Interface
+#define FLIPPER_VI_BASE_PTR          (void *)FLIPPER_VI_BASE ///< Pointer to Video Interface
 
 // 32-bit-wide registers
-#define R_VIDEO_VTIMING              (*(vu32 *)(MEM_VIDEO_BASE+0x00))   ///< Vertical timing.
-#define R_VIDEO_PSB_ODD              (*(vu32 *)(MEM_VIDEO_BASE+0x00))   ///< Postblank odd.
-#define R_VIDEO_PRB_ODD              (*(vu32 *)(MEM_VIDEO_BASE+0x00))   ///< Preblank odd.
-#define R_VIDEO_PSB_EVEN             (*(vu32 *)(MEM_VIDEO_BASE+0x00))   ///< Postblank even.
-#define R_VIDEO_PRB_EVEN             (*(vu32 *)(MEM_VIDEO_BASE+0x00))   ///< Preblank even.
-#define R_VIDEO_FRAMEBUFFER_1        (*(vu32 *)(MEM_VIDEO_BASE+0x1C))   ///< Framebuffer1 register location.
-#define R_VIDEO_FRAMEBUFFER_2        (*(vu32 *)(MEM_VIDEO_BASE+0x24))   ///< Framebuffer2 register location.
+#define R_VIDEO_VTIMING              (*(vu32 *)(FLIPPER_VI_BASE+0x00))   ///< Vertical timing.
+#define R_VIDEO_PSB_ODD              (*(vu32 *)(FLIPPER_VI_BASE+0x00))   ///< Postblank odd.
+#define R_VIDEO_PRB_ODD              (*(vu32 *)(FLIPPER_VI_BASE+0x00))   ///< Preblank odd.
+#define R_VIDEO_PSB_EVEN             (*(vu32 *)(FLIPPER_VI_BASE+0x00))   ///< Postblank even.
+#define R_VIDEO_PRB_EVEN             (*(vu32 *)(FLIPPER_VI_BASE+0x00))   ///< Preblank even.
+#define R_VIDEO_FRAMEBUFFER_1        (*(vu32 *)(FLIPPER_VI_BASE+0x1C))   ///< Framebuffer1 register location.
+#define R_VIDEO_FRAMEBUFFER_2        (*(vu32 *)(FLIPPER_VI_BASE+0x24))   ///< Framebuffer2 register location.
 // 16-bit-wide registers
-#define R_VIDEO_STATUS1              (*(vu16 *)(MEM_VIDEO_BASE+0x02))   ///< Status? register location.
-#define R_VIDEO_HALFLINE_1           (*(vu16 *)(MEM_VIDEO_BASE+0x2C))   ///< HalfLine1 register location.
-#define R_VIDEO_HALFLINE_2           (*(vu16 *)(MEM_VIDEO_BASE+0x2E))   ///< HalfLine2 register location.
-#define R_VIDEO_STATUS               (*(vu16 *)(MEM_VIDEO_BASE+0x6C))   ///< VideoStatus register location.
-#define R_VIDEO_VISEL                (*(vu16 *)(MEM_VIDEO_BASE+0x6E))   // cable detect
+#define R_VIDEO_STATUS1              (*(vu16 *)(FLIPPER_VI_BASE+0x02))   ///< Status? register location.
+#define R_VIDEO_HALFLINE_1           (*(vu16 *)(FLIPPER_VI_BASE+0x2C))   ///< HalfLine1 register location.
+#define R_VIDEO_HALFLINE_2           (*(vu16 *)(FLIPPER_VI_BASE+0x2E))   ///< HalfLine2 register location.
+#define R_VIDEO_STATUS               (*(vu16 *)(FLIPPER_VI_BASE+0x6C))   ///< VideoStatus register location.
+#define R_VIDEO_VISEL                (*(vu16 *)(FLIPPER_VI_BASE+0x6E))   // cable detect
 
 // Constants for VIDEO_Init()
 #define VIDEO_640X480_NTSCi_YUV16    (0)

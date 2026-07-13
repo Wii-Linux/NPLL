@@ -133,9 +133,9 @@ void VIDEO_Init(int VideoMode)
 	for(Counter=0; Counter<64; Counter++)
 	{
 		if(Counter==1)
-			*(vu16 *)(MEM_VIDEO_BASE + 2 * Counter) = video_initstate[Counter] & 0xFFFE;
+			*(vu16 *)(FLIPPER_VI_BASE + 2 * Counter) = video_initstate[Counter] & 0xFFFE;
 		else
-			*(vu16 *)(MEM_VIDEO_BASE + 2 * Counter) = video_initstate[Counter];
+			*(vu16 *)(FLIPPER_VI_BASE + 2 * Counter) = video_initstate[Counter];
 	}
 
 	video_mode = VideoMode;
@@ -144,7 +144,7 @@ void VIDEO_Init(int VideoMode)
 #ifdef VI_DEBUG
 	VI_debug("VI dump:\n");
 	for(Counter=0; Counter<32; Counter++)
-		log_printf("%02x: %04x %04x,\n", Counter*4, *(vu16 *)(MEM_VIDEO_BASE + Counter*4), *(vu16 *)(MEM_VIDEO_BASE + Counter*4+2));
+		log_printf("%02x: %04x %04x,\n", Counter*4, *(vu16 *)(FLIPPER_VI_BASE + Counter*4), *(vu16 *)(FLIPPER_VI_BASE + Counter*4+2));
 
 	log_printf("---\n");
 #endif
@@ -181,7 +181,7 @@ void VIDEO_BlackOut(void)
 	R_VIDEO_VTIMING &= ~0xfffffff0;
 }
 
-//static vu16* const _viReg = (u16*)MEM_VIDEO_BASE;
+//static vu16* const _viReg = (u16*)FLIPPER_VI_BASE;
 
 void VIDEO_Shutdown(void)
 {

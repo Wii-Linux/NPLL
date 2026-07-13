@@ -11,17 +11,13 @@
 #define _DRIVERS_SDIO_H
 
 #include <npll/types.h>
-#include <npll/utils.h>
+#include <npll/soc.h>
 
 /* NOT to be confused with SDHC. This API is universal */
 
 #define SDIO_HOST_SPI BIT(0)
 
 /* for Hollywood/Latte main SDHC */
-#define SDHC0_ADDR (void *)(AHB_BASE + 0x070000)
-#define SDHC1_ADDR (void *)(AHB_BASE + 0x080000)
-#define SDHC2_ADDR (void *)(AHB_BASE + 0x100000)
-#define SDHC3_ADDR (void *)(AHB_BASE + 0x110000)
 enum sdio_id {
 	SDHC0,
 	SDHC1,
