@@ -9,6 +9,7 @@
 #include <npll/console.h>
 #include <npll/init.h>
 #include <npll/timer.h>
+#include <npll/utils.h>
 #include <npll/drivers.h>
 #include <npll/cpu.h>
 #include <npll/latte/ipc.h>
@@ -101,19 +102,19 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 	 * Map lower MEM2
 	 */
 
-	/* BPRN = 0x10000000, WIMG=0000, PP=RW */
-	batl = 0x10000002;
+	/* BPRN = MEM2_PHYS_BASE, WIMG=0000, PP=RW */
+	batl = MEM2_PHYS_BASE | 2;
 
-	/* BEPI = 0x90000000, BL=256MB, Vs=1, Vp=1 */
-	batu = 0x90001fff;
+	/* BEPI = MEM2_CACHED_BASE, BL=256MB, Vs=1, Vp=1 */
+	batu = MEM2_CACHED_BASE | 0x1fff;
 
 	setbat(2, SETBAT_TYPE_BOTH, batu, batl);
 
-	/* BPRN = 0x10000000, WIMG=0101, PP=RW */
-	batl = 0x1000002a;
+	/* BPRN = MEM2_PHYS_BASE, WIMG=0101, PP=RW */
+	batl = MEM2_PHYS_BASE | 0x2a;
 
-	/* BEPI = 0xd0000000, BL=256MB, Vs=1, Vp=1 */
-	batu = 0xd0001fff;
+	/* BEPI = MEM2_UNCACHED_BASE, BL=256MB, Vs=1, Vp=1 */
+	batu = MEM2_UNCACHED_BASE | 0x1fff;
 
 	setbat(3, SETBAT_TYPE_BOTH, batu, batl);
 
@@ -137,11 +138,11 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 	/*
 	 * map higher portions of MEM2
 	 */
-	/* BPRN = 0x20000000, WIMG=0000, PP=RW */
-	batl = 0x20000002;
+	/* BPRN = second 256MB of MEM2, WIMG=0000, PP=RW */
+	batl = (MEM2_PHYS_BASE + 0x10000000) | 2;
 
-	/* BEPI = 0xa0000000, BL=256MB, Vs=1, Vp=1 */
-	batu = 0xa0001fff;
+	/* BEPI = second 256MB of cached MEM2, BL=256MB, Vs=1, Vp=1 */
+	batu = (MEM2_CACHED_BASE + 0x10000000) | 0x1fff;
 
 	setbat(4, SETBAT_TYPE_BOTH, batu, batl);
 	batl += 0x10000000; batu += 0x10000000;

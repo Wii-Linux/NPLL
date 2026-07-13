@@ -308,7 +308,7 @@ void M_Init(void) {
 	case CONSOLE_TYPE_GAMECUBE: {
 		/* MEM1 below our binary */
 		pools[0].top = &__reloc_dest_start;
-		pools[0].bottom = (void *)0x80004000;
+		pools[0].bottom = (void *)(MEM1_CACHED_BASE + 0x4000);
 		pools[0].cur_bottom = pools[0].top;
 		pools[0].name = "MEM1";
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
@@ -317,7 +317,7 @@ void M_Init(void) {
 	case CONSOLE_TYPE_WII: {
 		/* MEM1 below our binary */
 		pools[0].top = &__reloc_dest_start;
-		pools[0].bottom = (void *)0x80004000;
+		pools[0].bottom = (void *)(MEM1_CACHED_BASE + 0x4000);
 		pools[0].cur_bottom = pools[0].top;
 		pools[0].name = "MEM1";
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
@@ -336,7 +336,7 @@ void M_Init(void) {
 	case CONSOLE_TYPE_WII_U: {
 		/* MEM1 below our binary */
 		pools[0].top = &__reloc_dest_start;
-		pools[0].bottom = (void *)0x80004000;
+		pools[0].bottom = (void *)(MEM1_CACHED_BASE + 0x4000);
 		pools[0].cur_bottom = pools[0].top;
 		pools[0].name = "MEM1";
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);

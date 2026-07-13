@@ -408,19 +408,19 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	/*
 	 * Map MEM2
 	 */
-	/* BPRN = 0x10000000, WIMG=0000, PP=RW */
-	batl = 0x10000002;
+	/* BPRN = MEM2_PHYS_BASE, WIMG=0000, PP=RW */
+	batl = MEM2_PHYS_BASE | 2;
 
-	/* BEPI = 0x90000000, BL=256MB, Vs=1, Vp=1 */
-	batu = 0x90001fff;
+	/* BEPI = MEM2_CACHED_BASE, BL=256MB, Vs=1, Vp=1 */
+	batu = MEM2_CACHED_BASE | 0x1fff;
 
 	setbat(2, SETBAT_TYPE_BOTH, batu, batl);
 
-	/* BPRN = 0x10000000, WIMG=0101, PP=RW */
-	batl = 0x1000002a;
+	/* BPRN = MEM2_PHYS_BASE, WIMG=0101, PP=RW */
+	batl = MEM2_PHYS_BASE | 0x2a;
 
-	/* BEPI = 0xd0000000, BL=256MB, Vs=1, Vp=1 */
-	batu = 0xd0001fff;
+	/* BEPI = MEM2_UNCACHED_BASE, BL=256MB, Vs=1, Vp=1 */
+	batu = MEM2_UNCACHED_BASE | 0x1fff;
 
 	setbat(3, SETBAT_TYPE_BOTH, batu, batl);
 

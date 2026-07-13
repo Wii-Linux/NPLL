@@ -28,6 +28,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/timer.h>
+#include <npll/utils.h>
 #include <npll/video.h>
 #include <npll/log.h>
 #include <npll/flipper/vi.h>
@@ -151,7 +152,7 @@ void VIDEO_Init(int VideoMode)
 
 void VIDEO_SetFrameBuffer(void *FrameBufferAddr)
 {
-	u32 fb = (uintptr_t)FrameBufferAddr & ~0xc0000000; /* physical addr */
+	u32 fb = (u32)(uintptr_t)virtToPhys(FrameBufferAddr); /* physical addr */
 
 	R_VIDEO_FRAMEBUFFER_1 = (fb >> 5) | 0x10000000;
 	if(video_mode != VIDEO_640X480_NTSCp_YUV16)
