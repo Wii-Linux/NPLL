@@ -50,6 +50,7 @@ int ELF_CheckValid(const void *data) {
 static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_t *off, int *bail) {
 	void *addr;
 	u32 size;
+	uintptr_t start, end;
 
 	/* sanity check */
 	if (phdr->p_type != PT_LOAD) {
@@ -82,11 +83,12 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_
 
 	/* make it virtual */
 	addr = physToCached(addr);
+	start = (uintptr_t)addr;
+	end = start + phdr->p_memsz;
 
-	if (!(((uintptr_t)addr & 0xf0000000) == 0x80000000 && size < MEM1_SIZE_GCN) &&
-	     (((uintptr_t)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII && size < MEM2_SIZE_WII) &&
-	     (((uintptr_t)addr & 0xf0000000) == 0x90000000 && H_ConsoleType == CONSOLE_TYPE_WII_U && size < MEM2_SIZE_WIIU)) {
-		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", addr, size);
+	/* Check the complete in-memory segment, including its zero-filled tail. */
+	if (end < start || !phdr->p_memsz || !addrIsValidCached(addr) || !addrIsValidCached((void *)(end - 1))) {
+		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", addr, phdr->p_memsz);
 		*bail = ELF_ERR_INVALID_EXEC;
 		return false;
 	}
@@ -166,6 +168,11 @@ int ELF_LoadFile(int fd) {
 	if (res != sizeof(ehdr)) {
 		log_printf("FS_Read for ehdr returned: %d\r\n", res);
 		return ELF_ERR_FS_ERROR;
+	}
+	ret = ELF_CheckValid(&ehdr);
+	if (ret) {
+		FS_Close(fd);
+		return ret;
 	}
 
 	for (i = 0; i < ehdr.e_phnum; i++) {
