@@ -7,56 +7,64 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
-#include <npll/console.h>
-#include <npll/log_internal.h>
-#include <npll/types.h>
+#ifndef __ASSEMBLY__
+#  include <npll/console.h>
+#  include <npll/log_internal.h>
+#  include <npll/types.h>
 
 /* branch predictor helpers */
-#define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
-#define __likely(cond) __builtin_expect((cond), 1)
-#define __unlikely(cond) __builtin_expect((cond), 0)
+#  define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+#  define __likely(cond) __builtin_expect((cond), 1)
+#  define __unlikely(cond) __builtin_expect((cond), 0)
+#endif
 
 /* stringification helpers */
 #define __stringify(str) #str
 #define __stringifyResult(str) __stringify(str)
 
 /* memory helpers */
-#define CACHED_BASE        0x80000000u
-#define UNCACHED_BASE      0xc0000000u
+#ifdef __ASSEMBLY__
+#  define CACHED_BASE        0x80000000
+#  define UNCACHED_BASE      0xc0000000
+#else
+#  define CACHED_BASE        0x80000000u
+#  define UNCACHED_BASE      0xc0000000u
+#endif
 
-static inline void *_physToCached(void *_addr) {
-	uintptr_t addr = (uintptr_t)_addr;
-	addr |= CACHED_BASE;
-	return (void *)addr;
-}
+#define _physToCached(addr)   ((addr) | CACHED_BASE)
+#define _physToUncached(addr) ((addr) | UNCACHED_BASE)
+/* works for both cached and uncached */
+#define _virtToPhys(addr)     ((addr) & ~UNCACHED_BASE)
 
-static inline void *_physToUncached(void *_addr) {
-	uintptr_t addr = (uintptr_t)_addr;
-	addr |= UNCACHED_BASE;
-	return (void *)addr;
-}
-
-static inline void *_virtToPhys(void *_addr) {
-	uintptr_t addr = (uintptr_t)_addr;
-	addr &= ~UNCACHED_BASE; /* works for both cached and uncached */
-	return (void *)addr;
-}
-
-#define physToCached(x) _physToCached((void *)(x))
-#define physToUncached(x) _physToUncached((void *)(x))
+#ifndef __ASSEMBLY__
+#  define physToCached(x) ((void *)(uintptr_t)_physToCached((uintptr_t)(x)))
+#  define physToUncached(x) ((void *)(uintptr_t)_physToUncached((uintptr_t)(x)))
+#  define virtToPhys(x) ((void *)(uintptr_t)_virtToPhys((uintptr_t)(x)))
+#else
+#  define physToCached(x) _physToCached(x)
+#  define physToUncached(x) _physToUncached(x)
+#  define virtToPhys(x) _virtToPhys(x)
+#endif
 #define cachedToUncached(x) physToUncached(x)
 #define uncachedToCached(x) physToCached(uncachedToPhys(x))
-#define virtToPhys(x) _virtToPhys((void *)(x))
 #define cachedToPhys(x) virtToPhys(x)
 #define uncachedToPhys(x) virtToPhys(x)
 
-#define MEM1_PHYS_BASE     0x00000000u
-#define MEM1_CACHED_BASE   ((uintptr_t)physToCached(MEM1_PHYS_BASE))
-#define MEM1_UNCACHED_BASE ((uintptr_t)physToUncached(MEM1_PHYS_BASE))
-
-#define MEM2_PHYS_BASE     0x10000000u
-#define MEM2_CACHED_BASE   ((uintptr_t)physToCached(MEM2_PHYS_BASE))
-#define MEM2_UNCACHED_BASE ((uintptr_t)physToUncached(MEM2_PHYS_BASE))
+#ifndef __ASSEMBLY__
+#  define MEM1_PHYS_BASE     0x00000000u
+#  define MEM2_PHYS_BASE     0x10000000u
+#  define MEM1_CACHED_BASE   ((uintptr_t)physToCached(MEM1_PHYS_BASE))
+#  define MEM1_UNCACHED_BASE ((uintptr_t)physToUncached(MEM1_PHYS_BASE))
+#  define MEM2_CACHED_BASE   ((uintptr_t)physToCached(MEM2_PHYS_BASE))
+#  define MEM2_UNCACHED_BASE ((uintptr_t)physToUncached(MEM2_PHYS_BASE))
+#else
+#  define MEM1_PHYS_BASE     0x00000000
+#  define MEM2_PHYS_BASE     0x10000000
+#  define MEM1_CACHED_BASE   physToCached(MEM1_PHYS_BASE)
+#  define MEM1_UNCACHED_BASE physToUncached(MEM1_PHYS_BASE)
+#  define MEM2_CACHED_BASE   physToCached(MEM2_PHYS_BASE)
+#  define MEM2_UNCACHED_BASE physToUncached(MEM2_PHYS_BASE)
+#endif
 
 #define MEM1_SIZE_GCN      0x01800000u
 #define MEM1_SIZE_WII      MEM1_SIZE_GCN
@@ -68,6 +76,7 @@ static inline void *_virtToPhys(void *_addr) {
 /* lie, but this is all that we map */
 #define MEM2_SIZE_WIIU     0x10000000u
 
+#ifndef __ASSEMBLY__
 
 static inline bool addrIsValidCached(void *_addr) {
 	uintptr_t addr = (uintptr_t)_addr;
@@ -175,5 +184,6 @@ static inline u32 alignUpU32(u32 val, u32 align) {
 	return val + (align - rem);
 }
 
+#endif /* !__ASSEMBLY__ */
 
 #endif /* _UTILS_H */
