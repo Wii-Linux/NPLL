@@ -212,6 +212,7 @@ static inline void setbat(uint idx, uint typeMask, u32 batu, u32 batl) {
 }
 
 extern void CPU_Init(void);
+extern void CPU_DCacheFlushAll(void);
 extern void CPU_L2Disable(void);
 extern void CPU_L2Enable(void);
 

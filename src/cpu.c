@@ -9,6 +9,31 @@
 #include <npll/cache.h>
 #include <npll/cpu.h>
 #include <npll/log.h>
+#include <npll/utils.h>
+
+static void flushRange(uintptr_t start, size_t size) {
+	uintptr_t end = start + size;
+
+	for (; start < end; start += 32)
+		asm volatile("dcbf 0,%0" : : "b"(start) : "memory");
+}
+
+void CPU_DCacheFlushAll(void) {
+	/*
+	 * dcbf propagates a matching dirty block through L1 and L2 to memory.
+	 * Walking every cacheable RAM address therefore cleans both caches before
+	 * either cache is disabled or globally invalidated.
+	 */
+	flushRange(MEM1_CACHED_BASE,
+		H_ConsoleType == CONSOLE_TYPE_WII_U ? MEM1_SIZE_WIIU : MEM1_SIZE_GCN);
+
+	if (H_ConsoleType == CONSOLE_TYPE_WII)
+		flushRange(MEM2_CACHED_BASE, MEM2_SIZE_WII);
+	else if (H_ConsoleType == CONSOLE_TYPE_WII_U)
+		flushRange(MEM2_CACHED_BASE, MEM2_SIZE_WIIU);
+
+	asm volatile("sync; isync" ::: "memory");
+}
 
 void CPU_L2Enable(void) {
 	u32 l2cr, scratch;
@@ -42,32 +67,13 @@ void CPU_L2Enable(void) {
 }
 
 void CPU_L2Disable(void) {
-	u32 l2cr, scratch;
+	CPU_DCacheFlushAll();
 
-	/* invalidate and enable L2$ */
-	log_puts("disable L1I$");
-	mtspr(HID0, mfspr(HID0) & ~HID0_ICE); sync();
-	log_puts("disabling");
+	/* L2I must only be asserted while L2 is disabled. */
 	mtspr(L2CR, 0); sync();
-	l2cr = L2CR_L2I;
-	log_puts("invalidating");
-	asm volatile(
-		"mtspr 1017, %0\n" /* L2CR */
-		"wait_inval_disable:\n"
-		"mfspr %0, 1017\n" /* L2CR */
-		"andi. %1, %0, 1\n" /* L2IP */
-		"cmplwi %1, 0\n"
-		"bne wait_inval_disable\n"
-		: "+r"(l2cr), "=r"(scratch)
-	);
-
 	mtspr(L2CR, L2CR_L2I); sync();
-	log_puts("waiting on inval");
 	while (mfspr(L2CR) & L2CR_L2IP) barrier();
-	log_puts("disabling");
 	mtspr(L2CR, 0); sync();
-	log_puts("enabling L1I$");
-	mtspr(HID0, mfspr(HID0) | HID0_ICE); sync();
 }
 
 void CPU_Init(void) {
