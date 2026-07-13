@@ -9,7 +9,7 @@
 #include <string.h>
 #include <npll/cpu.h>
 #include <npll/console.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/irq.h>
 
 static irqHandler_t IRQ_Handlers[IRQDEV_MAX];

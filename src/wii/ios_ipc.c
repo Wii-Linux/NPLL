@@ -12,7 +12,7 @@
 
 #include "ios_ipc.h"
 #include <npll/types.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/cpu.h>
 #include <npll/cache.h>
 #include <npll/utils.h>

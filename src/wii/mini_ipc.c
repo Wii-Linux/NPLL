@@ -17,7 +17,7 @@
 #include <npll/console.h>
 #include <npll/log.h>
 #include <npll/panic.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>

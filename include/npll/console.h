@@ -15,7 +15,7 @@ enum consoleType {
 	CONSOLE_TYPE_WII_U
 };
 
-/* see comment in regs.h */
+/* see comment in soc.h */
 enum gcnRev {
 	PI_CHIPID_REV_A = 0x046500b0, /* some values pulled from Dolphin */
 	PI_CHIPID_REV_B = 0x146500b1,

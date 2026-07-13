@@ -11,7 +11,7 @@
 
 #include <assert.h>
 #include <npll/types.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/console.h>
 #include <npll/init.h>
 #include <npll/timer.h>

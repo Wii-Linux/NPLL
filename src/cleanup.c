@@ -14,7 +14,7 @@
 #include <npll/irq.h>
 #include <npll/log_internal.h>
 #include <npll/output.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/video.h>
 
 /*

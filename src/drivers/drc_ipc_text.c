@@ -8,7 +8,7 @@
 #include <npll/drivers.h>
 #include <npll/irq.h>
 #include <npll/output.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/latte/ipc.h>
 
 static REGISTER_DRIVER(drcDrv);

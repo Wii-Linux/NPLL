@@ -11,7 +11,7 @@
 
 #include <npll/types.h>
 #include <npll/log.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/drivers/exi.h>

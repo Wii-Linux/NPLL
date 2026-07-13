@@ -7,7 +7,7 @@
 #ifndef _GPIO_H
 #define _GPIO_H
 
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/utils.h>
 
 #define HW_GPIOB_OUT     _HOLLYWOOD_REG(0xc0)

@@ -17,7 +17,7 @@
 #include <string.h>
 #include <npll/cache.h>
 #include <npll/log.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include "ios_ipc.h"

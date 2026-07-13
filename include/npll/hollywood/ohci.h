@@ -7,7 +7,7 @@
 #ifndef _OHCI_H
 #define _OHCI_H
 
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/utils.h>
 
 #define _OHCI_BASE(i) ((uintptr_t)(i == 0 ? HOLLYWOOD_OHCI0_BASE : i == 1 ? HOLLYWOOD_OHCI1_BASE : (uintptr_t)-1))

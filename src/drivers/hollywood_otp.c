@@ -12,7 +12,7 @@
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/hollywood/otp.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/irq.h>
 #include <npll/utils.h>
 

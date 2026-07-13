@@ -16,7 +16,7 @@
 #include <npll/log_internal.h>
 #include <npll/menu.h>
 #include <npll/output.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>

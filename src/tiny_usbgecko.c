@@ -12,7 +12,7 @@
  */
 
 
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/console.h>
 
 #define UG_SLOTA 0

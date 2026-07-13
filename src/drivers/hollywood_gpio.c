@@ -12,7 +12,7 @@
 #include <npll/irq.h>
 #include <npll/input.h>
 #include <npll/log.h>
-#include <npll/regs.h>
+#include <npll/soc.h>
 #include <npll/types.h>
 #include <npll/hollywood/gpio.h>
 
