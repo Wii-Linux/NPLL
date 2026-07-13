@@ -18,6 +18,7 @@
 #include <npll/dol.h>
 #include <npll/fs.h>
 #include <npll/log.h>
+#include <npll/linux.h>
 #include <npll/menu.h>
 #include <npll/partition.h>
 #include <npll/utils.h>
@@ -1201,21 +1202,56 @@ static void installPreEntryHook(struct npllEntry *ne) {
 static void npllBootLinux(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
+	struct linuxBootFiles files;
+	u32 ignoredSize, dtbExtra, cmdlineFlags = 0;
+
+	memset(&files, 0, sizeof(files));
+
+	if (ne->initrdPath) {
+		if (npllEnsureFS(ne, ne->initrdPath, &path))
+			return;
+		fd = FS_Open(path);
+		if (fd < 0 || L_LoadAuxFile(fd, POOL_ANY, &files.initrd, 0, &files.initrdSize)) {
+			log_printf("npllBootLinux: failed to load initrd: %d\r\n", fd);
+			return;
+		}
+	}
+
+	if (ne->dtbPath) {
+		if (npllEnsureFS(ne, ne->dtbPath, &path))
+			goto fail;
+		fd = FS_Open(path);
+		dtbExtra = 1024u + (ne->cmdline ? (u32)strlen(ne->cmdline) + 1u : 0u);
+		if (fd < 0 || L_LoadAuxFile(fd, POOL_MEM1, &files.dtb, dtbExtra, &ignoredSize)) {
+			log_printf("npllBootLinux: failed to load device tree: %d\r\n", fd);
+			goto fail;
+		}
+		if (L_PrepareDTB(&files, ne->cmdline))
+			goto fail;
+	}
 
 	if (npllEnsureFS(ne, ne->execPath, &path))
-		return;
+		goto fail;
 
 	fd = FS_Open(path);
 	if (fd < 0) {
 		log_printf("npllBootLinux: FS_Open returned %d\r\n", fd);
-		return;
+		goto fail;
 	}
 
-	/* TODO: initrd and DTB */
+	if (ne->mods & NPLL_MOD_DKP_CMDLINE)
+		cmdlineFlags |= ELF_LINUX_CMDLINE_DKP;
+	if (ne->mods & NPLL_MOD_LINUX_LDR_CMDLINE)
+		cmdlineFlags |= ELF_LINUX_CMDLINE_LNXLDR;
 
 	installPreEntryHook(ne);
-	ret = ELF_LoadFile(fd);
-	log_printf("npllBootLinux: ELF_LoadFile returned %d\r\n", ret);
+	ret = ELF_LoadLinuxFile(fd, files.dtb, files.initrd, files.initrdSize,
+				ne->cmdline, cmdlineFlags);
+	log_printf("npllBootLinux: ELF_LoadLinuxFile returned %d\r\n", ret);
+
+fail:
+	sfree(files.dtb);
+	sfree(files.initrd);
 }
 
 static void npllBootELF(struct npllEntry *ne) {

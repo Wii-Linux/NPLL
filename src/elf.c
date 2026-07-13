@@ -9,13 +9,95 @@
 #include <string.h>
 #include <npll/console.h>
 #include <npll/cache.h>
+#include <npll/cpu.h>
 #include <npll/elf_abi.h>
 #include <npll/elf.h>
 #include <npll/fs.h>
+#include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/utils.h>
 
-extern void __attribute__((noreturn)) ELF_DoEntry(const void *entry);
+extern void __attribute__((noreturn)) ELF_DoEntry(u32 arg3, u32 arg4, u32 arg5, const void *entry, bool keepCaches);
+
+#define ARGV_MAGIC 0x5f617267u
+#define WIIU_LOADER_MAGIC 0xcafefecau
+#define WIIU_LOADER_EA    0xe9200000u
+
+struct dkpArgv {
+	u32 magic;
+	char *commandLine;
+	u32 length;
+	u32 argc;
+	char **argv;
+	char **endARGV;
+};
+
+struct wiiuLoaderData {
+	u32 magic;
+	char cmdline[256];
+	void *initrd;
+	u32 initrdSize;
+};
+
+static void ELF_InstallLinuxData(u32 entry, const void *initrd, u32 initrdSize, const char *cmdline, u32 flags) {
+	size_t len, copyLen;
+	u32 oldBatu, oldBatl;
+	struct wiiuLoaderData *loader;
+	void *entryCached = physToCached(entry);
+
+	len = cmdline ? strlen(cmdline) + 1 : 0;
+
+	if (cmdline && (flags & ELF_LINUX_CMDLINE_DKP)) {
+		struct dkpArgv *argv = (struct dkpArgv *)((u8 *)entryCached + 8);
+
+		if (*(u32 *)((u8 *)entryCached + 4) == ARGV_MAGIC) {
+			argv->magic = ARGV_MAGIC;
+			argv->commandLine = (char *)cmdline;
+			argv->length = (u32)len;
+			argv->argc = 0;
+			argv->argv = NULL;
+			argv->endARGV = NULL;
+			dcache_flush(argv, sizeof(*argv));
+			dcache_flush((void *)cmdline, len);
+		} else
+			log_puts("dkp_cmdline requested but executable has no argv magic");
+	}
+
+	if (flags & ELF_LINUX_CMDLINE_LNXLDR) {
+		if (H_ConsoleType != CONSOLE_TYPE_WII_U) {
+			log_puts("linux_loader_cmdline requested outside Wii U");
+			return;
+		}
+
+		/*
+		 * linux-loader places this structure at physical 0x89200000, well
+		 * above NPLL's regular MEM2 BATs.  Borrow DBAT6 to expose the
+		 * containing 256 MiB as an uncached window at 0xe0000000.
+		 */
+		oldBatu = mfspr(DBAT6U);
+		oldBatl = mfspr(DBAT6L);
+		setbat(6, SETBAT_TYPE_DATA, 0xe0001fffu, 0x8000002au);
+		loader = (struct wiiuLoaderData *)WIIU_LOADER_EA;
+
+		if (loader->magic == WIIU_LOADER_MAGIC) {
+			if (cmdline) {
+				copyLen = len;
+				if (copyLen > sizeof(loader->cmdline))
+					copyLen = sizeof(loader->cmdline);
+				memcpy(loader->cmdline, cmdline, copyLen);
+				loader->cmdline[sizeof(loader->cmdline) - 1] = '\0';
+			}
+			if (initrd) {
+				loader->initrd = virtToPhys(initrd);
+				loader->initrdSize = initrdSize;
+			}
+			sync();
+		} else
+			log_puts("linux_loader_cmdline requested but loader magic is absent");
+
+		setbat(6, SETBAT_TYPE_DATA, oldBatu, oldBatl);
+	}
+}
 
 int ELF_CheckValid(const void *data) {
 	const Elf32_Ehdr *ehdr = (const Elf32_Ehdr *)data;
@@ -47,7 +129,7 @@ int ELF_CheckValid(const void *data) {
 	return 0;
 }
 
-static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_t *off, int *bail) {
+static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, bool linuxDirect, void **dest, u32 *loadSz, size_t *off, int *bail) {
 	void *addr;
 	u32 size;
 	uintptr_t start, end;
@@ -59,11 +141,16 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, void **dest, u32 *loadSz, size_
 		return false;
 	}
 
-	/* get the address */
+	/*
+	 * A raw 32-bit PowerPC vmlinux is linked at PAGE_OFFSET (normally
+	 * 0xc0000000), but its PT_LOAD p_paddr is the physical destination and
+	 * may legitimately be zero.  Generic ELF files do not reliably give
+	 * p_paddr meaning, so fallback to p_vaddr for them.
+	 */
 	addr = (void *)(uintptr_t)phdr->p_paddr;
-	if (!addr)
+	if (!linuxDirect && !addr)
 		addr = (void *)(uintptr_t)phdr->p_vaddr;
-	if (!addr) {
+	if (!linuxDirect && !addr) {
 		log_puts("Skipping segment: no address");
 		*bail = 0;
 		return false;
@@ -113,7 +200,7 @@ int ELF_LoadMem(const void *data) {
 	phdr = (const Elf32_Phdr *)((uintptr_t)data + ehdr->e_phoff);
 
 	for (i = 0; i < ehdr->e_phnum; i++) {
-		load = ELF_LoadPhdr(phdr, &addr, &size, &off, &ret);
+		load = ELF_LoadPhdr(phdr, false, &addr, &size, &off, &ret);
 		if (ret)
 			return ret;
 		else if (!load) {
@@ -125,12 +212,18 @@ int ELF_LoadMem(const void *data) {
 		memcpy(addr, (void *)((uintptr_t)data + off), size);
 		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, addr, size);
 
-		/* and flush the cache - ELF_DoEntry will turn caches off */
-		dcache_flush(addr, size);
+		/* Executable data must be visible to an already-enabled I-cache. */
+		if (phdr->p_flags & PF_X)
+			dcache_flush_icache_invalidate(addr, size);
+		else
+			dcache_flush(addr, size);
 
 		if (phdr->p_memsz > phdr->p_filesz) {
 			memset((u8 *)addr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
-			dcache_flush((u8 *)addr + phdr->p_filesz, phdr->p_memsz - phdr->p_filesz);
+			if (phdr->p_flags & PF_X)
+				dcache_flush_icache_invalidate((u8 *)addr + phdr->p_filesz, phdr->p_memsz - phdr->p_filesz);
+			else
+				dcache_flush((u8 *)addr + phdr->p_filesz, phdr->p_memsz - phdr->p_filesz);
 		}
 
 		phdr = (const Elf32_Phdr *)((uintptr_t)phdr + ehdr->e_phentsize);
@@ -143,13 +236,13 @@ int ELF_LoadMem(const void *data) {
 		H_PreEntryHook();
 
 	/* lets do this thing */
-	ELF_DoEntry(virtToPhys((uintptr_t)ehdr->e_entry));
+	ELF_DoEntry(0, 0, 0, virtToPhys((uintptr_t)ehdr->e_entry), false);
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
 }
 
-int ELF_LoadFile(int fd) {
+static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdSize, const char *cmdline, u32 cmdlineFlags) {
 	/* should be aligned since we're reading into these */
 	Elf32_Ehdr ALIGN(32) ehdr;
 	Elf32_Phdr ALIGN(32) phdr;
@@ -178,6 +271,15 @@ int ELF_LoadFile(int fd) {
 		return ret;
 	}
 
+	/*
+	 * A direct Linux image is loaded at physical zero and replaces NPLL's
+	 * exception vectors.  No interrupt may be taken from that point onward.
+	 * The storage drivers used below are polled, and normal executable cleanup
+	 * disables IRQs before touching them as well.
+	 */
+	if (dtb)
+		IRQ_Disable();
+
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		res = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
 		if (res != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
@@ -190,7 +292,7 @@ int ELF_LoadFile(int fd) {
 			return ELF_ERR_FS_ERROR;
 		}
 
-		load = ELF_LoadPhdr(&phdr, &addr, &size, &off, &ret);
+		load = ELF_LoadPhdr(&phdr, dtb != NULL, &addr, &size, &off, &ret);
 		if (ret)
 			return ret;
 		else if (!load)
@@ -208,12 +310,18 @@ int ELF_LoadFile(int fd) {
 			return ELF_ERR_FS_ERROR;
 		}
 
-		/* flush the cache - ELF_DoEntry will turn caches off */
-		dcache_flush(addr, size);
+		/* Linux enters with L1 enabled, so synchronize executable lines too. */
+		if (phdr.p_flags & PF_X)
+			dcache_flush_icache_invalidate(addr, size);
+		else
+			dcache_flush(addr, size);
 
 		if (phdr.p_memsz > phdr.p_filesz) {
 			memset((u8 *)addr + phdr.p_filesz, 0, phdr.p_memsz - phdr.p_filesz);
-			dcache_flush((u8 *)addr + phdr.p_filesz, phdr.p_memsz - phdr.p_filesz);
+			if (phdr.p_flags & PF_X)
+				dcache_flush_icache_invalidate((u8 *)addr + phdr.p_filesz, phdr.p_memsz - phdr.p_filesz);
+			else
+				dcache_flush((u8 *)addr + phdr.p_filesz, phdr.p_memsz - phdr.p_filesz);
 		}
 	}
 
@@ -227,8 +335,26 @@ int ELF_LoadFile(int fd) {
 		H_PreEntryHook();
 
 	/* lets do this thing */
-	ELF_DoEntry(virtToPhys((uintptr_t)ehdr.e_entry));
+	if (dtb) {
+		u32 entry = (u32)(uintptr_t)virtToPhys((uintptr_t)ehdr.e_entry);
+		u32 dtbPhys = (u32)(uintptr_t)virtToPhys(dtb);
+
+		ELF_InstallLinuxData(entry, initrd, initrdSize, cmdline, cmdlineFlags);
+		ELF_DoEntry(dtbPhys, entry, 0, (void *)(uintptr_t)entry, true);
+	} else {
+		u32 entry = (u32)(uintptr_t)virtToPhys((uintptr_t)ehdr.e_entry);
+		ELF_InstallLinuxData(entry, initrd, initrdSize, cmdline, cmdlineFlags);
+		ELF_DoEntry(0, 0, 0, virtToPhys((uintptr_t)ehdr.e_entry), false);
+	}
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
+}
+
+int ELF_LoadFile(int fd) {
+	return _elfLoadFile(fd, NULL, NULL, 0, NULL, 0);
+}
+
+int ELF_LoadLinuxFile(int fd, const void *dtb, const void *initrd, u32 initrdSize, const char *cmdline, u32 cmdlineFlags) {
+	return _elfLoadFile(fd, dtb, initrd, initrdSize, cmdline, cmdlineFlags);
 }
