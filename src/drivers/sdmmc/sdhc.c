@@ -273,6 +273,15 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 #endif
 }
 
+static inline bool cmd_dma_reads_memory(struct sdhc *host, struct mmc_cmd *cmd)
+{
+	if (!cmd->data || get_dma_mode(host, cmd) == DMA_MODE_NONE)
+		return false;
+
+	return cmd->index == MMC_READ_SINGLE_BLOCK ||
+	       cmd->index == MMC_READ_MULTIPLE_BLOCK;
+}
+
 static inline int UNUSED cap_sdma_supported(struct sdhc *host)
 {
 	u32 v;
@@ -656,6 +665,12 @@ check_again:
 
 	/* If the transaction has finished */
 	if (cmd != NULL && cmd->complete != 0) {
+		/* PIO writes through vbuf and must not be invalidated here. */
+		if (cmd->complete > 0 && cmd_dma_reads_memory(host, cmd)) {
+			size_t len = (size_t)cmd->data->block_size * cmd->data->blocks;
+			dcache_invalidate(cmd->data->vbuf, len);
+		}
+
 		if (cmd->next == NULL) {
 			/* Shutdown */
 			host->cmd_list_head = NULL;

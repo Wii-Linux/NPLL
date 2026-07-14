@@ -293,6 +293,7 @@ static ssize_t nandRead(struct blockDevice *bdev, void *dest, size_t len, u64 of
 	if (err)
 		return err;
 
+	dcache_invalidate(dest, len);
 	return (ssize_t)len;
 }
 

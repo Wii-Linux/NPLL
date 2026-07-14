@@ -363,6 +363,7 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 			log_printf("cmd %08x incomplete DMA: %uB left of %uB\r\n", cmdbuf0, residual, dataLen);
 			return -EIO;
 		}
+		dcache_invalidate(data, dataLen);
 	}
 
 	return 0;
