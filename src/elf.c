@@ -16,9 +16,8 @@
 #include <npll/fs.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/panic.h>
 #include <npll/utils.h>
-
-extern void __attribute__((noreturn)) ELF_DoEntry(u32 arg3, u32 arg4, u32 arg5, const void *entry, bool keepCaches);
 
 #define ARGV_MAGIC 0x5f617267u
 #define WIIU_LOADER_MAGIC 0xcafefecau
@@ -268,22 +267,24 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	ssize_t res;
 	size_t off;
 	u32 linuxEntry = 0, linuxLoadEnd = 0;
+	bool irqWasEnabled = false, irqStateSaved = false, loadStarted = false;
 
 	/* read in the ehdr */
 	res = FS_Seek(fd, 0);
 	if (res != 0) {
 		log_printf("FS_Seek for ehdr returned: %d\r\n", res);
-		return ELF_ERR_FS_ERROR;
+		ret = ELF_ERR_FS_ERROR;
+		goto fail;
 	}
 	res = FS_Read(fd, &ehdr, sizeof(ehdr));
 	if (res != sizeof(ehdr)) {
 		log_printf("FS_Read for ehdr returned: %d\r\n", res);
-		return ELF_ERR_FS_ERROR;
+		ret = ELF_ERR_FS_ERROR;
+		goto fail;
 	}
 	ret = ELF_CheckValid(&ehdr);
 	if (ret) {
-		FS_Close(fd);
-		return ret;
+		goto fail;
 	}
 
 	/*
@@ -292,24 +293,28 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	 * The storage drivers used below are polled, and normal executable cleanup
 	 * disables IRQs before touching them as well.
 	 */
-	if (dtb)
-		IRQ_Disable();
+	if (dtb) {
+		irqWasEnabled = IRQ_DisableSave();
+		irqStateSaved = true;
+	}
 
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		res = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
 		if (res != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
 			log_printf("FS_Seek for phdr returned: %d\r\n", res);
-			return ELF_ERR_FS_ERROR;
+			ret = ELF_ERR_FS_ERROR;
+			goto fail;
 		}
 		res = FS_Read(fd, &phdr, sizeof(phdr));
 		if (res != sizeof(phdr)) {
 			log_printf("FS_Read for phdr returned: %d\r\n", res);
-			return ELF_ERR_FS_ERROR;
+			ret = ELF_ERR_FS_ERROR;
+			goto fail;
 		}
 
 		load = ELF_LoadPhdr(&phdr, dtb != NULL, &addr, &size, &off, &ret);
 		if (ret)
-			return ret;
+			goto fail;
 		else if (!load)
 			continue;
 
@@ -319,7 +324,8 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 			if (phdr.p_paddr + entryOff < phdr.p_paddr) {
 				log_puts("Linux physical entry address overflows");
-				return ELF_ERR_INVALID_EXEC;
+				ret = ELF_ERR_INVALID_EXEC;
+				goto fail;
 			}
 			linuxEntry = phdr.p_paddr + entryOff;
 			linuxEntryFound = true;
@@ -331,13 +337,16 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 		res = FS_Seek(fd, (ssize_t)off);
 		if (res != (ssize_t)off) {
 			log_printf("FS_Seek for segment %d returned: %d\r\n", i, res);
-			return ELF_ERR_FS_ERROR;
+			ret = ELF_ERR_FS_ERROR;
+			goto fail;
 		}
 		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr.p_offset, addr, size);
+		loadStarted = true;
 		res = FS_Read(fd, addr, size);
 		if (res != (ssize_t)size) {
 			log_printf("FS_Read for segment %d returned: %d\r\n", i, res);
-			return ELF_ERR_FS_ERROR;
+			ret = ELF_ERR_FS_ERROR;
+			goto fail;
 		}
 
 		/* Linux enters with L1 enabled, so synchronize executable lines too. */
@@ -359,7 +368,8 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	FS_Close(fd);
 	if (dtb && !linuxEntryFound) {
 		log_printf("Linux entry %08x is not in a PT_LOAD segment\r\n", ehdr.e_entry);
-		return ELF_ERR_INVALID_EXEC;
+		ret = ELF_ERR_INVALID_EXEC;
+		goto fail_closed;
 	}
 	if (dtb && H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		u32 dtbSize = (u32)fdt_totalsize(dtb);
@@ -368,18 +378,21 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 		if (linuxLoadEnd > 0xffffffffu - (LINUX_DTB_ALIGN - 1u)) {
 			log_puts("Linux load end cannot be aligned for DTB placement");
-			return ELF_ERR_INVALID_EXEC;
+			ret = ELF_ERR_INVALID_EXEC;
+			goto fail_closed;
 		}
 		dtbPhys = (linuxLoadEnd + LINUX_DTB_ALIGN - 1u) & ~(LINUX_DTB_ALIGN - 1u);
 		if (!dtbSize || dtbPhys > 0xffffffffu - dtbSize) {
 			log_puts("Linux DTB placement overflows");
-			return ELF_ERR_INVALID_EXEC;
+			ret = ELF_ERR_INVALID_EXEC;
+			goto fail_closed;
 		}
 		dtbEnd = dtbPhys + dtbSize;
 		if (dtbEnd > WIIU_LINUX_DTB_LIMIT) {
 			log_printf("Linux image/DTB ends at %08x, cannot preserve hash window at %08x\r\n",
 			           dtbEnd, WIIU_LINUX_DTB_LIMIT);
-			return ELF_ERR_INVALID_EXEC;
+			ret = ELF_ERR_INVALID_EXEC;
+			goto fail_closed;
 		}
 
 		newDtb = physToCached(dtbPhys);
@@ -415,6 +428,18 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
+
+fail:
+	FS_Close(fd);
+fail_closed:
+	if (irqStateSaved) {
+		/* Physical zero may now contain a partial kernel instead of vectors. */
+		/* FIXME: this might be recoverable by re-initializing the vectors */
+		if (loadStarted)
+			panic("Linux load failed after overwriting exception vectors");
+		IRQ_Restore(irqWasEnabled);
+	}
+	return ret;
 }
 
 int ELF_LoadFile(int fd) {

@@ -11,11 +11,10 @@
 #include <npll/console.h>
 #include <npll/cpu.h>
 #include <npll/dol.h>
+#include <npll/elf.h>
 #include <npll/fs.h>
 #include <npll/log.h>
 #include <npll/utils.h>
-
-extern void __attribute__((noreturn)) ELF_DoEntry(const void *entry);
 
 static bool dolAddrRangeOk(u32 addr, u32 size) {
 	u32 end;
@@ -60,30 +59,35 @@ int DOL_LoadFile(int fd) {
 	ret = FS_Seek(fd, 0);
 	if (ret != 0) {
 		log_printf("FS_Seek for dol hdr returned: %d\r\n", (int)ret);
-		return DOL_ERR_FS_ERROR;
+		ret = DOL_ERR_FS_ERROR;
+		goto fail;
 	}
 
 	ret = FS_Read(fd, &hdr, sizeof(hdr));
 	if (ret != (ssize_t)sizeof(hdr)) {
 		log_printf("FS_Read for dol hdr returned: %d\r\n", (int)ret);
-		return DOL_ERR_FS_ERROR;
+		ret = DOL_ERR_FS_ERROR;
+		goto fail;
 	}
 
 	fileSz = FS_GetSize(fd);
 	if (fileSz <= (int)sizeof(hdr)) {
 		log_printf("DOL too short: %d\r\n", fileSz);
-		return DOL_ERR_INVALID_EXEC;
+		ret = DOL_ERR_INVALID_EXEC;
+		goto fail;
 	}
 
 	entry = hdr.entry;
 	if (!dolAddrRangeOk(entry, 4)) {
 		log_printf("DOL entry 0x%08x is not in a valid memory range\r\n", entry);
-		return DOL_ERR_INVALID_EXEC;
+		ret = DOL_ERR_INVALID_EXEC;
+		goto fail;
 	}
 
 	if (hdr.bssSize && !dolAddrRangeOk(hdr.bssAddr, hdr.bssSize)) {
 		log_printf("DOL bss range 0x%08x+0x%x is not valid\r\n", hdr.bssAddr, hdr.bssSize);
-		return DOL_ERR_INVALID_EXEC;
+		ret = DOL_ERR_INVALID_EXEC;
+		goto fail;
 	}
 
 	/* validate every section first so we either load all or none */
@@ -96,12 +100,14 @@ int DOL_LoadFile(int fd) {
 		if (off < sizeof(hdr) || off >= (u32)fileSz || (off + size) > (u32)fileSz) {
 			log_printf("DOL section %u offset/size (0x%x+0x%x) out of file (size %d)\r\n",
 				i, off, size, fileSz);
-			return DOL_ERR_INVALID_EXEC;
+			ret = DOL_ERR_INVALID_EXEC;
+			goto fail;
 		}
 		if (!dolAddrRangeOk(hdr.sectAddr[i], size)) {
 			log_printf("DOL section %u addr 0x%08x size 0x%x out of range\r\n",
 				i, hdr.sectAddr[i], size);
-			return DOL_ERR_INVALID_EXEC;
+			ret = DOL_ERR_INVALID_EXEC;
+			goto fail;
 		}
 	}
 
@@ -120,13 +126,15 @@ int DOL_LoadFile(int fd) {
 		ret = FS_Seek(fd, (ssize_t)off);
 		if (ret != (ssize_t)off) {
 			log_printf("FS_Seek for section %u returned: %d\r\n", i, (int)ret);
-			return DOL_ERR_FS_ERROR;
+			ret = DOL_ERR_FS_ERROR;
+			goto fail;
 		}
 
 		ret = FS_Read(fd, addr, size);
 		if (ret != (ssize_t)size) {
 			log_printf("FS_Read for section %u returned: %d\r\n", i, (int)ret);
-			return DOL_ERR_FS_ERROR;
+			ret = DOL_ERR_FS_ERROR;
+			goto fail;
 		}
 
 		if (i < DOL_NUM_TEXT)
@@ -152,6 +160,10 @@ int DOL_LoadFile(int fd) {
 
 	CPU_DCacheFlushAll();
 
-	ELF_DoEntry(virtToPhys(entry));
+	ELF_DoEntry(0, 0, 0, virtToPhys(entry), false);
 	__builtin_unreachable();
+
+fail:
+	FS_Close(fd);
+	return (int)ret;
 }
