@@ -792,6 +792,15 @@ long long mmc_card_capacity(mmc_card_t mmc_card)
 	}
 }
 
+bool mmc_card_read_only(mmc_card_t mmc_card)
+{
+	if (!mmc_card)
+		return true;
+
+	/* CSD bits 13 and 12 are permanent and temporary write protection. */
+	return slice_bits(mmc_card->raw_csd, 12, 2) != 0;
+}
+
 
 int mmc_nth_irq(mmc_card_t mmc, int n)
 {

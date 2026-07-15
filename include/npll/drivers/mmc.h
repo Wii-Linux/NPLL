@@ -91,4 +91,7 @@ int mmc_handle_irq(mmc_card_t mmc, int irq);
  */
 long long mmc_card_capacity(mmc_card_t mmc_card);
 
+/* Whether the card's CSD permanently or temporarily write-protects it. */
+bool mmc_card_read_only(mmc_card_t mmc_card);
+
 #endif /* _DRIVERS_MMC_H */
