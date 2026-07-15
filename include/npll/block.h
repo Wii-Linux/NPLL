@@ -9,6 +9,7 @@
 
 #include <npll/partition.h>
 #include <npll/types.h>
+#include <npll/utils.h>
 
 #define MAX_BDEV 16
 #define MAX_PARTITIONS 32
@@ -32,6 +33,7 @@ enum blockTransferMode {
 #define BLOCK_FLAG_STANDARD  BIT(0)
 #define BLOCK_FLAG_HLWD_NAND BIT(1)
 #define BLOCK_FLAG_OPTICAL   BIT(2)
+#define BLOCK_FLAG_READ_ONLY BIT(3)
 
 struct blockTransfer {
 	/* atomic transfer size in bytes */
