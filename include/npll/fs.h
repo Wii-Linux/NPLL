@@ -50,10 +50,22 @@ struct filesystem {
 	int (*open)(struct filesystem *fs, const char *path);
 
 	/*
+	 * Create a file and open it.  Returns a file descriptor (>= 0) on success,
+	 * negative errno on error.
+	 */
+	int (*create)(struct filesystem *fs, const char *path);
+
+	/*
 	 * Read up to len bytes from an open file descriptor into dest.
 	 * Returns number of bytes read, 0 on EOF, negative on error.
 	 */
 	ssize_t (*read)(struct filesystem *fs, int fd, void *dest, size_t len);
+
+	/*
+	 * Write up to len bytes from an open file descriptor from src.
+	 * Returns number of bytes written, or negative on error.
+	 */
+	ssize_t (*write)(struct filesystem *fs, int fd, const void *src, size_t len);
 
 	/*
 	 * Seek to an exact position within an open file.
@@ -91,9 +103,11 @@ extern void FS_Unmount(void);
 
 /* open a file on the mounted filesystem */
 extern int FS_Open(const char *path);
+extern int FS_Create(const char *path);
 
 /* read from an open file */
 extern ssize_t FS_Read(int fd, void *dest, size_t len);
+extern ssize_t FS_Write(int fd, const void *src, size_t len);
 
 /* seek within an open file */
 extern ssize_t FS_Seek(int fd, ssize_t off);

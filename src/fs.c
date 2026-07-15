@@ -91,12 +91,26 @@ int FS_Open(const char *path) {
 	return FS_Mounted->open(FS_Mounted, path);
 }
 
+int FS_Create(const char *path) {
+	assert_msg(initialized, "fs: FS_Create w/o FS_Init");
+	if (!FS_Mounted || !FS_Mounted->create)
+		return -1;
+	return FS_Mounted->create(FS_Mounted, path);
+}
+
 ssize_t FS_Read(int fd, void *dest, size_t len) {
 	assert_msg(initialized, "fs: FS_Read w/o FS_Init");
 	assert_msg(FS_Mounted, "fs: FS_Read with no mounted filesystem");
 	assert_msg(FS_Mounted->read, "fs: filesystem has no read op");
 
 	return FS_Mounted->read(FS_Mounted, fd, dest, len);
+}
+
+ssize_t FS_Write(int fd, const void *src, size_t len) {
+	assert_msg(initialized, "fs: FS_Write w/o FS_Init");
+	if (!FS_Mounted || !FS_Mounted->write)
+		return -1;
+	return FS_Mounted->write(FS_Mounted, fd, src, len);
 }
 
 ssize_t FS_Seek(int fd, ssize_t off) {
