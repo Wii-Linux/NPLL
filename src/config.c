@@ -1081,12 +1081,6 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 		if (line[0] == '#' || (line[0] == '\t' && line[1] == '#'))
 			continue;
 
-		/* @include */
-		if (!memcmp(line, "@include ", 9)) {
-			doInclude(ctx, line + 9);
-			continue;
-		}
-
 		/* cfg_version must be very first meaningful line of top-level file */
 		if (firstMeaningful) {
 			firstMeaningful = false;
@@ -1101,6 +1095,12 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 				return;
 			}
 			ctx->sawCfgVersion = true;
+			continue;
+		}
+
+		/* @include */
+		if (!memcmp(line, "@include ", 9)) {
+			doInclude(ctx, line + 9);
 			continue;
 		}
 
