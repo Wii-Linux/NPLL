@@ -84,8 +84,7 @@ static int fixupWiiMemory(void *fdt) {
 
 int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	void *fdt;
-	u32 oldSize, capacity;
-	u32 initrdStart, initrdEnd;
+	u32 capacity, initrdStart, initrdEnd;
 	int chosen, ret;
 
 	if (!files || !files->dtb)
@@ -96,8 +95,10 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	if (ret)
 		goto fail;
 
-	oldSize = fdt_totalsize(fdt);
-	capacity = oldSize + DTB_SLACK + (cmdline ? (u32)strlen(cmdline) + 1u : 0u);
+	if (fdt_totalsize(fdt) != files->dtbSize)
+		return -1;
+
+	capacity = files->dtbSize + DTB_SLACK + (cmdline ? (u32)strlen(cmdline) + 1u : 0u);
 	ret = fdt_open_into(fdt, fdt, (int)capacity);
 	if (ret)
 		goto fail;

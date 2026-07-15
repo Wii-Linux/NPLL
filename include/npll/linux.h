@@ -12,6 +12,7 @@
 
 struct linuxBootFiles {
 	void *dtb;
+	u32 dtbSize;
 	void *initrd;
 	u32 initrdSize;
 };

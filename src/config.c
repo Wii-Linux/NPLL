@@ -1205,7 +1205,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
 	struct linuxBootFiles files;
-	u32 ignoredSize, dtbExtra, cmdlineFlags = 0;
+	u32 dtbExtra, cmdlineFlags = 0;
 
 	memset(&files, 0, sizeof(files));
 
@@ -1224,7 +1224,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 			goto fail;
 		fd = FS_Open(path);
 		dtbExtra = 1024u + (ne->cmdline ? (u32)strlen(ne->cmdline) + 1u : 0u);
-		if (fd < 0 || L_LoadAuxFile(fd, POOL_MEM1, &files.dtb, dtbExtra, &ignoredSize)) {
+		if (fd < 0 || L_LoadAuxFile(fd, POOL_MEM1, &files.dtb, dtbExtra, &files.dtbSize)) {
 			log_printf("npllBootLinux: failed to load device tree: %d\r\n", fd);
 			goto fail;
 		}
