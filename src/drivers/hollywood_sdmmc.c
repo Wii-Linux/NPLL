@@ -107,12 +107,24 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 }
 
 static ssize_t sdmmcWrite(struct blockDevice *bdev, const void *src, size_t len, u64 off) {
-	/* TODO: rewrite this like the new sdmmcRead once I care about writes */
-	(void)bdev;
-	(void)src;
-	(void)len;
-	(void)off;
-	return -1;
+	uint blkSize;
+	size_t startBlock, nblocks;
+	long ret;
+
+	if (!bdevToMMC(bdev) || (bdev->flags & BLOCK_FLAG_READ_ONLY))
+		return -1;
+
+	blkSize = bdev->blockSize;
+	startBlock = (size_t)(off / blkSize);
+	nblocks = len / blkSize;
+
+	dcache_flush(src, len);
+	ret = mmc_block_write(bdevToMMC(bdev), startBlock, (uint)nblocks, src,
+		(uintptr_t)virtToPhys(src), NULL, NULL);
+	if (ret != (long)len)
+		return -1;
+
+	return (ssize_t)len;
 }
 
 static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
