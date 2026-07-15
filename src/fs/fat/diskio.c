@@ -34,7 +34,8 @@ DSTATUS disk_status (
 	if (!partitions[pdrv])
 		return STA_NOINIT;
 
-	if (!partitions[pdrv]->bdev->write)
+	if (!partitions[pdrv]->bdev->write ||
+	    (partitions[pdrv]->bdev->flags & BLOCK_FLAG_READ_ONLY))
 		return STA_PROTECT;
 
 	return 0;
@@ -105,6 +106,8 @@ DRESULT disk_write (
 
 	if (!partitions[pdrv])
 		return RES_PARERR;
+	if (partitions[pdrv]->bdev->flags & BLOCK_FLAG_READ_ONLY)
+		return RES_WRPRT;
 
 	blocksz = partitions[pdrv]->bdev->blockSize;
 	result = B_Write(partitions[pdrv], buff, (size_t)((u64)count * blocksz), sector * blocksz);

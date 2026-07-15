@@ -224,6 +224,21 @@ static int fatOpen(struct filesystem *fs, const char *path) {
 	}
 }
 
+static int fatCreate(struct filesystem *fs, const char *path) {
+	FRESULT fr;
+	int fd;
+	(void)fs;
+
+	fd = allocateFd();
+	if (fd < 0)
+		return -EMFILE;
+	fr = f_open(&openFiles[fd], path, FA_CREATE_ALWAYS | FA_WRITE);
+	if (fr == FR_OK)
+		return fd;
+	memset(&openFiles[fd], 0, sizeof(FIL));
+	return fr == FR_WRITE_PROTECTED ? -EROFS : -EIO;
+}
+
 static void fatClose(struct filesystem *fs, int fd) {
 	FRESULT fr;
 
@@ -258,7 +273,6 @@ static ssize_t fatRead(struct filesystem *fs, int fd, void *dest, size_t len) {
 	}
 }
 
-#if 0
 static ssize_t fatWrite(struct filesystem *fs, int fd, const void *src, size_t len) {
 	FRESULT fr;
 	UINT bytesWritten;
@@ -280,7 +294,6 @@ static ssize_t fatWrite(struct filesystem *fs, int fd, const void *src, size_t l
 		return -EIO;
 	}
 }
-#endif
 
 static ssize_t fatSeek(struct filesystem *fs, int fd, ssize_t off) {
 	FRESULT fr;
@@ -318,8 +331,10 @@ struct filesystem VISIBLE FS_FAT = {
 	.mount = fatMount,
 	.unmount = fatUnmount,
 	.open = fatOpen,
+	.create = fatCreate,
 	.close = fatClose,
 	.read = fatRead,
+	.write = fatWrite,
 	.seek = fatSeek,
 	.getSize = fatGetSize,
 	.flagMask = BLOCK_FLAG_STANDARD
@@ -332,8 +347,10 @@ struct filesystem VISIBLE FS_exFAT = {
 	.mount = fatMount,
 	.unmount = fatUnmount,
 	.open = fatOpen,
+	.create = fatCreate,
 	.close = fatClose,
 	.read = fatRead,
+	.write = fatWrite,
 	.seek = fatSeek,
 	.getSize = fatGetSize,
 	.flagMask = BLOCK_FLAG_STANDARD
