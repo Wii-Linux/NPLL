@@ -1,4 +1,5 @@
 -Iinclude
+-Iexternal/dtc/libfdt
 -nostdinc
 -ffreestanding
 -nostdlib
