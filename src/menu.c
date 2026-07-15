@@ -536,6 +536,8 @@ void UI_HandleInputs(void) {
 		hasChanged = true;
 		bodyHeight = canonicalBodyHeight();
 		firstEntryLine = menuEntryBaseLine(curMenu) + selected;
+		if (ev & INPUT_EV_SCREENSHOT)
+			(void)V_SaveScreenshot();
 
 		if (ev & INPUT_EV_DOWN) {
 			if (firstEntryLine >= bodyScroll + bodyHeight) {

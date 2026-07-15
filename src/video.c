@@ -20,6 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <npll/irq.h>
+#include <npll/block.h>
+#include <npll/endian.h>
+#include <npll/fs.h>
 #include <npll/log.h>
 #include <npll/output.h>
 #include <npll/panic.h>
@@ -491,4 +494,137 @@ void V_UnlockFB(void) {
 	irqs = IRQ_DisableSave();
 	fbLocked = false;
 	IRQ_Restore(irqs);
+}
+struct bmpHdr {
+	char magic[2];
+	u32 size;
+	u16 rsrvd[2];
+	u32 dataOff;
+} __attribute__((packed));
+enum bihCompMethod : u32 {
+	a = 0
+};
+struct dibBitmapInfoHdr {
+	u32 hdrSize;
+	i32 bmpWidth;
+	i32 bmpHeight;
+	u16 numColorPlanes;
+	u16 bpp;
+	enum bihCompMethod compMethod;
+	u32 rawSize;
+	i32 horizPPM;
+	i32 vertPPM;
+	u32 numPaletteColors;
+	u32 numImportantColors;
+} __attribute__((packed));
+
+struct bmp {
+	struct bmpHdr bmpHdr;
+	struct dibBitmapInfoHdr dibHdr;
+} __attribute__((packed));
+
+static bool screenshotDevice(const struct blockDevice *bdev) {
+	return !(bdev->flags & BLOCK_FLAG_READ_ONLY) &&
+	       (!strcmp(bdev->name, "sdhci0") ||
+	        !strcmp(bdev->name, "sdgecko-a") ||
+	        !strcmp(bdev->name, "sdgecko-b") ||
+	        !strcmp(bdev->name, "sdgecko-sp1") ||
+	        !strcmp(bdev->name, "sdgecko-sp2"));
+}
+
+int V_SaveScreenshot(void) {
+	struct filesystem *oldFS = FS_Mounted, *targetFS = NULL;
+	struct partition *oldPart = FS_MountedPartition, *targetPart = NULL;
+	u8 *file, *row;
+	struct bmp *bmp;
+	u32 rowSize, imageSize, fileSize, pixel;
+	uint i, j, x, y;
+	int fd = -1, ret = -1;
+
+	if (!V_ActiveDriver)
+		return -1;
+	if (oldPart && screenshotDevice(oldPart->bdev) && oldFS) {
+		targetFS = oldFS;
+		targetPart = oldPart;
+	}
+	else {
+		for (i = 0; i < B_NumDevices && !targetPart; i++) {
+			if (!screenshotDevice(B_Devices[i]))
+				continue;
+			for (j = 0; j < B_Devices[i]->numPartitions; j++) {
+				targetFS = FS_Probe(B_Devices[i]->partitions[j]);
+				if (targetFS) {
+					targetPart = B_Devices[i]->partitions[j];
+					break;
+				}
+			}
+		}
+	}
+	if (!targetPart) {
+		log_puts("screenshot: no writable FAT SD/SDGecko found");
+		return -1;
+	}
+	if (targetPart != oldPart && FS_Mount(targetFS, targetPart))
+		return -1;
+
+	rowSize = (V_FbWidth * 3u + 3u) & ~3u;
+	imageSize = rowSize * V_FbHeight;
+	fileSize = (u32)sizeof(*bmp) + imageSize;
+	file = malloc(fileSize);
+	if (!file)
+		goto out;
+
+	memset(file, 0, fileSize);
+	bmp = (struct bmp *)file;
+	row = file + sizeof(*bmp);
+	memcpy(bmp->bmpHdr.magic, "BM", 2);
+	bmp->bmpHdr.size = npll_cpu_to_le32(fileSize);
+	bmp->bmpHdr.dataOff = npll_cpu_to_le32(sizeof(*bmp));
+	bmp->dibHdr.hdrSize = npll_cpu_to_le32(sizeof(bmp->dibHdr));
+	bmp->dibHdr.bmpWidth = (i32)npll_cpu_to_le32(V_FbWidth);
+	bmp->dibHdr.bmpHeight = (i32)npll_cpu_to_le32(V_FbHeight);
+	bmp->dibHdr.numColorPlanes = npll_cpu_to_le16(1);
+	bmp->dibHdr.bpp = npll_cpu_to_le16(24);
+	bmp->dibHdr.rawSize = npll_cpu_to_le32(imageSize);
+
+	if (!V_LockFB()) {
+		log_puts("V_LockFB failed");
+		goto free_file;
+	}
+	for (y = V_FbHeight; y-- > 0;) {
+		for (x = 0; x < V_FbWidth; x++) {
+			pixel = V_FbPtr[y * V_FbWidth + x];
+			row[x * 3] = (u8)pixel;
+			row[x * 3 + 1] = (u8)(pixel >> 8);
+			row[x * 3 + 2] = (u8)(pixel >> 16);
+		}
+		row += rowSize;
+	}
+	V_UnlockFB();
+
+	fd = FS_Create("npllssht.bmp");
+	if (fd < 0) {
+		log_printf("FS_Create failed: %d\r\n", fd);
+		goto free_file;
+	}
+	ret = (int)FS_Write(fd, file, fileSize);
+	if (ret == (int)fileSize) {
+		ret = 0;
+		log_printf("screenshot: wrote npllssht.bmp to %s\r\n", targetPart->bdev->name);
+	}
+	else
+		log_printf("FS_Write failed: %d\r\n", ret);
+free_file:
+	free(file);
+out:
+	if (fd >= 0)
+		FS_Close(fd);
+	if (targetPart != oldPart) {
+		FS_Unmount();
+		if (oldFS && oldPart)
+			(void)FS_Mount(oldFS, oldPart);
+	}
+	if (ret)
+		log_printf("screenshot: write failed (%d)\r\n", ret);
+	return ret;
 }

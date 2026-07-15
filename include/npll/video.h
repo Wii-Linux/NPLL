@@ -23,6 +23,7 @@ extern void V_Flush(void);
 extern void V_Register(struct videoInfo *info);
 extern bool V_LockFB(void);
 extern void V_UnlockFB(void);
+extern int V_SaveScreenshot(void);
 
 extern struct videoInfo *V_ActiveDriver;
 extern u32 *V_FbPtr;
