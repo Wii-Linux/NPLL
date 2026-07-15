@@ -370,6 +370,8 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 
 	*entriesOut = numEntries ? entries : NULL;
 	free(file);
+	if (!numEntries)
+		free(entries);
 	return (int)numEntries;
 }
 
