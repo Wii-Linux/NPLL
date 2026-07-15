@@ -44,10 +44,10 @@ struct menu {
 
 #define FOOTER_CONTROLS_GCN "\
 Use the GameCube controller to navigate the menu.\r\n\
-DPad: navigate between options; A button: select an option"
+DPad: navigate between options; A button: select an option; Z button: screenshot"
 #define FOOTER_CONTROLS_WII "\
 Use a GameCube controller or the front buttons to navigate the menu.\r\n\
-[GameCube Controller] DPad: navigate between options; A button: select an option\r\n\
+[GameCube Controller] DPad: navigate; A button: select; Z button: screenshot\r\n\
 [Front Buttons] Power: Move forward an option; Reset (Press): Move backward an\r\n\
                 option; Reset (Hold): Select an option; Eject: Select an option"
 #define FOOTER_CONTROLS_WIIU "\

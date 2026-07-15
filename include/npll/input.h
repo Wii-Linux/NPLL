@@ -16,6 +16,7 @@ typedef u32 inputEvent_t;
 #define INPUT_EV_LEFT   BIT(2)
 #define INPUT_EV_RIGHT  BIT(3)
 #define INPUT_EV_SELECT BIT(4)
+#define INPUT_EV_SCREENSHOT BIT(5)
 
 extern void IN_Init(void);
 extern inputEvent_t IN_ConsumeEvent(void);

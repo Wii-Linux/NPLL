@@ -585,6 +585,8 @@ static void probeGCNPad(uint chan) {
 
 	if (fire & GCN_CONTROLLER_DIRECT_A)
 		IN_NewEvent(INPUT_EV_SELECT);
+	if (pressed & GCN_CONTROLLER_DIRECT_Z)
+		IN_NewEvent(INPUT_EV_SCREENSHOT);
 	if (fire & GCN_CONTROLLER_DIRECT_DPAD_UP)
 		IN_NewEvent(INPUT_EV_UP);
 	if (fire & GCN_CONTROLLER_DIRECT_DPAD_DOWN)
