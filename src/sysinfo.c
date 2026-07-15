@@ -204,8 +204,9 @@ static void sysinfoMenuInit(struct menu *m) {
 	/* step 7: report attached storage */
 	strcat(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
 	for (i = 0; i < B_NumDevices; i++) {
-		sprintf(tmp, "- %s: %llu bytes, %u partitions\r\n",
-			B_Devices[i]->name, B_Devices[i]->size, B_Devices[i]->numPartitions);
+		sprintf(tmp, "- %s: %llu bytes, %u partitions%s\r\n",
+			B_Devices[i]->name, B_Devices[i]->size, B_Devices[i]->numPartitions,
+			B_Devices[i]->flags & BLOCK_FLAG_READ_ONLY ? " [READ-ONLY]" : "");
 		strcat(m->content, tmp);
 		for (j = 0; j < B_Devices[i]->numPartitions; j++) {
 			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx%s%s%s\r\n",
