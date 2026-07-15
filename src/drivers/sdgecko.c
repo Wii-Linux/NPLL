@@ -142,6 +142,10 @@ static int sdgeckoRegisterBlock(uint i) {
 	bdev->write = sdgeckoWrite;
 	bdev->probePartitions = true;
 	bdev->flags = BLOCK_FLAG_STANDARD;
+	if (mmc_card_read_only(sdgeckoMMC[i])) {
+		bdev->flags |= BLOCK_FLAG_READ_ONLY;
+		log_printf("WARNING: %s is read-only\r\n", bdev->name);
+	}
 
 	B_Register(bdev);
 	sdgeckoRegistered[i] = true;

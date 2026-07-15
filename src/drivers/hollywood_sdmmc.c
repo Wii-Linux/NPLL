@@ -136,6 +136,12 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	bdev->write = sdmmcWrite;
 	bdev->probePartitions = true;
 	bdev->flags = BLOCK_FLAG_STANDARD;
+	if (mmc_card_read_only(bdevToMMC(bdev)) ||
+	    (bdev == &sdmmcBdev[0] &&
+	     !(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_WPSPL))) {
+		bdev->flags |= BLOCK_FLAG_READ_ONLY;
+		log_printf("WARNING: %s is read-only\r\n", name);
+	}
 
 
 	B_Register(bdev);
