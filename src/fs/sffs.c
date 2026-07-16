@@ -6,6 +6,7 @@
 
 #define MODULE "sffs"
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <npll/block.h>
 #include <npll/endian.h>
@@ -83,7 +84,7 @@ struct sffs_superblock {
 
 static struct partition *mountedPart = NULL;
 static const struct sffsLayout *mountedLayout = NULL;
-static struct sffs_superblock sb ALIGN(32);
+static struct sffs_superblock *sb ALIGN(32);
 struct sffsFdInfo {
 	bool open;
 	u16 firstClust;
@@ -144,22 +145,24 @@ static int findNewestSuperblock(struct partition *part, const struct sffsLayout 
 	uint offset, bestOffset = 0, bestGen = 0, i;
 	bool found = false;
 	ssize_t ret;
+	u8 buf[NAND_PAGE_SIZE] ALIGN(32);
+	struct sffs_superblock *_sb = (struct sffs_superblock *)buf;
 
 	for (i = 0; i < 16; i++) {
 		offset = layout->superblockOffset + i * SFFS_SUPERBLOCK_PAGES;
 
-		ret = nandReadPage(part, &sb, NAND_PAGE_SIZE, offset);
+		ret = nandReadPage(part, _sb, NAND_PAGE_SIZE, offset);
 		if (ret != NAND_PAGE_SIZE) {
 			log_printf("findNewestSuperblock: nandReadPage failed: %d\r\n", ret);
 			return -EIO;
 		}
 
-		if (memcmp(sb.magic, layout->magic, 4) != 0)
+		if (memcmp(_sb->magic, layout->magic, 4) != 0)
 			continue;
 
-		if (!found || sb.genNum > bestGen) {
+		if (!found || _sb->genNum > bestGen) {
 			found = true;
-			bestGen = sb.genNum;
+			bestGen = _sb->genNum;
 			bestOffset = offset;
 		}
 	}
@@ -168,6 +171,8 @@ static int findNewestSuperblock(struct partition *part, const struct sffsLayout 
 		return -ENODEV;
 
 	*off = bestOffset;
+	sb = malloc(sizeof(*sb));
+	memcpy(sb, _sb, sizeof(buf));
 	return 0;
 }
 
@@ -196,7 +201,7 @@ static u16 sffsWalkChain(u16 first, u32 n) {
 	while (n--) {
 		if (cluster >= SFFS_FAT_LEN)
 			return CLUSTER_END;
-		cluster = sb.fat[cluster];
+		cluster = sb->fat[cluster];
 	}
 	if (cluster >= SFFS_FAT_LEN)
 		return CLUSTER_END;
@@ -204,7 +209,7 @@ static u16 sffsWalkChain(u16 first, u32 n) {
 }
 
 static int sffsLookupEntry(const char *path, struct sffs_fst_entry **out) {
-	struct sffs_fst_entry *current = &sb.fst[0];
+	struct sffs_fst_entry *current = &sb->fst[0];
 	const char *p = path;
 	char component[13], tmp[13];
 	uint i;
@@ -240,13 +245,13 @@ static int sffsLookupEntry(const char *path, struct sffs_fst_entry **out) {
 			p++;
 
 		/* search the children of `current` via the sibling list. */
-		current = &sb.fst[current->sub];
+		current = &sb->fst[current->sub];
 		while (true) {
 			if (!memcmp(current->fileName, component, 12))
 				break;
 			if (current->sib >= SFFS_FST_LEN)
 				return -ENOENT;
-			current = &sb.fst[current->sib];
+			current = &sb->fst[current->sib];
 		}
 	}
 
@@ -272,10 +277,10 @@ static int sffsMount(struct filesystem *fs, struct partition *part) {
 	if (!layout)
 		return -ENODEV;
 
-	log_printf("sffsMount: magic=%.4s off=%u, sb.genNum=%u\r\n", layout->magic, off, sb.genNum);
+	log_printf("sffsMount: magic=%.4s off=%u, sb->genNum=%u\r\n", layout->magic, off, sb->genNum);
 	/* read the rest of it */
 	for (i = 0; i < 128; i++) {
-		ret = nandReadPage(part, ((void *)&sb) + (i * NAND_PAGE_SIZE), NAND_PAGE_SIZE, off + i);
+		ret = nandReadPage(part, ((void *)sb) + (i * NAND_PAGE_SIZE), NAND_PAGE_SIZE, off + i);
 		if (ret != NAND_PAGE_SIZE) {
 			log_printf("sffsMount: nandReadPage failed: %d\r\n", ret);
 			return -EIO;
