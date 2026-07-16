@@ -349,7 +349,7 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 
 	/* Two commands need to have at least 8 clock cycles in between.
 	 * Lets assume that the hcd will NOT enforce this. */
-	udelay(1000);
+	udelay(2);
 
 	/* Write to the argument register. */
 	ZF_LOGD("CMD: %d with arg %x ", cmd->index, cmd->arg);
