@@ -15,6 +15,7 @@
 #include <npll/elf.h>
 #include <npll/fs.h>
 #include <npll/irq.h>
+#include <npll/linux.h>
 #include <npll/log.h>
 #include <npll/panic.h>
 #include <npll/utils.h>
@@ -288,6 +289,56 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	}
 
 	/*
+	 * Validate every direct-Linux segment before physical zero is overwritten.
+	 * This keeps malformed images and DT reservation conflicts recoverable.
+	 */
+	if (dtb) {
+		for (i = 0; i < ehdr.e_phnum; i++) {
+			res = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
+			if (res != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
+				ret = ELF_ERR_FS_ERROR;
+				goto fail;
+			}
+			res = FS_Read(fd, &phdr, sizeof(phdr));
+			if (res != sizeof(phdr)) {
+				ret = ELF_ERR_FS_ERROR;
+				goto fail;
+			}
+			load = ELF_LoadPhdr(&phdr, true, &addr, &size, &off, &ret);
+			if (ret)
+				goto fail;
+			if (!load)
+				continue;
+			if (L_RangeReserved(dtb, phdr.p_paddr, phdr.p_memsz)) {
+				log_printf("Linux PT_LOAD %08x-%08x overlaps DT-reserved memory\r\n",
+					   phdr.p_paddr, phdr.p_paddr + phdr.p_memsz);
+				ret = ELF_ERR_INVALID_EXEC;
+				goto fail;
+			}
+			if (ehdr.e_entry >= phdr.p_vaddr &&
+			    ehdr.e_entry - phdr.p_vaddr < phdr.p_memsz) {
+				u32 entryOff = ehdr.e_entry - phdr.p_vaddr;
+
+				if (phdr.p_paddr + entryOff < phdr.p_paddr) {
+					log_puts("Linux physical entry address overflows");
+					ret = ELF_ERR_INVALID_EXEC;
+					goto fail;
+				}
+				linuxEntry = phdr.p_paddr + entryOff;
+				linuxEntryFound = true;
+			}
+			if (phdr.p_paddr <= 0xffffffffu - phdr.p_memsz &&
+			    phdr.p_paddr + phdr.p_memsz > linuxLoadEnd)
+				linuxLoadEnd = phdr.p_paddr + phdr.p_memsz;
+		}
+		if (!linuxEntryFound) {
+			log_printf("Linux entry %08x is not in a PT_LOAD segment\r\n", ehdr.e_entry);
+			ret = ELF_ERR_INVALID_EXEC;
+			goto fail;
+		}
+	}
+
+	/*
 	 * A direct Linux image is loaded at physical zero and replaces NPLL's
 	 * exception vectors.  No interrupt may be taken from that point onward.
 	 * The storage drivers used below are polled, and normal executable cleanup
@@ -317,22 +368,6 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 			goto fail;
 		else if (!load)
 			continue;
-
-		if (dtb && ehdr.e_entry >= phdr.p_vaddr &&
-		    ehdr.e_entry - phdr.p_vaddr < phdr.p_memsz) {
-			u32 entryOff = ehdr.e_entry - phdr.p_vaddr;
-
-			if (phdr.p_paddr + entryOff < phdr.p_paddr) {
-				log_puts("Linux physical entry address overflows");
-				ret = ELF_ERR_INVALID_EXEC;
-				goto fail;
-			}
-			linuxEntry = phdr.p_paddr + entryOff;
-			linuxEntryFound = true;
-		}
-		if (dtb && phdr.p_paddr <= 0xffffffffu - phdr.p_memsz &&
-		    phdr.p_paddr + phdr.p_memsz > linuxLoadEnd)
-			linuxLoadEnd = phdr.p_paddr + phdr.p_memsz;
 
 		res = FS_Seek(fd, (ssize_t)off);
 		if (res != (ssize_t)off) {
@@ -366,11 +401,6 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 	/* close the file */
 	FS_Close(fd);
-	if (dtb && !linuxEntryFound) {
-		log_printf("Linux entry %08x is not in a PT_LOAD segment\r\n", ehdr.e_entry);
-		ret = ELF_ERR_INVALID_EXEC;
-		goto fail_closed;
-	}
 	if (dtb && H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		u32 dtbSize = (u32)fdt_totalsize(dtb);
 		u32 dtbPhys, dtbEnd;

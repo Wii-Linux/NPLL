@@ -16,8 +16,15 @@ enum pool_idx {
 	POOL_ANY
 };
 
+struct memRange {
+	u32 start;
+	u32 size;
+};
+
 extern void M_Init(void);
 extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size, size_t align);
+extern void *__attribute__((malloc, assume_aligned(32))) M_PoolAllocAvoid(
+	enum pool_idx pool, size_t size, size_t align, const struct memRange *avoid, size_t avoidCount);
 
 extern void M_PoolStats(enum pool_idx pool, u32 *total, u32 *used, u32 *free_bytes, u32 *largest_alloc, u32 *largest_free);
 

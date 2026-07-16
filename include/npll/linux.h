@@ -18,6 +18,10 @@ struct linuxBootFiles {
 };
 
 extern int L_LoadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut);
+extern int L_LoadAuxFileAvoid(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut,
+			     const struct memRange *avoid, size_t avoidCount);
+extern int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity, size_t *count);
+extern bool L_RangeReserved(const void *fdt, u32 start, u32 size);
 extern int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline);
 
 #endif /* _LINUX_H */

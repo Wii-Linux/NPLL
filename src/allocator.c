@@ -165,6 +165,65 @@ static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolA
 	return mem;
 }
 
+static bool _rangesOverlap(uintptr_t start, uintptr_t end, const struct memRange *range) {
+	u32 rangeEnd;
+
+	if (!range->size || range->start > 0xffffffffu - range->size)
+		return false;
+	rangeEnd = range->start + range->size;
+	return start < rangeEnd && range->start < end;
+}
+
+static void *_poolAllocAvoid(struct pool *pool, size_t size, size_t align,
+			    const struct memRange *avoid, size_t avoidCount, bool commit) {
+	uintptr_t originalBottom, candidateTop, mem, blockStart, allocEnd;
+	size_t i;
+	bool retry;
+	struct block *block;
+
+	if (__unlikely(!pool || memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))
+		panic("_poolAllocAvoid: invalid pool");
+	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
+		return NULL;
+
+	originalBottom = (uintptr_t)pool->cur_bottom;
+	candidateTop = originalBottom;
+	for (;;) {
+		if (candidateTop < size)
+			return NULL;
+		mem = ALIGN_DOWN(candidateTop - size, align);
+		if (mem < sizeof(*block))
+			return NULL;
+		blockStart = mem - sizeof(*block);
+		allocEnd = mem + size;
+		if (blockStart < (uintptr_t)pool->bottom)
+			return NULL;
+
+		retry = false;
+		for (i = 0; i < avoidCount; i++) {
+			if (_rangesOverlap((uintptr_t)virtToPhys(blockStart),
+					   (uintptr_t)virtToPhys(allocEnd), &avoid[i])) {
+				candidateTop = (uintptr_t)physToCached(avoid[i].start);
+				retry = true;
+				break;
+			}
+		}
+		if (!retry)
+			break;
+	}
+
+	if (!commit)
+		return (void *)mem;
+
+	block = (struct block *)blockStart;
+	memcpy(block->magic, BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
+	block->size = (u32)(originalBottom - mem);
+	if (_blockCanFree(block))
+		panic("_poolAllocAvoid: bad size");
+	pool->cur_bottom = block;
+	return (void *)mem;
+}
+
 /* public function to allocate from a specific (or any) pool */
 void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size, size_t align) {
 	u32 mem1_free, mem2_free;
@@ -211,6 +270,47 @@ void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(e
 		panic("M_PoolAlloc with invalid pool");
 	}
 	__builtin_unreachable();
+}
+
+void *__attribute__((malloc, assume_aligned(32))) M_PoolAllocAvoid(
+	enum pool_idx pool, size_t size, size_t align, const struct memRange *avoid, size_t avoidCount) {
+	void *mem1, *mem2;
+	u32 mem1Free, mem2Free;
+
+	if (!avoid || !avoidCount)
+		return M_PoolAlloc(pool, size, align);
+	if (align == 0)
+		align = MIN_ALIGN;
+	else if (!IS_POWER_OF_2(align))
+		panic("M_PoolAllocAvoid: align not a power of 2");
+	else if (align < MIN_ALIGN)
+		align = MIN_ALIGN;
+
+	if (pool == POOL_MEM1 || pool == POOL_MEM2) {
+		mem1 = _poolAllocAvoid(&pools[pool], size, align, avoid, avoidCount, true);
+		return mem1;
+	}
+	if (pool != POOL_ANY)
+		panic("M_PoolAllocAvoid: invalid pool");
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+		mem1 = _poolAllocAvoid(&pools[POOL_MEM1], size, align, avoid, avoidCount, true);
+		return mem1;
+	}
+
+	mem1 = _poolAllocAvoid(&pools[POOL_MEM1], size, align, avoid, avoidCount, false);
+	mem2 = _poolAllocAvoid(&pools[POOL_MEM2], size, align, avoid, avoidCount, false);
+	if (!mem1 && !mem2)
+		return NULL;
+	if (!mem1)
+		return _poolAllocAvoid(&pools[POOL_MEM2], size, align, avoid, avoidCount, true);
+	if (!mem2)
+		return _poolAllocAvoid(&pools[POOL_MEM1], size, align, avoid, avoidCount, true);
+
+	mem1Free = (u32)((uintptr_t)mem1 - (uintptr_t)pools[POOL_MEM1].bottom);
+	mem2Free = (u32)((uintptr_t)mem2 - (uintptr_t)pools[POOL_MEM2].bottom);
+	if (mem1Free > mem2Free)
+		return _poolAllocAvoid(&pools[POOL_MEM1], size, align, avoid, avoidCount, true);
+	return _poolAllocAvoid(&pools[POOL_MEM2], size, align, avoid, avoidCount, true);
 }
 
 /* C stdlib free() implementation */
