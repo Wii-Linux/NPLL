@@ -159,9 +159,12 @@ $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED)
 	  if [ -n "$$start" ] && [ -n "$$end" ]; then \
 	    used=$$((0x$$end - 0x$$start)); \
 	    total=$$((768 * 1024)); \
-	    free=$$((total - used)); \
-	    pct=$$(awk -v u=$$used -v t=$$total 'BEGIN{printf "%.2f", u*100/t}'); \
-	    printf '  NPLL image: %u / %u bytes used (%s%%), %d bytes free\n' $$used $$total $$pct $$free; \
+	    stack=$$((128 * 1024)); \
+	    budget=$$((total - stack)); \
+	    free=$$((budget - used)); \
+	    pct=$$(awk -v u=$$used -v t=$$budget 'BEGIN{printf "%.2f", u*100/t}'); \
+	    printf '  NPLL image: %u / %u bytes used (%s%%), %d bytes free\n' $$used $$budget $$pct $$free; \
+	    printf '  (budget = %u HIVIRT - %u stack; the linker ASSERT counts the stack)\n' $$total $$stack; \
 	  else \
 	    echo "  (size report skipped: missing __reloc_dest_start / __sbss_end symbols)"; \
 	  fi
