@@ -126,6 +126,9 @@
 #define ERR_INT_STATUS_CCE          BIT(1)    //Command CRC Error
 #define ERR_INT_STATUS_CTOE         BIT(0)    //Command Timeout Error
 
+/* Protocol/Host Control Register */
+#define PROT_CTRL_HSEN          BIT(2)    //High Speed Enable
+
 /* Host Controller Capabilities Register */
 #define HOST_CTRL_CAP_VS18      BIT(26)   //Voltage Support 1.8V
 #define HOST_CTRL_CAP_VS30      BIT(25)   //Voltage Support 3.0V
@@ -216,7 +219,8 @@ typedef enum {
 
 typedef enum {
 	CLOCK_INITIAL = 0,
-	CLOCK_OPERATIONAL
+	CLOCK_OPERATIONAL,
+	CLOCK_HIGH_SPEED
 } clock_mode;
 
 typedef enum {
@@ -387,7 +391,12 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		}
 		if (cmd->index == MMC_READ_SINGLE_BLOCK
 		    || cmd->index == MMC_READ_MULTIPLE_BLOCK
-		    || cmd->index == MMC_SEND_EXT_CSD) {
+		    || cmd->index == MMC_SEND_EXT_CSD
+		    /* SD's CMD6 (SWITCH_FUNC) returns a 64-byte status block on
+		     * DAT. It shares an index with eMMC's MMC_SWITCH, which
+		     * carries no data at all -- that one never reaches here,
+		     * since this whole block is gated on cmd->data. */
+		    || cmd->index == MMC_SWITCH) {
 			mix_ctrl |= MIX_CTRL_DTDSEL;
 		}
 		if (cmd->data->blocks > 1) {
@@ -1038,6 +1047,18 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_27);
 #endif
 		break;
+	case CLOCK_HIGH_SPEED:
+		/*
+		 * base/1 = 48MHz, under the 50MHz high-speed ceiling. Only legal
+		 * once the card has accepted CMD6 and the host's high speed bit
+		 * is set; at default-speed timing this would be out of spec.
+		 *
+		 * Per the model above this leaves ~1083/48 + 7 = ~29.6us a block
+		 * against ~22.6us of wire, so the fixed 7us becomes a quarter of
+		 * each block. Expect ~1.7x, not the 2x the clock ratio implies.
+		 */
+		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_1, SDCLK_TIMES_2_POW_27);
+		break;
 	default:
 		ZF_LOGE("Unsupported clock mode setting");
 		rslt = -1;
@@ -1182,6 +1203,50 @@ static int sdhc_set_bus_width(sdio_host_dev_t *sdio, u32 width)
 	return 0;
 }
 
+/*
+ * Move the host to high-speed timing. The card must already have taken
+ * CMD6: it retimes itself the moment it answers, so the host is what is
+ * behind, and the ordering here (enable, then clock) is not arbitrary.
+ */
+static int sdhc_set_high_speed(sdio_host_dev_t *sdio)
+{
+	sdhc_dev_t host = sdio_get_sdhc(sdio);
+	u32 val;
+	int ret;
+
+	val = readl(host->base + HOST_CTRL_CAP);
+	if (!(val & HOST_CTRL_CAP_HSS)) {
+		ZF_LOGE("host controller does not advertise high speed support");
+		return -1;
+	}
+
+	val = readl(host->base + PROT_CTRL);
+	val |= PROT_CTRL_HSEN;
+	writel(val, host->base + PROT_CTRL);
+	(void)readl(host->base + PROT_CTRL);
+	sync(); barrier();
+
+	ret = sdhc_set_clock(host->base, CLOCK_HIGH_SPEED);
+	if (ret) {
+		/*
+		 * The clock never came back stable. Drop the enable bit so the
+		 * host is at least self-consistent at the old divider; the card
+		 * stays in high-speed timing, but it tolerates a slower clock,
+		 * whereas the reverse would not be true.
+		 */
+		ZF_LOGE("failed to raise the clock for high speed");
+		val = readl(host->base + PROT_CTRL);
+		val &= (u32)~PROT_CTRL_HSEN;
+		writel(val, host->base + PROT_CTRL);
+		(void)readl(host->base + PROT_CTRL);
+		sync(); barrier();
+		return ret;
+	}
+
+	ZF_LOGD("host switched to high speed (48MHz)");
+	return 0;
+}
+
 static int sdhc_set_operational(struct sdio_host_dev *sdio)
 {
 	/*
@@ -1220,6 +1285,7 @@ int sdhc_init(void *iobase, const int *irq_table, int nirqs, sdio_host_dev_t *de
 	dev->reset = &sdhc_reset;
 	dev->set_operational = &sdhc_set_operational;
 	dev->set_bus_width = &sdhc_set_bus_width;
+	dev->set_high_speed = &sdhc_set_high_speed;
 	dev->get_present_state = &sdhc_get_present_state_register;
 	dev->flags = 0;
 	dev->priv = sdhc;

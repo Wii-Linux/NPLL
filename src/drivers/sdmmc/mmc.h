@@ -79,6 +79,25 @@
 #define MMC_MODE_8BIT	   0x04
 #define MMC_MODE_4BIT	   0x02
 
+/*
+ * SD CMD6 (SWITCH_FUNC). Shares an index with MMC_SWITCH but is a wholly
+ * different command on SD: it returns a 64-byte status block on the DAT
+ * lines alongside the R1 response.
+ *
+ * The argument packs one nibble per function group, 0xF meaning "leave
+ * this group alone". Group 1 is access mode, where 0 is default speed
+ * and 1 is high speed. Bit 31 picks check (0) vs set (1); a check must
+ * succeed before a set, since the set is what actually retimes the card.
+ */
+#define SD_SWITCH_CHECK_HS	  0x00fffff1u
+#define SD_SWITCH_SET_HS	  0x80fffff1u
+#define SD_SWITCH_STATUS_LEN  64
+/* Byte 13 bit 1: group 1 supports function 1 (high speed). */
+#define SD_SWITCH_HS_SUPPORTED(buf)  (((buf)[13] & 0x02u) != 0)
+/* Byte 16 low nibble: the access mode the card actually selected. A card
+ * that cannot honour the switch returns 0xF here rather than failing. */
+#define SD_SWITCH_SELECTED(buf)      ((buf)[16] & 0x0fu)
+
 
 enum mmc_rsp_type {
 	MMC_RSP_TYPE_NONE = 0,
@@ -207,6 +226,11 @@ static inline int host_set_operational(struct mmc_card *card)
 static inline int host_set_bus_width(struct mmc_card *card, u32 width)
 {
 	return sdio_set_bus_width(card->sdio, width);
+}
+
+static inline int host_set_high_speed(struct mmc_card *card)
+{
+	return sdio_set_high_speed(card->sdio);
 }
 
 

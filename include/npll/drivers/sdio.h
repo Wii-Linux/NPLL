@@ -53,6 +53,10 @@ struct sdio_host_dev {
     int (*reset)(struct sdio_host_dev *sdio);
     int (*set_operational)(struct sdio_host_dev *sdio);
     int (*set_bus_width)(struct sdio_host_dev *sdio, u32 width);
+    /* Move the host to high-speed timing. Only valid once the card has
+     * been switched with CMD6; the host must not clock past the default
+     * speed limit before the card agrees. */
+    int (*set_high_speed)(struct sdio_host_dev *sdio);
     int (*send_command)(struct sdio_host_dev *sdio, struct mmc_cmd *cmd, sdio_cb cb, void *token);
     int (*handle_irq)(struct sdio_host_dev *sdio, int irq);
     int (*is_voltage_compatible)(struct sdio_host_dev *sdio, int mv);
@@ -114,6 +118,13 @@ static inline int sdio_set_operational(sdio_host_dev_t *sdio)
 static inline int sdio_set_bus_width(sdio_host_dev_t *sdio, u32 width)
 {
     return sdio->set_bus_width(sdio, width);
+}
+
+static inline int sdio_set_high_speed(sdio_host_dev_t *sdio)
+{
+    if (!sdio->set_high_speed)
+        return -1;
+    return sdio->set_high_speed(sdio);
 }
 
 /**

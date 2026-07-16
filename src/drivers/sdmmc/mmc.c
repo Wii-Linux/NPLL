@@ -498,6 +498,99 @@ static void mmc_blockop_completion_cb(struct sdio_host_dev *sdio, int stat, stru
 	mmc_completion_token_destroy(t);
 }
 
+/*
+ * Move an SD card and the host to high-speed timing.
+ *
+ * Best-effort by design: returns 0 only when both ended up in high speed,
+ * and every failure path leaves a card that still works at the default
+ * operational clock. Callers may ignore the result.
+ */
+static int sd_switch_high_speed(mmc_card_t mmc)
+{
+	struct mmc_cmd cmd;
+	struct mmc_data data;
+	u8 status[SD_SWITCH_STATUS_LEN] __attribute__((aligned(32)));
+
+	/*
+	 * pbuf 0 keeps this on the PIO path: it is 64 bytes exactly once, so
+	 * a DMA-able buffer would be all cost and no benefit.
+	 */
+	data.pbuf = 0;
+	data.vbuf = status;
+	data.data_addr = 0;
+	data.block_size = SD_SWITCH_STATUS_LEN;
+	data.blocks = 1;
+
+	/*
+	 * Ask before telling. A card predating spec 1.10 has no CMD6 at all
+	 * and rejects it, which doubles as the version check -- no need to
+	 * read the SCR just to learn that.
+	 */
+	memset(status, 0, sizeof(status));
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.index = MMC_SWITCH;
+	cmd.arg = SD_SWITCH_CHECK_HS;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	cmd.data = &data;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGD("CMD6 check rejected; card stays at default speed");
+		return -1;
+	}
+	if (!SD_SWITCH_HS_SUPPORTED(status)) {
+		ZF_LOGD("card does not offer high speed; staying at default speed");
+		return -1;
+	}
+
+	/* Tell. The card retimes itself as soon as it answers this. */
+	memset(status, 0, sizeof(status));
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.index = MMC_SWITCH;
+	cmd.arg = SD_SWITCH_SET_HS;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	cmd.data = &data;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGE("CMD6 set failed; card stays at default speed");
+		return -1;
+	}
+	/*
+	 * A card that will not honour the switch answers 0xF rather than
+	 * failing the command, so this has to be read, not assumed.
+	 */
+	if (SD_SWITCH_SELECTED(status) != 1) {
+		ZF_LOGE("card declined high speed (mode %u); staying at default speed",
+			SD_SWITCH_SELECTED(status));
+		return -1;
+	}
+
+	/*
+	 * The card is in high-speed timing now while the host is still on the
+	 * operational divider. That is a legal place to sit -- a high-speed
+	 * card tolerates a slow clock -- but nothing is gained until the host
+	 * catches up.
+	 */
+	if (host_set_high_speed(mmc)) {
+		ZF_LOGE("host would not switch to high speed");
+		return -1;
+	}
+
+	/*
+	 * Prove the new timing before handing the card back. A switch that
+	 * half-worked otherwise surfaces later as wedged data reads, which is
+	 * a much worse place to find out.
+	 */
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.index = MMC_SEND_STATUS;
+	cmd.arg = (u32)mmc->raw_rca << 16;
+	cmd.rsp_type = MMC_RSP_TYPE_R1;
+	if (host_send_command(mmc, &cmd, NULL, NULL)) {
+		ZF_LOGE("card unresponsive at high speed; falling back to the operational clock");
+		host_set_operational(mmc);
+		return -1;
+	}
+
+	return 0;
+}
+
 int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 {
 	mmc_card_t mmc;
@@ -594,6 +687,15 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 			ZF_LOGE("4-bit mode validation via SEND_STATUS failed");
 			free(mmc);
 			return -1;
+		}
+
+		/*
+		 * Now that the bus is 4-bit and settled, try for high speed.
+		 * Deliberately not fatal: default speed works on every card, so
+		 * a card that refuses simply runs slower.
+		 */
+		if (sd_switch_high_speed(mmc) == 0) {
+			ZF_LOGD("card and host running at high speed");
 		}
 	}
 

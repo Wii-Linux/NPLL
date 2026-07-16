@@ -19,7 +19,10 @@
 #include <npll/timer.h>
 #include <npll/types.h>
 
-#define IOSTATS 1
+/* Debug instrumentation; costs ~1-2KB of image. Flip to 1 to get a
+ * breakdown of load time across the SD bus, the block layer, and
+ * everything above it, dumped just before the kernel is entered. */
+#define IOSTATS 0
 
 #if IOSTATS
 
