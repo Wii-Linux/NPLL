@@ -259,15 +259,7 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 	}
 	data_len = (size_t)cmd->data->block_size * (size_t)cmd->data->blocks;
 	boundary_off = cmd->data->pbuf & sdhc_dma_boundary_mask;
-	if (boundary_off + data_len > sdhc_dma_boundary) {
-		/*
-		 * Hollywood SDMA gets flaky when a transfer crosses the programmed
-		 * 512 KiB boundary. That makes success depend on the exact buffer
-		 * address, which is why unrelated codegen/layout changes can flip
-		 * CMD17/CMD18 between working and timing out.
-		 */
-		return DMA_MODE_NONE;
-	}
+
 	/* Currently only SDMA supported */
 	return DMA_MODE_SDMA;
 #endif
