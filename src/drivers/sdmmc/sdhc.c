@@ -511,9 +511,26 @@ check_again:
 	if (!int_status && !err_status)
 		return 0;
 
+	/*
+	 * Acknowledge exactly the bits we just latched, before doing any
+	 * processing.
+	 *
+	 * These bits are W1C, and the controller keeps asserting new ones
+	 * while we work. Draining a PIO block below costs ~128 MMIO reads;
+	 * in that window the controller can finish receiving the next block
+	 * and re-assert BRR, or finish the transfer and assert TC. Clearing
+	 * the latched snapshot *after* that processing would clear those
+	 * newly-asserted bits too, and they are never re-raised: the buffer
+	 * stays full (BRE=1) with BRR gone, or TC is lost and the command
+	 * never completes. Either way the data path wedges until timeout.
+	 *
+	 * Clearing here keeps the window to a few cycles, and anything the
+	 * controller raises during processing survives to be picked up by
+	 * the check_again loop below.
+	 */
+	writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
+
 	if (!cmd) {
-		/* Clear flags */
-		writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
 		goto check_again;
 	}
 	/** Handle errors **/
@@ -658,11 +675,6 @@ check_again:
 		/* assert_msg(cmd->complete == 0, "cmd->complete != 0 in sdhc_handle_irq DATA COMPLETE path"); */
 		cmd->complete = 1;
 	}
-	/* Clear flags (W1C: write-1-to-clear).
-	 * INT_STATUS and ERR_INT_STATUS share a 32-bit word; must use a single
-	 * writel to avoid the RMW in writew accidentally clearing the other half. */
-	writel(((u32)err_status << 16) | (u32)int_status, host->base + INT_STATUS);
-
 	/* If the transaction has finished */
 	if (cmd != NULL && cmd->complete != 0) {
 		/* PIO writes through vbuf and must not be invalidated here. */
