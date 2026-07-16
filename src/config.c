@@ -17,6 +17,7 @@
 #include <npll/elf.h>
 #include <npll/dol.h>
 #include <npll/fs.h>
+#include <npll/iostats.h>
 #include <npll/log.h>
 #include <npll/linux.h>
 #include <npll/menu.h>
@@ -1211,6 +1212,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 	u32 dtbExtra, cmdlineFlags = 0;
 
 	memset(&files, 0, sizeof(files));
+	IOStats_MarkStart();
 
 	if (ne->dtbPath) {
 		if (npllEnsureFS(ne, ne->dtbPath, &path))

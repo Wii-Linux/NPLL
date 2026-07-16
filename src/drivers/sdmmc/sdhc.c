@@ -15,6 +15,7 @@
 #include <npll/allocator.h>
 #include <npll/cache.h>
 #include <npll/drivers/sdio.h>
+#include <npll/iostats.h>
 #include <npll/irq.h>
 #include <npll/revle.h>
 #include <npll/timer.h>
@@ -473,6 +474,9 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 
 	/* Issue the command. */
 	writel(val32, host->base + CMD_XFR_TYP);
+#if IOSTATS
+	host->cmd_start_tb = mftb();
+#endif
 	return 0;
 }
 
@@ -607,6 +611,12 @@ check_again:
 
 	/* Command complete */
 	if (int_status & INT_STATUS_CC) {
+		/* Data commands only: for those, this is the card's response
+		 * latency, and the rest of the wait is the data phase. */
+		if (cmd->data) {
+			IOSTATS_ADD(ccUsecs, T_ElapsedUsecs(host->cmd_start_tb));
+			IOSTATS_ADD(ccCount, 1);
+		}
 		/* Command complete */
 		switch (cmd->rsp_type) {
 		case MMC_RSP_TYPE_R2:
@@ -708,13 +718,14 @@ static int sdhc_is_voltage_compatible(sdio_host_dev_t *sdio, int mv)
 	}
 }
 
-static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb, void *token)
+static int _sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb, void *token)
 {
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	bool irqs, wait_irqs = false;
 	int ret;
 	u64 tb;
 	u8 val8;
+	IOSTATS_TB(fnTB);
 
 	/* Initialise callbacks */
 	cmd->complete = 0;
@@ -727,10 +738,13 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 	/* Append to list */
 	*host->cmd_list_tail = cmd;
 	host->cmd_list_tail = &cmd->next;
+	IOSTATS_ADD(preUsecs, T_ElapsedUsecs(fnTB));
 
 	/* If idle, bump */
 	if (host->cmd_list_head == cmd) {
+		IOSTATS_TB(setupTB);
 		ret = sdhc_next_cmd(host);
+		IOSTATS_ADD(setupUsecs, T_ElapsedUsecs(setupTB));
 		if (ret) {
 			host->cmd_list_head = NULL;
 			host->cmd_list_tail = &host->cmd_list_head;
@@ -739,11 +753,14 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 		}
 	}
 
+	IOSTATS_TB(midTB);
 	IRQ_Restore(irqs);
 
 	/* finalise the transacton */
 	if (cb == NULL) {
 		wait_irqs = IRQ_DisableSave();
+		IOSTATS_ADD(midUsecs, T_ElapsedUsecs(midTB));
+		IOSTATS_TB(waitTB);
 		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
@@ -780,6 +797,8 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 				return -1;
 			}
 		}
+		IOSTATS_ADD(waitUsecs, T_ElapsedUsecs(waitTB));
+		IOSTATS_TB(postTB);
 		/* Return result */
 		if (cmd->complete < 0) {
 			ZF_LOGD("doing sw reset of DAT+CMD due to command failure");
@@ -795,15 +814,56 @@ static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb,
 				}
 			}
 			IRQ_Restore(wait_irqs);
+			IOSTATS_ADD(postUsecs, T_ElapsedUsecs(postTB));
 			return cmd->complete;
 		} else {
 			IRQ_Restore(wait_irqs);
+			IOSTATS_ADD(postUsecs, T_ElapsedUsecs(postTB));
 			return 0;
 		}
 	} else {
 		/* Defer to IRQ handler */
 		return 0;
 	}
+}
+
+static int sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb, void *token)
+{
+#if !IOSTATS
+	return _sdhc_send_cmd(sdio, cmd, cb, token);
+#else
+	sdhc_dev_t host = sdio_get_sdhc(sdio);
+	bool isData = (cmd->data != NULL);
+	bool isDMA = isData && (get_dma_mode(host, cmd) != DMA_MODE_NONE);
+	u32 blocks = isData ? cmd->data->blocks : 0;
+	u64 tb = mftb();
+	u32 usecs;
+	int ret;
+
+	ret = _sdhc_send_cmd(sdio, cmd, cb, token);
+
+	/* With a callback the command is finished by the IRQ handler, so the
+	 * time measured here is only the submit path and would understate the
+	 * transfer. Every caller is synchronous today; skip async to keep the
+	 * numbers honest rather than silently wrong. */
+	if (cb != NULL)
+		return ret;
+
+	usecs = T_ElapsedUsecs(tb);
+	IOSTATS_ADD(cmdCount, 1);
+	IOSTATS_ADD(cmdUsecs, usecs);
+	if (isData) {
+		IOSTATS_ADD(dataCmdCount, 1);
+		IOSTATS_ADD(dataCmdUsecs, usecs);
+		IOSTATS_ADD(dataBlocks, blocks);
+		if (isDMA)
+			IOSTATS_ADD(dmaCmdCount, 1);
+		else
+			IOSTATS_ADD(pioCmdCount, 1);
+	}
+
+	return ret;
+#endif
 }
 
 static int sdhc_enable_clock(volatile void *base_addr)
@@ -969,7 +1029,22 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 #if SDHC_SLOW_4BIT_TEST
 		rslt = sdhc_set_clock_div(base_addr, DIV_8, PRESCALER_8, SDCLK_TIMES_2_POW_27);
 #else
-		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_4, SDCLK_TIMES_2_POW_27);
+		/*
+		 * base/2 = 24MHz on Hollywood's 48MHz base clock. This sits just
+		 * under the 25MHz default-speed rating that every SD card must
+		 * support, so it needs neither a CMD6 high-speed switch nor the
+		 * host's high-speed bit. Going faster than this means implementing
+		 * high-speed mode; base/1 would be 48MHz, which is out of spec
+		 * for default speed.
+		 */
+		/*
+		 * Measured per 512-byte block, solving across base/2 and base/4:
+		 * ~1083 clocks + ~7us of fixed time. The clock term is close to
+		 * the 1040 the protocol requires (1024 data + 16 CRC at 4-bit),
+		 * so the bus itself is fine; the 7us does not scale with the
+		 * clock and is the floor on what raising it can buy.
+		 */
+		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_27);
 #endif
 		break;
 	default:

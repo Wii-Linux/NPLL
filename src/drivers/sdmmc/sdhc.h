@@ -10,6 +10,7 @@
 #ifndef _INTERNAL_SDMMC_SDHC_H
 #define _INTERNAL_SDMMC_SDHC_H
 #include <npll/drivers/sdio.h>
+#include <npll/iostats.h>
 
 struct sdhc {
     /* Device data */
@@ -21,6 +22,11 @@ struct sdhc {
     struct mmc_cmd *cmd_list_head;
     struct mmc_cmd **cmd_list_tail;
     unsigned int blocks_remaining;
+#if IOSTATS
+    /* Timebase at the CMD_XFR_TYP write, so the IRQ handler can measure
+     * how long the card took to reach Command Complete. */
+    u64 cmd_start_tb;
+#endif
 };
 typedef struct sdhc *sdhc_dev_t;
 

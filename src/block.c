@@ -11,8 +11,10 @@
 #include <npll/allocator.h>
 #include <npll/block.h>
 #include <npll/fs.h>
+#include <npll/iostats.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/timer.h>
 #include <npll/menu.h>
 #include <npll/partition.h>
 #include <npll/types.h>
@@ -84,6 +86,10 @@ static const struct blockTransfer *selectTransfer(const struct blockDevice *bdev
 static ssize_t bounceDMA(struct blockDevice *bdev, const struct blockTransfer *xfer, void *buf, size_t len, u64 off, bool write) {
 	u8 *tmp;
 	ssize_t ret;
+	IOSTATS_TB(tb);
+
+	IOSTATS_ADD(bounceCount, 1);
+	IOSTATS_ADD(bounceBytes, len);
 
 	tmp = M_PoolAlloc(POOL_ANY, len, xfer->dmaAlign);
 	if (!tmp)
@@ -101,10 +107,12 @@ static ssize_t bounceDMA(struct blockDevice *bdev, const struct blockTransfer *x
 
 	if (ret != (ssize_t)len) {
 		free(tmp);
+		IOSTATS_ADD(bounceUsecs, T_ElapsedUsecs(tb));
 		return -1;
 	}
 
 	free(tmp);
+	IOSTATS_ADD(bounceUsecs, T_ElapsedUsecs(tb));
 	return (ssize_t)len;
 }
 
@@ -149,6 +157,10 @@ static ssize_t blockRW(struct blockDevice *bdev, void *buf, size_t len, u64 off,
 	if (!tmp)
 		return -1;
 
+	IOSTATS_TB(chunkedTB);
+	IOSTATS_ADD(chunkedCount, 1);
+	IOSTATS_ADD(chunkedBytes, len);
+
 	cursor = buf;
 	writeCursor = buf;
 	pos = alignDownU64(off, xfer->size);
@@ -191,6 +203,7 @@ static ssize_t blockRW(struct blockDevice *bdev, void *buf, size_t len, u64 off,
 	}
 
 	free(tmp);
+	IOSTATS_ADD(chunkedUsecs, T_ElapsedUsecs(chunkedTB));
 	return (ssize_t)len;
 }
 

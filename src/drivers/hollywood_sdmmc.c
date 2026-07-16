@@ -16,6 +16,7 @@
 #include <npll/drivers/mmc.h>
 #include <npll/drivers/sdio.h>
 #include <npll/drivers.h>
+#include <npll/iostats.h>
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/timer.h>
@@ -97,11 +98,16 @@ static ssize_t sdmmcRead(struct blockDevice *bdev, void *dest, size_t len, u64 o
 	startBlock = (size_t)(off / blkSize);
 	nblocks = len / blkSize;
 
+	IOSTATS_TB(tb);
 	dcache_invalidate(dest, len);
 	ret = (size_t)mmc_block_read(bdevToMMC(bdev), startBlock, nblocks, dest,
 		(uintptr_t)virtToPhys(dest), NULL, NULL);
 	if (ret != len)
 		return -1;
+
+	IOSTATS_ADD(devCount, 1);
+	IOSTATS_ADD(devBytes, len);
+	IOSTATS_ADD(devUsecs, T_ElapsedUsecs(tb));
 
 	return (ssize_t)len;
 }
