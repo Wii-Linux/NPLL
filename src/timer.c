@@ -55,6 +55,22 @@ bool T_HasElapsed(u64 startTB, u32 usecSince) {
 	return (tb >= (startTB + ticks));
 }
 
+u32 T_ElapsedUsecs(u64 startTB) {
+	u64 delta;
+	u64 tb = mftb();
+
+	if (tb <= startTB || !ticksPerUsec)
+		return 0;
+
+	/* Narrow before dividing: a u64 divide would pull in __udivdi3, and
+	 * the image has no room to spare for it. */
+	delta = tb - startTB;
+	if (delta > 0xffffffffull)
+		return 0xffffffffu;
+
+	return (u32)delta / ticksPerUsec;
+}
+
 /* delay for [n] microseconds */
 void udelay(u32 usec) {
 	spinOnTB((u64)ticksPerUsec * usec);

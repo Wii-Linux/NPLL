@@ -33,6 +33,10 @@ extern void udelay(u32 usec);
 extern void T_Init(void);
 extern void T_EnableEvents(void);
 extern bool T_HasElapsed(u64 startTB, u32 usecSince);
+/* microseconds elapsed since the timebase value [startTB], saturating.
+ * u32 keeps this free of the 64-bit division helpers; the range is still
+ * ~71s at Wii timebase, far more than any span worth measuring. */
+extern u32 T_ElapsedUsecs(u64 startTB);
 extern void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData);
 extern void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData);
 extern void T_CancelRepeatingEvent(void (*callback)(void *), void *cbData);
