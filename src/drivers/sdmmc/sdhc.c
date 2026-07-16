@@ -404,19 +404,10 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		/* Record the number of blocks to be sent */
 		host->blocks_remaining = cmd->data->blocks;
 
-		/*
-		 * Make sure the data path programming has actually landed before
-		 * we launch the command. Hollywood appears to be timing-sensitive
-		 * here: with unlucky timing it can enter a stuck read-active/data-
-		 * active state without ever raising CC/TC/ERR, and serial output
-		 * changes the odds by perturbing timing.
-		 */
 		(void)readl(host->base + BLK_ATT);
-		if (get_dma_mode(host, cmd) != DMA_MODE_NONE) {
+		if (get_dma_mode(host, cmd) != DMA_MODE_NONE)
 			(void)readl(host->base + DS_ADDR);
-		}
-		sync(); barrier();
-		udelay(50);
+		sync();
 	}
 
 	/* The command should be MSB and the first two bits should be '00' */
