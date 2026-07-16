@@ -34,6 +34,12 @@ struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
 uint V_FbWidth, V_FbHeight, V_FbStride;
 static volatile bool fbLocked = false;
+/* Set by anything that writes V_FbPtr, cleared by V_Flush. The flush is
+ * expensive on GC/Wii, and the periodic flush event fires regardless of
+ * whether anything actually changed -- during a kernel load that is a
+ * full flush every 66ms with an identical framebuffer. Starts true so
+ * the first flush always happens. */
+static volatile bool fbDirty = true;
 
 /* 15 FPS */
 #define FRAME_MS_TARGET 66
@@ -180,6 +186,7 @@ static void handleEscape(char c) {
 
 		if (mode == 2) {
 			memset(V_FbPtr, 0, V_FbStride * V_FbHeight);
+			fbDirty = true;
 			posX = 0;
 			posY = 0;
 		} else {
@@ -306,6 +313,7 @@ static void maybeScroll(void) {
 
 	startZeroAddr = (srcAddr + size) - fontSz;
 	memset(startZeroAddr, 0, fontSz);
+	fbDirty = true;
 }
 
 static void odevWriteChar(char c) {
@@ -378,6 +386,7 @@ static void odevWriteChar(char c) {
 
 		row++;
 	}
+	fbDirty = true;
 
 	/* done writing */
 	posX++;
@@ -415,8 +424,16 @@ void V_Flush(void) {
 	if (!V_ActiveDriver->flush)
 		return;
 
+	if (!fbDirty)
+		return;
+
 	if (!V_LockFB())
 		return;
+
+	/* Clear before flushing, not after: a write that lands mid-flush must
+	 * leave the flag set so the next tick picks it up. Clearing afterwards
+	 * would swallow it. */
+	fbDirty = false;
 
 	#ifdef VID_BENCH
 	tbStart[numFlushes] = mftb();
