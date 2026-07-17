@@ -14,7 +14,6 @@
 #include <npll/elf_abi.h>
 #include <npll/elf.h>
 #include <npll/fs.h>
-#include <npll/iostats.h>
 #include <npll/irq.h>
 #include <npll/linux.h>
 #include <npll/log.h>
@@ -433,9 +432,6 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 		log_printf("ELF: Linux PT_LOAD end %08x, moved DTB to %08x-%08x\r\n",
 		           linuxLoadEnd, dtbPhys, dtbEnd);
 	}
-
-	/* Last chance to report: H_PrepareForExecEntry() takes logging down. */
-	IOStats_Dump("linux load");
 
 	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
 	H_PrepareForExecEntry();

@@ -12,6 +12,7 @@
 #include <npll/fs.h>
 #include <npll/input.h>
 #include <npll/irq.h>
+#include <npll/iostats.h>
 #include <npll/log_internal.h>
 #include <npll/output.h>
 #include <npll/soc.h>
@@ -29,6 +30,9 @@ void H_PrepareForExecEntry(void) {
 
 	L_Method = LOG_METHOD_ALL_ODEV;
 	printf("\x1b[1;1H\x1b[2J");
+
+	/* Last chance to report: H_PrepareForExecEntry() takes logging down. */
+	IOStats_Dump("linux load");
 
 	/* disable IRQs */
 	IRQ_Disable();
