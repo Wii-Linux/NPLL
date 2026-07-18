@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 
 int memcmp(const void *s1, const void *s2, size_t n) {
@@ -87,6 +88,30 @@ int strcmp(const char *str1, const char *str2) {
 	}
 
 	return *(const uint8_t *)str1 - *(const uint8_t *)str2;
+}
+
+int strcasecmp(const char *str1, const char *str2) {
+	int c1, c2;
+
+	do {
+		c1 = tolower(*(const uint8_t *)str1++);
+		c2 = tolower(*(const uint8_t *)str2++);
+	} while (c1 && c1 == c2);
+
+	return c1 - c2;
+}
+
+int strncasecmp(const char *str1, const char *str2, size_t n) {
+	int c1, c2;
+
+	while (n--) {
+		c1 = tolower(*(const uint8_t *)str1++);
+		c2 = tolower(*(const uint8_t *)str2++);
+		if (!c1 || c1 != c2)
+			return c1 - c2;
+	}
+
+	return 0;
 }
 
 char *strcpy(char *dest, const char *src) {
