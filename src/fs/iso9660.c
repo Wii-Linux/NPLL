@@ -21,6 +21,13 @@
 #define readSects(part, dest, num, off) B_Read(part, dest, (num) * SECTOR_SIZE, (off) * SECTOR_SIZE)
 #define ISO9660_PVD_IDENT "CD001"
 
+#define SUSP_ENTRY_HDR_LEN 4
+#define RRIP_NM_HDR_LEN    5
+
+#define RRIP_NM_CONTINUE BIT(0)
+#define RRIP_NM_CURRENT  BIT(1)
+#define RRIP_NM_PARENT   BIT(2)
+
 #define FLAGS_HIDDEN    BIT(0)
 #define FLAGS_DIR       BIT(1)
 #define FLAGS_ASSOC     BIT(2)
@@ -155,8 +162,71 @@ struct iso9660VolDesc {
 	} data;
 };
 
+/*
+ * Look for Rock Ridge NM entries in a directory record's System Use Area.
+ * A name may be split across several consecutive NM entries.  Return 1 when
+ * a complete alternate name was found, 0 when there is no usable NM entry,
+ * and -ENAMETOOLONG when the alternate name does not fit in dest.
+ */
+static int iso9660RockRidgeName(const struct iso9660DirRecordHdr *rec, char *dest, size_t destLen) {
+	const u8 *entry;
+	size_t entryLen, nameLen = 0, systemUseOff;
+	bool found = false, complete = false;
+
+	/* ISO 9660 inserts a padding byte after an even-length file identifier. */
+	systemUseOff = sizeof(*rec) + rec->fileNameLen + ((rec->fileNameLen & 1) ? 0 : 1);
+	if (systemUseOff > rec->length)
+		return 0;
+
+	entry = (const u8 *)rec + systemUseOff;
+	entryLen = rec->length - systemUseOff;
+	while (entryLen >= SUSP_ENTRY_HDR_LEN) {
+		size_t len = entry[2];
+
+		if (len < SUSP_ENTRY_HDR_LEN || len > entryLen)
+			break;
+
+		/* ST terminates the SUSP entries in this System Use Area. */
+		if (entry[0] == 'S' && entry[1] == 'T')
+			break;
+
+		if (entry[0] == 'N' && entry[1] == 'M' && entry[3] == 1 && len >= RRIP_NM_HDR_LEN) {
+			u8 flags = entry[4];
+			size_t componentLen = len - RRIP_NM_HDR_LEN;
+
+			if (flags & RRIP_NM_CURRENT) {
+				if (destLen < 2)
+					return -ENAMETOOLONG;
+				strcpy(dest, ".");
+				return 1;
+			}
+			if (flags & RRIP_NM_PARENT) {
+				if (destLen < 3)
+					return -ENAMETOOLONG;
+				strcpy(dest, "..");
+				return 1;
+			}
+
+			if (nameLen + componentLen >= destLen)
+				return -ENAMETOOLONG;
+			memcpy(dest + nameLen, entry + RRIP_NM_HDR_LEN, componentLen);
+			nameLen += componentLen;
+			found = true;
+			complete = !(flags & RRIP_NM_CONTINUE);
+		}
+
+		entry += len;
+		entryLen -= len;
+	}
+
+	if (!found || !complete)
+		return 0;
+	dest[nameLen] = '\0';
+	return 1;
+}
+
 static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, struct iso9660DirRecordHdr *out) {
-	int ret;
+	int ret, rrName;
 	char fileName[FILENAME_MAX], *semicolon;
 	void *buf;
 	uint dirLen = from->dataLen.be, off = 0;
@@ -195,13 +265,26 @@ static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, s
 			break;
 		}
 
-		/* can we even fit it? */
-		if (rec->fileNameLen >= FILENAME_MAX || sizeof(*rec) + rec->fileNameLen > rec->length) {
-			log_printf("file name too big (%u), skipping\r\n", rec->fileNameLen);
+		/* Make sure the base ISO identifier is contained in the record. */
+		if (sizeof(*rec) + rec->fileNameLen > rec->length) {
+			log_printf("invalid file name length (%u), skipping\r\n", rec->fileNameLen);
 			goto cont;
 		}
 
-		/* stash the name */
+		/* Prefer the Rock Ridge alternate name, if this record has one. */
+		rrName = iso9660RockRidgeName(rec, fileName, sizeof(fileName));
+		if (rrName < 0) {
+			log_puts("Rock Ridge file name too big, skipping");
+			goto cont;
+		}
+		if (rrName > 0)
+			goto haveName;
+
+		/* Otherwise use the base ISO 9660 identifier. */
+		if (rec->fileNameLen >= FILENAME_MAX) {
+			log_printf("file name too big (%u), skipping\r\n", rec->fileNameLen);
+			goto cont;
+		}
 		if (rec->fileNameLen == 1 && *(u8 *)((uintptr_t)rec + sizeof(*rec)) == 0)
 			strcpy(fileName, ".");
 		else if (rec->fileNameLen == 1 && *(u8 *)((uintptr_t)rec + sizeof(*rec)) == 1)
@@ -216,6 +299,7 @@ static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, s
 		if (semicolon)
 			*semicolon = '\0';
 
+haveName:
 		/*log_printf("Found a file: %s\r\n", fileName);*/
 		/* is it the one we're looking for? */
 		if (!strcasecmp(fileName, name)) {
