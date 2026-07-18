@@ -4,3 +4,6 @@
 [submodule "external/dtc"]
 	path = external/dtc
 	url = https://github.com/dgibson/dtc
+[submodule "external/dol-tools"]
+	path = external/dol-tools
+	url = https://github.com/Wii-Linux/dol-tools
