@@ -124,12 +124,13 @@ FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c f
 FAT_EXPORTS := FS_FAT FS_exFAT
 OUT_ELF := bin/npll.elf
 OUT_DOL := bin/npll.dol
+OUT_DOL_VIRT := bin/npll_virt.dol
 
 # need to put this before the libfdt include
 ifeq ($(BUILD_DOL),0)
 all: $(OUT_ELF)
 else
-all: $(OUT_ELF) $(OUT_DOL)
+all: $(OUT_ELF) $(OUT_DOL) $(OUT_DOL_VIRT)
 endif
 
 
@@ -144,6 +145,9 @@ FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
 FAT_COMBINED := build/fs/fat/fat.o
 
 .PHONY: all clean libfdt_clean
+
+$(OUT_DOL_VIRT): $(OUT_DOL) external/dol-tools/bin/dol-info external/dol-tools/bin/dol-patch
+	util/fixup_virt_dol.sh $< $@
 
 $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
@@ -209,6 +213,11 @@ build/%.o: src/%.S
 external/mini/armboot.bin: external/mini/Makefile
 	$(HIDE)$(MAKE) -C external/mini FOR_NPLL=1
 
+external/dol-tools/bin/dol-info: external/dol-tools/Makefile
+	$(HIDE)$(MAKE) -C external/dol-tools dol-info CC="$(HOSTCC)"
+external/dol-tools/bin/dol-patch: external/dol-tools/Makefile
+	$(HIDE)$(MAKE) -C external/dol-tools dol-patch CC="$(HOSTCC)"
+
 src/armboot_bin.c: util/bin2c external/mini/armboot.bin
 	$(info $s  BIN2C $@)
 	$(HIDE)util/bin2c
@@ -225,3 +234,4 @@ util/bin2c: util/bin2c.c
 clean:
 	rm -rf bin build utils/bin2c
 	$(MAKE) -C external/mini clean
+	$(MAKE) -C external/dol-tools clean
