@@ -22,7 +22,7 @@
 
 #define IPC_TIMEOUT (250 * 1000)
 
-#define IPC_PTR(x) ((u32)(uintptr_t)(void *)(x))
+#define IPC_PTR(x) ((u32)(uintptr_t)(void *)virtToPhys(x))
 
 static void ipc_bell(u32 w) {
 	HW_IPC_PPCCTRL = (HW_IPC_PPCCTRL & 0x30) | w;
