@@ -218,7 +218,7 @@ static int iso9660LookupAt(const char *name, struct iso9660DirRecordHdr *from, s
 
 		/*log_printf("Found a file: %s\r\n", fileName);*/
 		/* is it the one we're looking for? */
-		if (!strcmp(fileName, name)) {
+		if (!strcasecmp(fileName, name)) {
 			/*log_puts("Found it!!");*/
 			memcpy(out, rec, sizeof(struct iso9660DirRecordHdr));
 			if (from != &pvd.data.pvd.rootDirHdr)
