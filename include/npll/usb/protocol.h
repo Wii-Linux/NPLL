@@ -48,6 +48,10 @@
 #define USB_PROTOCOL_BOT            0x50u
 #define USB_PROTOCOL_UAS            0x62u
 
+#define USB_HID_REQ_SET_IDLE        0x0au
+#define USB_HID_REQ_SET_PROTOCOL    0x0bu
+#define USB_HID_PROTOCOL_BOOT       0u
+
 #define USB_ENDPOINT_NUMBER_MASK    0x0fu
 #define USB_ENDPOINT_DIR_MASK       0x80u
 #define USB_ENDPOINT_XFER_MASK      0x03u

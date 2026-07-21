@@ -115,7 +115,7 @@ SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drive
 # Storage drivers
 SOURCE  += drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/hollywood_nand.c drivers/di.c
 # Input Drivers
-SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c
+SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c drivers/usb_hid.c
 # Misc Drivers
 SOURCE  += drivers/hollywood_aes.c drivers/hollywood_sha1.c drivers/hollywood_otp.c
 # Filesystems
