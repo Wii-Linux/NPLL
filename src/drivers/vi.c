@@ -26,13 +26,13 @@
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/i2c.h>
 #include <npll/irq.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include <npll/video.h>
 #include <npll/log.h>
 #include <npll/flipper/vi.h>
-#include <npll/hollywood/gpio.h>
 #include <npll/allocator.h>
 
 static REGISTER_DRIVER(viDrv);
@@ -189,140 +189,14 @@ void VIDEO_Shutdown(void)
 	R_VIDEO_STATUS1 = 0;
 }
 
-#define SLAVE_AVE 0xe0
-
-static inline void aveSetDirection(u32 dir)
-{
-	u32 val = (HW_GPIOB_DIR & ~0x8000u) | 0x4000u;
-	if(dir) val |= 0x8000u;
-	HW_GPIOB_DIR = val;
-}
-
-static inline void aveSetSCL(u32 scl)
-{
-	u32 val = HW_GPIOB_OUT & ~0x4000u;
-	if (scl) val |= 0x4000;
-	HW_GPIOB_OUT = val;
-}
-
-static inline void aveSetSDA(u32 sda)
-{
-	u32 val = HW_GPIOB_OUT & ~0x8000u;
-	if (sda) val |= 0x8000;
-	HW_GPIOB_OUT = val;
-}
-
-static inline u32 aveGetSDA()
-{
-	if (HW_GPIOB_IN & 0x8000u)
-		return 1;
-	else
-		return 0;
-}
-
-static u32 __sendSlaveAddress(u8 addr)
-{
-	u32 i;
-
-	aveSetSDA(0);
-	udelay(2);
-
-	aveSetSCL(0);
-	for(i=0;i<8;i++) {
-		if(addr&0x80) aveSetSDA(1);
-		else aveSetSDA(0);
-		udelay(2);
-
-		aveSetSCL(1);
-		udelay(2);
-
-		aveSetSCL(0);
-		addr <<= 1;
-	}
-
-	aveSetDirection(0);
-	udelay(2);
-
-	aveSetSCL(1);
-	udelay(2);
-
-	if(aveGetSDA()!=0) {
-		VI_debug("No ACK\n");
-		return 0;
-	}
-
-	aveSetSDA(0);
-	aveSetDirection(1);
-	aveSetSCL(0);
-
-	return 1;
-}
-
-static u32 __VISendI2CData(u8 addr,void *val,u32 len)
-{
-	u8 c;
-	u32 i,j;
-	u32 ret;
-
-	VI_debug("I2C[%02x]:",addr);
-	for(i=0;i<len;i++)
-		VI_debug(" %02x", ((u8*)val)[i]);
-	VI_debug("\n");
-
-	aveSetDirection(1);
-	aveSetSCL(1);
-
-	aveSetSDA(1);
-	udelay(4);
-
-	ret = __sendSlaveAddress(addr);
-	if(ret==0) {
-		return 0;
-	}
-
-	aveSetDirection(1);
-	for(i=0;i<len;i++) {
-		c = ((u8*)val)[i];
-		for(j=0;j<8;j++) {
-			if(c&0x80) aveSetSDA(1);
-			else aveSetSDA(0);
-			udelay(2);
-
-			aveSetSCL(1);
-			udelay(2);
-			aveSetSCL(0);
-
-			c <<= 1;
-		}
-		aveSetDirection(0);
-		udelay(2);
-		aveSetSCL(1);
-		udelay(2);
-
-		if(aveGetSDA()!=0) {
-			VI_debug("No ACK\n");
-			return 0;
-		}
-
-		aveSetSDA(0);
-		aveSetDirection(1);
-		aveSetSCL(0);
-	}
-
-	aveSetDirection(1);
-	aveSetSDA(0);
-	udelay(2);
-	aveSetSDA(1);
-
-	return 1;
-}
+#define SLAVE_AVE 0x70
 
 static void __VIWriteI2CRegister8(u8 reg, u8 data)
 {
 	u8 buf[2];
 	buf[0] = reg;
 	buf[1] = data;
-	__VISendI2CData(SLAVE_AVE,buf,2);
+	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 2);
 	udelay(2);
 }
 
@@ -332,7 +206,7 @@ static void __VIWriteI2CRegister16(u8 reg, u16 data)
 	buf[0] = reg;
 	buf[1] = (u8)(data >> 8);
 	buf[2] = (u8)(data & 0xFF);
-	__VISendI2CData(SLAVE_AVE,buf,3);
+	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 3);
 	udelay(2);
 }
 
@@ -344,7 +218,7 @@ static void __VIWriteI2CRegister32(u8 reg, u32 data)
 	buf[2] = (u8)(data >> 16) & 0xFF;
 	buf[3] = (u8)(data >> 8) & 0xFF;
 	buf[4] = data & 0xFF;
-	__VISendI2CData(SLAVE_AVE,buf,5);
+	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 5);
 	udelay(2);
 }
 
@@ -353,7 +227,7 @@ static void __VIWriteI2CRegisterBuf(u8 reg, uint size, u8 *data)
 	u8 buf[0x100];
 	buf[0] = reg;
 	memcpy(&buf[1], data, size);
-	__VISendI2CData(SLAVE_AVE,buf, size + 1);
+	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, size + 1);
 	udelay(2);
 }
 
