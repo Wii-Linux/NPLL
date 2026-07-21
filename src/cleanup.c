@@ -17,6 +17,7 @@
 #include <npll/output.h>
 #include <npll/soc.h>
 #include <npll/video.h>
+#include <npll/usb.h>
 
 void (*H_PreEntryHook)(void) = NULL;
 
@@ -36,6 +37,7 @@ void H_PrepareForExecEntry(void) {
 
 	/* disable IRQs */
 	IRQ_Disable();
+	USB_Shutdown();
 
 	/* unmount the current FS */
 	FS_Unmount();

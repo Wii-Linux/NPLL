@@ -20,6 +20,7 @@
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
+#include <npll/usb.h>
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
 struct platOps *H_PlatOps = NULL;
@@ -118,6 +119,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	IRQ_Init();
 	IRQ_Enable();
 	M_Init();
+	USB_Init();
 	B_Init();
 	FS_Init();
 	UI_Init();
@@ -126,6 +128,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	#endif
 	T_EnableEvents();
 	D_Init();
+	USB_Start();
 	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();

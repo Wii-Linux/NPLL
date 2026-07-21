@@ -104,12 +104,12 @@ SOURCE  := bs1.S entry.S gamecube/init.c wii/init.c wii/ios_ipc.c wii/ios_es.c w
 # CPU plumbing
 SOURCE  += exception_2200.S irq_asm.S cpu.c exception.c irq.c
 # Core subsystems
-SOURCE  += allocator.c timer.c panic.c drivers.c i2c.c output.c main.c menu.c sysinfo.c video.c input.c elf.c elf_asm.S linux.c dol.c log.c cleanup.c config.c
+SOURCE  += allocator.c timer.c panic.c drivers.c i2c.c usb.c output.c main.c menu.c sysinfo.c video.c input.c elf.c elf_asm.S linux.c dol.c log.c cleanup.c config.c
 SOURCE  += block.c partition.c fs.c iostats.c
 # libc, compiler support, etc
 SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c armboot_bin.c
 # Bus drivers
-SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c
+SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/usb_hcd.c
 # Video / Output drivers
 SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/usbgecko.c
 # Storage drivers
