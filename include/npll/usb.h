@@ -149,5 +149,8 @@ extern int USB_ControlTransfer(struct usbDevice *dev, u8 type, u8 request, u16 v
 extern int USB_BulkTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual, u32 timeoutUsecs);
 extern int USB_InterruptTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual, u32 timeoutUsecs);
 extern int USB_ClearHalt(struct usbDevice *dev, struct usbEndpoint *ep);
+extern int USB_EnumerateChild(struct usbDevice *parent, uint port,
+	enum usbSpeed speed, struct usbDevice **child);
+extern void USB_DisconnectDevice(struct usbDevice *dev);
 
 #endif /* _NPLL_USB_H */

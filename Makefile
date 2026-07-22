@@ -109,7 +109,7 @@ SOURCE  += block.c partition.c fs.c iostats.c
 # libc, compiler support, etc
 SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c libc/string_asm.S libc/cc-runtime.c stack_protector.c font.c armboot_bin.c
 # Bus drivers
-SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/usb_hcd.c
+SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/usb_hcd.c drivers/usb_hub.c
 # Video / Output drivers
 SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/usbgecko.c
 # Storage drivers

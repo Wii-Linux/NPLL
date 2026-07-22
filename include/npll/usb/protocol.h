@@ -69,8 +69,13 @@
 
 #define USB_PORT_STAT_CONNECTION    BIT(0)
 #define USB_PORT_STAT_ENABLE        BIT(1)
+#define USB_PORT_STAT_RESET         BIT(4)
 #define USB_PORT_STAT_LOW_SPEED     BIT(9)
 #define USB_PORT_STAT_HIGH_SPEED    BIT(10)
+#define USB_PORT_STAT_POWER         BIT(8)
+#define USB_PORT_STAT_C_CONNECTION  BIT(0)
+#define USB_PORT_STAT_C_ENABLE      BIT(1)
+#define USB_PORT_STAT_C_RESET       BIT(4)
 
 struct usbSetupPacket {
 	u8 requestType;
@@ -108,6 +113,16 @@ struct usbEndpointDescriptor {
 	u8 length, descriptorType, endpointAddress, attributes;
 	u16 maxPacketSize;
 	u8 interval;
+} __attribute__((packed));
+
+struct usbHubDescriptor {
+	u8 length, descriptorType, numPorts;
+	u16 characteristics;
+	u8 powerOnToPowerGood, controllerCurrent;
+} __attribute__((packed));
+
+struct usbHubPortStatus {
+	u16 status, change;
 } __attribute__((packed));
 
 /* Bulk-only transport */

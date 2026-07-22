@@ -48,12 +48,18 @@
 
 #define EHCI_LINK_TERMINATE  BIT(0)
 #define EHCI_LINK_QH         BIT(1)
+#define EHCI_QH_SPEED_FULL   (0u << 12)
+#define EHCI_QH_SPEED_LOW    (1u << 12)
 #define EHCI_QH_SPEED_HIGH   (2u << 12)
 #define EHCI_QH_DTC          BIT(14)
 #define EHCI_QH_HEAD         BIT(15)
+#define EHCI_QH_CONTROL_EP   BIT(27)
 #define EHCI_QH_RL(n)        ((u32)(n) << 28)
 #define EHCI_QH_MULT_ONE     (1u << 30)
 #define EHCI_QH_RL_HS        4u
+#define EHCI_QH_CMASK(n)     ((u32)(n) << 8)
+#define EHCI_QH_HUB_ADDR(n)  ((u32)(n) << 16)
+#define EHCI_QH_HUB_PORT(n)  ((u32)(n) << 23)
 #define EHCI_QTD_ACTIVE      BIT(7)
 #define EHCI_QTD_HALTED      BIT(6)
 #define EHCI_QTD_DBE         BIT(5)
@@ -432,6 +438,13 @@ static u32 ehciDataChunk(const void *buffer, u32 remaining, u16 maxPacketSize) {
 	return chunk;
 }
 
+static u32 ehciControlDmaLength(const struct usbTransfer *transfer, u32 chunk, u32 remaining, bool input) {
+	if (input && transfer->device->speed != USB_SPEED_HIGH && chunk == remaining)
+		return (chunk + transfer->endpoint->maxPacketSize - 1u) & ~((u32)transfer->endpoint->maxPacketSize - 1u);
+
+	return chunk;
+}
+
 static void ehciBuildQTD(struct ehciQtd *qtd, u32 next, u32 alternate, u32 token, const void *buffer, u32 length) {
 	memset(qtd, 0, sizeof(*qtd));
 
@@ -441,6 +454,37 @@ static void ehciBuildQTD(struct ehciQtd *qtd, u32 next, u32 alternate, u32 token
 
 	if (length)
 		ehciSetBuffers(qtd, buffer, length);
+}
+
+static bool ehciCanTransfer(const struct usbDevice *dev) {
+	return dev->speed == USB_SPEED_HIGH ||
+		(dev->ttHubAddress && dev->ttPort);
+}
+
+static u32 ehciQhEndpoint(struct usbTransfer *transfer, bool control) {
+	struct usbDevice *dev = transfer->device;
+	struct usbEndpoint *endpoint = transfer->endpoint;
+	u32 value = (u32)dev->address |
+		((u32)(endpoint->address & USB_ENDPOINT_NUMBER_MASK) << 8) |
+		EHCI_QH_DTC | ((u32)endpoint->maxPacketSize << 16);
+	if (dev->speed == USB_SPEED_HIGH) {
+		value |= EHCI_QH_SPEED_HIGH | EHCI_QH_RL(EHCI_QH_RL_HS);
+	}
+	else if (dev->speed == USB_SPEED_LOW)
+		value |= EHCI_QH_SPEED_LOW;
+	else
+		value |= EHCI_QH_SPEED_FULL;
+	if (control && dev->speed != USB_SPEED_HIGH)
+		value |= EHCI_QH_CONTROL_EP;
+	return value;
+}
+
+static u32 ehciQhCaps(const struct usbDevice *dev) {
+	u32 value = EHCI_QH_MULT_ONE;
+	if (dev->speed != USB_SPEED_HIGH)
+		value |= EHCI_QH_HUB_ADDR(dev->ttHubAddress) |
+			EHCI_QH_HUB_PORT(dev->ttPort);
+	return value;
 }
 
 static int ehciDisableAsync(struct usbHostController *hc) {
@@ -459,15 +503,15 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 	struct hcdPrivate *priv = hc->priv;
 	struct ehciSchedule *sched = priv->ehci;
 	struct ehciQtd *qtd;
-	u32 qhPhys, statusPhys, nextPhys, token, chunk, remaining, completed;
-	u32 command, qtdToken;
+	u32 qhPhys, statusPhys, nextPhys, token, chunk, dmaLength, remaining, completed;
+	u32 command, overlayNext, qtdToken;
 	u32 failureToken = 0;
 	u8 *cursor;
 	uint dataFirst, statusIndex, count, i;
 	bool input, toggle;
 	u64 start;
 
-	if (!sched || !transfer->setup || !transfer->endpoint || transfer->device->speed != USB_SPEED_HIGH)
+	if (!sched || !transfer->setup || !transfer->endpoint || !ehciCanTransfer(transfer->device))
 		return -EINVAL;
 	if (transfer->length && !transfer->data)
 		return -EINVAL;
@@ -502,13 +546,14 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 	toggle = true;
 	for (i = dataFirst; i < statusIndex; i++) {
 		chunk = ehciQtdCapacity(cursor, remaining);
+		dmaLength = ehciControlDmaLength(transfer, chunk, remaining, input);
 		nextPhys = i + 1u < statusIndex ? ehciPhys(&sched->qtd[i + 1u]) : statusPhys;
 		token = input ? EHCI_QTD_PID_IN : EHCI_QTD_PID_OUT;
 
 		if (toggle)
 			token |= EHCI_QTD_TOGGLE;
 
-		ehciBuildQTD(&sched->qtd[i], nextPhys, statusPhys, token, cursor, chunk);
+		ehciBuildQTD(&sched->qtd[i], nextPhys, statusPhys, token, cursor, dmaLength);
 		if (((chunk + transfer->endpoint->maxPacketSize - 1u) / transfer->endpoint->maxPacketSize) & 1u)
 			toggle = !toggle;
 
@@ -521,12 +566,8 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 
 	qhPhys = ehciPhys(&sched->qh);
 	sched->qh.horizontal = npll_cpu_to_le32(qhPhys | EHCI_LINK_QH);
-	sched->qh.endpoint = npll_cpu_to_le32(
-		((u32)transfer->device->address) | EHCI_QH_SPEED_HIGH | EHCI_QH_DTC |
-		EHCI_QH_HEAD | ((u32)transfer->endpoint->maxPacketSize << 16) |
-		EHCI_QH_RL(EHCI_QH_RL_HS)
-	);
-	sched->qh.endpointCaps = npll_cpu_to_le32(EHCI_QH_MULT_ONE);
+	sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(transfer, true) | EHCI_QH_HEAD);
+	sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device));
 	sched->qh.overlayNext = npll_cpu_to_le32(ehciPhys(&sched->qtd[0]));
 	sched->qh.overlayAlternate = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
 
@@ -550,23 +591,31 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 
 	start = mftb();
 	while (true) {
-		dcache_invalidate(&sched->qtd[statusIndex], sizeof(sched->qtd[statusIndex]));
-		qtdToken = npll_le32_to_cpu(sched->qtd[statusIndex].token);
-		if (!(qtdToken & EHCI_QTD_ACTIVE))
-			break;
-
-		for (i = 0; i < statusIndex; i++) {
-			dcache_invalidate(&sched->qtd[i], sizeof(sched->qtd[i]));
-			qtdToken = npll_le32_to_cpu(sched->qtd[i].token);
-			if (qtdToken & EHCI_QTD_ERROR) {
-				failureToken = qtdToken;
-				goto finished;
-			}
+		/*
+		 * Once a qTD has been prefetched, its backing token is not a
+		 * reliable indication of execution progress on Hollywood/Latte.
+		 * In particular, split transactions may leave it looking inactive
+		 * while the live qH overlay is still completing split phases.
+		 */
+		dcache_invalidate(&sched->qh, sizeof(sched->qh));
+		qtdToken = npll_le32_to_cpu(sched->qh.overlayToken);
+		overlayNext = npll_le32_to_cpu(sched->qh.overlayNext);
+		if (qtdToken & EHCI_QTD_ERROR) {
+			failureToken = qtdToken;
+			goto finished;
 		}
 
+		/*
+		 * Before the HC fetches SETUP the overlay token is also inactive;
+		 * overlayNext still points at the first qTD in that state.
+		 */
+		if (!(qtdToken & EHCI_QTD_ACTIVE) && (overlayNext & EHCI_LINK_TERMINATE))
+			break;
+
 		if (T_HasElapsed(start, transfer->timeoutUsecs)) {
-			dcache_invalidate(&sched->qh, sizeof(sched->qh));
-			log_printf("bus %u control timeout: qTD %08x, overlay %08x\r\n", hc->bus, qtdToken, npll_le32_to_cpu(sched->qh.overlayToken));
+			log_printf("bus %u control timeout: qTD %08x, overlay %08x\r\n",
+				hc->bus, qtdToken, npll_le32_to_cpu(sched->qh.overlayToken)
+			);
 			transfer->status = USB_TRANSFER_TIMEOUT;
 			ehciDisableAsync(hc);
 			return -ETIMEDOUT;
@@ -597,7 +646,11 @@ finished:
 
 		qtdToken = npll_le32_to_cpu(qtd->token);
 		chunk = ehciQtdCapacity(cursor, remaining);
-		completed += chunk - EHCI_QTD_REMAIN(qtdToken);
+		dmaLength = ehciControlDmaLength(transfer, chunk, remaining, input);
+		if (EHCI_QTD_REMAIN(qtdToken) <= dmaLength) {
+			u32 done = dmaLength - EHCI_QTD_REMAIN(qtdToken);
+			completed += done < chunk ? done : chunk;
+		}
 		remaining -= chunk;
 		cursor += chunk;
 
@@ -639,7 +692,7 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 	bool input, toggle, finished;
 	u64 start;
 
-	if (!sched || !endpoint || transfer->device->speed != USB_SPEED_HIGH ||
+	if (!sched || !endpoint || !ehciCanTransfer(transfer->device) ||
 	    (endpoint->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_BULK ||
 	    !endpoint->maxPacketSize || (transfer->length && !transfer->data))
 		return -EINVAL;
@@ -686,14 +739,8 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 
 	qhPhys = ehciPhys(&sched->qh);
 	sched->qh.horizontal = npll_cpu_to_le32(qhPhys | EHCI_LINK_QH);
-	sched->qh.endpoint = npll_cpu_to_le32(
-		((u32)transfer->device->address) |
-		((u32)(endpoint->address & USB_ENDPOINT_NUMBER_MASK) << 8) |
-		EHCI_QH_SPEED_HIGH | EHCI_QH_DTC |
-		EHCI_QH_HEAD | ((u32)endpoint->maxPacketSize << 16) |
-		EHCI_QH_RL(EHCI_QH_RL_HS)
-	);
-	sched->qh.endpointCaps = npll_cpu_to_le32(EHCI_QH_MULT_ONE);
+	sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(transfer, false) | EHCI_QH_HEAD);
+	sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device));
 	sched->qh.overlayNext = npll_cpu_to_le32(ehciPhys(&sched->qtd[0]));
 	sched->qh.overlayAlternate = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
 
@@ -813,9 +860,9 @@ static int ehciInterruptTransfer(struct usbHostController *hc, struct usbTransfe
 	uint i, intervalMicroframes, framePeriod, smask;
 
 	if (!sched || !priv->periodicList || !endpoint ||
-	    transfer->device->speed != USB_SPEED_HIGH ||
+	    !ehciCanTransfer(transfer->device) ||
 	    (endpoint->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_INT ||
-	    !endpoint->maxPacketSize || !endpoint->interval || endpoint->interval > 16 ||
+	    !endpoint->maxPacketSize || !endpoint->interval ||
 	    transfer->length > endpoint->maxPacketSize ||
 	    (transfer->length && !transfer->data))
 		return -EINVAL;
@@ -830,25 +877,38 @@ static int ehciInterruptTransfer(struct usbHostController *hc, struct usbTransfe
 	ehciBuildQTD(&sched->qtd[0], EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, token | EHCI_QTD_IOC, transfer->data, transfer->length);
 	qhPhys = ehciPhys(&sched->qh);
 	sched->qh.horizontal = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
-	sched->qh.endpoint = npll_cpu_to_le32(
-		((u32)transfer->device->address) |
-		((u32)(endpoint->address & USB_ENDPOINT_NUMBER_MASK) << 8) |
-		EHCI_QH_SPEED_HIGH | EHCI_QH_DTC |
-		((u32)endpoint->maxPacketSize << 16)
-	);
-	intervalMicroframes = 1u << (endpoint->interval - 1u);
-	if (intervalMicroframes <= 8u) {
-		framePeriod = 1;
-		smask = 0;
-		for (i = 0; i < 8u; i += intervalMicroframes)
-			smask |= BIT(i);
+	sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(transfer, false));
+	if (transfer->device->speed == USB_SPEED_HIGH) {
+		if (endpoint->interval > 16u)
+			return -EINVAL;
+
+		intervalMicroframes = 1u << (endpoint->interval - 1u);
+		if (intervalMicroframes <= 8u) {
+			framePeriod = 1;
+			smask = 0;
+			for (i = 0; i < 8u; i += intervalMicroframes)
+				smask |= BIT(i);
+		}
+		else {
+			framePeriod = intervalMicroframes / 8u;
+			smask = BIT(0);
+		}
+		sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device) | smask);
 	}
 	else {
-		framePeriod = intervalMicroframes / 8u;
+		/*
+		 * One start-split followed by three complete-split opportunities.
+		 * Full/low-speed bInterval is expressed in frames.
+		 */
+		framePeriod = endpoint->interval;
+		if (framePeriod > 1024u)
+			framePeriod = 1024u;
+		for (i = 1; (i << 1) <= framePeriod; i <<= 1)
+			;
+		framePeriod = i;
 		smask = BIT(0);
+		sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device) | smask | EHCI_QH_CMASK(0x1cu));
 	}
-
-	sched->qh.endpointCaps = npll_cpu_to_le32(EHCI_QH_MULT_ONE | smask);
 	sched->qh.overlayNext = npll_cpu_to_le32(ehciPhys(&sched->qtd[0]));
 	sched->qh.overlayAlternate = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
 

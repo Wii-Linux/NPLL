@@ -55,7 +55,7 @@ static bool usbNeedsBounce(const void *data, u32 length) {
 }
 
 static struct usbDevice *allocateDevice(struct usbHostController *hc, uint port,
-	enum usbSpeed speed) {
+	enum usbSpeed speed, struct usbDevice *parent) {
 	uint i;
 
 	for (i = 0; i < USB_MAX_DEVICES; i++) {
@@ -65,7 +65,17 @@ static struct usbDevice *allocateDevice(struct usbHostController *hc, uint port,
 		memset(&devices[i], 0, sizeof(devices[i]));
 		devices[i].hc = hc;
 		devices[i].port = (u8)port;
+		devices[i].parent = parent;
+		devices[i].depth = parent ? (u8)(parent->depth + 1u) : 0;
 		devices[i].speed = speed;
+		if (parent && parent->speed == USB_SPEED_HIGH && speed != USB_SPEED_HIGH) {
+			devices[i].ttHubAddress = parent->address;
+			devices[i].ttPort = (u8)(port + 1u);
+		}
+		else if (parent && parent->ttHubAddress) {
+			devices[i].ttHubAddress = parent->ttHubAddress;
+			devices[i].ttPort = parent->ttPort;
+		}
 		devices[i].connected = true;
 		devices[i].descriptor.maxPacketSize0 = 8;
 		return &devices[i];
@@ -98,12 +108,19 @@ static void disconnectDevice(struct usbDevice *dev) {
 		return;
 
 	dev->connected = false;
+	for (i = 0; i < USB_MAX_DEVICES; i++)
+		if (devices[i].connected && devices[i].parent == dev)
+			disconnectDevice(&devices[i]);
 	for (i = 0; i < dev->numInterfaces; i++) {
 		if (dev->interfaces[i].driver) {
 			dev->interfaces[i].driver->remove(&dev->interfaces[i]);
 			dev->interfaces[i].driver = NULL;
 		}
 	}
+}
+
+void USB_DisconnectDevice(struct usbDevice *dev) {
+	disconnectDevice(dev);
 }
 
 static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
@@ -119,24 +136,39 @@ static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
 
 	config = (struct usbConfigurationDescriptor *)dev->configurationData;
 	if (config->length < sizeof(*config) || config->descriptorType != USB_DT_CONFIGURATION ||
-	    npll_le16_to_cpu(config->totalLength) != totalLength || !config->configurationValue)
+	    npll_le16_to_cpu(config->totalLength) != totalLength || !config->configurationValue) {
+		log_printf("bus %u address %u: bad config header %u/%u/%u/%u expected %u\r\n",
+			dev->hc->bus, dev->address, config->length, config->descriptorType,
+			npll_le16_to_cpu(config->totalLength), config->configurationValue,
+			totalLength);
 		return -EIO;
+	}
 
 	dev->numInterfaces = 0;
 	offset = config->length;
 	while (offset < totalLength) {
-		if ((u16)(totalLength - offset) < sizeof(*header))
+		if ((u16)(totalLength - offset) < sizeof(*header)) {
+			log_printf("bus %u address %u: descriptor tail at %u/%u\r\n",
+				dev->hc->bus, dev->address, offset, totalLength);
 			return -EIO;
+		}
 
 		header = (struct usbDescriptorHeader *)(dev->configurationData + offset);
-		if (header->length < sizeof(*header) || header->length > (u16)(totalLength - offset))
+		if (header->length < sizeof(*header) || header->length > (u16)(totalLength - offset)) {
+			log_printf("bus %u address %u: bad descriptor at %u: %u/%u, remain %u\r\n",
+				dev->hc->bus, dev->address, offset, header->length,
+				header->descriptorType, totalLength - offset);
 			return -EIO;
+		}
 
 		next = (u16)(offset + header->length);
 
 		if (header->descriptorType == USB_DT_INTERFACE) {
-			if (header->length < sizeof(*interfaceDesc))
+			if (header->length < sizeof(*interfaceDesc)) {
+				log_printf("bus %u address %u: short interface at %u: %u\r\n",
+					dev->hc->bus, dev->address, offset, header->length);
 				return -EIO;
+			}
 
 			if (current) {
 				current->extraLength = (u16)(offset - (u16)(current->extra - dev->configurationData));
@@ -163,8 +195,11 @@ static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
 			}
 		}
 		else if (header->descriptorType == USB_DT_ENDPOINT && current) {
-			if (header->length < sizeof(*endpointDesc))
+			if (header->length < sizeof(*endpointDesc)) {
+				log_printf("bus %u address %u: short endpoint at %u: %u\r\n",
+					dev->hc->bus, dev->address, offset, header->length);
 				return -EIO;
+			}
 
 			if (current->numEndpoints >= USB_MAX_ENDPOINTS) {
 				log_printf("bus %u address %u interface %u: more than %u endpoints\r\n",
@@ -262,17 +297,21 @@ static int configureDevice(struct usbDevice *dev) {
 	return 0;
 }
 
-static int enumerateRootDevice(struct usbHostController *hc, uint port, enum usbSpeed speed) {
+static int enumerateDevice(struct usbHostController *hc, struct usbDevice *parent, uint port, enum usbSpeed speed, struct usbDevice **result) {
 	struct usbDevice *dev;
 	u8 address, descriptorBuffer[32] ALIGN(32);
 	int ret;
 	uint attempt, i;
 
-	dev = allocateDevice(hc, port, speed);
+	if (parent && parent->depth + 1u >= USB_MAX_DEPTH)
+		return -ELOOP;
+
+	dev = allocateDevice(hc, port, speed, parent);
 	if (!dev)
 		return -ENOSPC;
 
-	hc->rootDevices[port] = dev;
+	if (result)
+		*result = dev;
 
 	ret = -EIO;
 	for (attempt = 0; attempt < 3; attempt++) {
@@ -375,9 +414,17 @@ static int enumerateRootDevice(struct usbHostController *hc, uint port, enum usb
 	return 0;
 
 fail:
-	hc->rootDevices[port] = NULL;
+	if (result)
+		*result = NULL;
 	disconnectDevice(dev);
 	return ret;
+}
+
+int USB_EnumerateChild(struct usbDevice *parent, uint port,
+	enum usbSpeed speed, struct usbDevice **child) {
+	if (!parent || !parent->connected || !child || port >= 255u)
+		return -EINVAL;
+	return enumerateDevice(parent->hc, parent, port, speed, child);
 }
 
 void USB_Init(void) {
@@ -571,7 +618,7 @@ int USB_ControlTransfer(struct usbDevice *dev, u8 type, u8 request, u16 value, u
 	setup.index = npll_cpu_to_le16(index);
 	setup.length = npll_cpu_to_le16(length);
 
-	if (usbNeedsBounce(data, length)) {
+	if (usbNeedsBounce(data, length) || (length && (type & USB_DIR_IN) && dev->speed != USB_SPEED_HIGH && dev->ttHubAddress)) {
 		bounce = M_PoolAlloc(POOL_MEM2, alignUpU32(length, 32), 32);
 		memset(bounce, 0, alignUpU32(length, 32));
 
@@ -755,7 +802,7 @@ void USB_Poll(void) {
 				speed == USB_SPEED_LOW ? "low" : "full"
 			);
 
-			ret = enumerateRootDevice(hc, port, speed);
+			ret = enumerateDevice(hc, NULL, port, speed, &hc->rootDevices[port]);
 			if (ret)
 				log_printf("bus %u port %u enumeration failed: %d\r\n",
 					hc->bus, port + 1, ret);
