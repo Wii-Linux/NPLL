@@ -149,8 +149,11 @@ static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
 			 * settings remain available in the retained descriptor blob.
 			 */
 			if (!interfaceDesc->alternateSetting) {
-				if (dev->numInterfaces >= USB_MAX_INTERFACES)
+				if (dev->numInterfaces >= USB_MAX_INTERFACES) {
+					log_printf("bus %u address %u: more than %u interfaces\r\n",
+						dev->hc->bus, dev->address, USB_MAX_INTERFACES);
 					return -ENOSPC;
+				}
 
 				current = &dev->interfaces[dev->numInterfaces++];
 				memset(current, 0, sizeof(*current));
@@ -163,8 +166,12 @@ static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
 			if (header->length < sizeof(*endpointDesc))
 				return -EIO;
 
-			if (current->numEndpoints >= USB_MAX_ENDPOINTS)
+			if (current->numEndpoints >= USB_MAX_ENDPOINTS) {
+				log_printf("bus %u address %u interface %u: more than %u endpoints\r\n",
+					dev->hc->bus, dev->address,
+					current->descriptor.interfaceNumber, USB_MAX_ENDPOINTS);
 				return -ENOSPC;
+			}
 
 			endpointDesc = (struct usbEndpointDescriptor *)header;
 
