@@ -947,7 +947,10 @@ static void ohciBuildED(struct ohciED *ed, struct usbTransfer *transfer,
 
 	ed->control = npll_cpu_to_le32(control);
 	ed->tail = npll_cpu_to_le32(tail);
-	ed->head = npll_cpu_to_le32(head);
+	/* For non-control endpoints the TD asks hardware to use this carry bit
+	 * as the next DATA0/DATA1 value, then OHCI updates it on completion. */
+	ed->head = npll_cpu_to_le32(head |
+		(transfer->endpoint->toggle ? OHCI_ED_HEAD_CARRY : 0));
 	ed->next = 0;
 }
 
@@ -1024,6 +1027,29 @@ ohciDone:
 
 	/* let the HC finish the frame before the shared schedule is reused */
 	udelay(2000);
+
+	/*
+	 * A periodic TD can complete after the polling deadline but before PLE
+	 * actually takes effect at the frame boundary.  Reconcile that late
+	 * completion; otherwise the device advances its data toggle while the
+	 * software endpoint incorrectly retains the old one.
+	 */
+	if (cc == 0xfu) {
+		complete = true;
+		for (i = 0; i < numTDs; i++) {
+			dcache_invalidate(&sched->td[i], sizeof(sched->td[i]));
+			tdControl = npll_le32_to_cpu(sched->td[i].control);
+			cc = (tdControl & OHCI_TD_CC_MASK) >> OHCI_TD_CC_SHIFT;
+			if (cc == 0xfu) {
+				complete = false;
+				break;
+			}
+			if (cc)
+				break;
+		}
+		if (complete && i == numTDs)
+			cc = 0;
+	}
 	if (conditionCode)
 		*conditionCode = cc;
 
@@ -1114,8 +1140,7 @@ static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer 
 	int ret;
 
 	memset(sched, 0, sizeof(*sched));
-	flags = (input ? OHCI_TD_DP_IN | OHCI_TD_ROUNDING : OHCI_TD_DP_OUT) |
-		(endpoint->toggle ? OHCI_TD_TOGGLE_1 : OHCI_TD_TOGGLE_0);
+	flags = (input ? OHCI_TD_DP_IN | OHCI_TD_ROUNDING : OHCI_TD_DP_OUT) | OHCI_TD_TOGGLE_CARRY;
 
 	ohciBuildTD(&sched->td[0], ohciPhys(&sched->td[1]), flags, buffer, length);
 	ohciBuildTD(&sched->td[1], 0, 0, NULL, 0);
@@ -1139,6 +1164,8 @@ static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer 
 	dcache_invalidate(&sched->ed, sizeof(sched->ed));
 	endpoint->toggle = (u8)!!(npll_le32_to_cpu(sched->ed.head) & OHCI_ED_HEAD_CARRY);
 	if (cc) {
+		log_printf("bus %u OHCI endpoint %02x condition code %u\r\n",
+			hc->bus, endpoint->address, cc);
 		ohciSetStatus(transfer, cc);
 		return 0;
 	}

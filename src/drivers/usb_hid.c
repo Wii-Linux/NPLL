@@ -17,6 +17,7 @@
 #define MAX_USB_KEYBOARDS 8
 #define KEYBOARD_POLL_US  10000u
 #define KEYBOARD_TIMEOUT_US 30000u
+#define KEYBOARD_ERROR_RETRIES 3u
 #define KEYBOARD_REPEAT_DELAY_US 400000u
 #define KEYBOARD_REPEAT_PERIOD_US 100000u
 
@@ -60,6 +61,33 @@ static u8 reportActionKey(const u8 *report) {
 	return 0;
 }
 
+static int keyboardReadReport(struct usbKeyboard *keyboard, u8 *report,
+	u32 *actual) {
+	int ret = -EIO;
+	uint attempt;
+
+	for (attempt = 0; attempt < KEYBOARD_ERROR_RETRIES; attempt++) {
+		*actual = 0;
+		ret = USB_InterruptTransfer(keyboard->interface->device, keyboard->endpoint, report, sizeof(keyboard->report), actual, KEYBOARD_TIMEOUT_US);
+
+		if (!ret || ret == -ETIMEDOUT)
+			return ret;
+
+		if (ret == -EPIPE) {
+			ret = USB_ClearHalt(keyboard->interface->device, keyboard->endpoint);
+			if (ret)
+				return ret;
+		}
+
+		/*
+		 * A changed HID report remains queued until ACKed.  Retry transient
+		 * transaction/toggle errors while that report is still available.
+		 */
+		udelay(1000);
+	}
+	return ret;
+}
+
 static void keyboardPoll(void *data) {
 	struct usbKeyboard *keyboard;
 	inputEvent_t action;
@@ -77,8 +105,7 @@ static void keyboardPoll(void *data) {
 
 		memset(report, 0, sizeof(report));
 		actual = 0;
-
-		ret = USB_InterruptTransfer(keyboard->interface->device, keyboard->endpoint, report, sizeof(report), &actual, KEYBOARD_TIMEOUT_US);
+		ret = keyboardReadReport(keyboard, report, &actual);
 		if (ret == -ETIMEDOUT) {
 			now = mftb();
 			if (keyboard->repeatKey &&
