@@ -102,6 +102,16 @@ struct usbHostControllerOps {
 	void (*poll)(struct usbHostController *hc);
 	int (*transfer)(struct usbHostController *hc, struct usbTransfer *transfer);
 	int (*cancel)(struct usbHostController *hc, struct usbTransfer *transfer);
+	/*
+	 * Resident interrupt-IN endpoints.  interruptArm links a QH/ED into the
+	 * hardware periodic schedule and returns immediately; the controller then
+	 * polls the device on its own.  interruptPoll is a non-blocking peek at the
+	 * DMA result (see USB_InterruptPoll for return values).  interruptStop
+	 * unlinks and frees the endpoint's controller state.
+	 */
+	int (*interruptArm)(struct usbHostController *hc, struct usbDevice *dev, struct usbEndpoint *ep, u32 length);
+	int (*interruptPoll)(struct usbHostController *hc, struct usbEndpoint *ep, void *data, u32 length, u32 *actual);
+	void (*interruptStop)(struct usbHostController *hc, struct usbEndpoint *ep);
 	int (*rootPortStatus)(struct usbHostController *hc, uint port, struct usbRootPortStatus *status);
 	int (*rootPortReset)(struct usbHostController *hc, uint port, enum usbSpeed *speed);
 	void (*rootPortClearChange)(struct usbHostController *hc, uint port);
@@ -147,7 +157,22 @@ extern void USB_UnregisterDriver(struct usbDriver *driver);
 extern int USB_SubmitTransfer(struct usbTransfer *transfer);
 extern int USB_ControlTransfer(struct usbDevice *dev, u8 type, u8 request, u16 value, u16 index, void *data, u16 length, u32 timeoutUsecs);
 extern int USB_BulkTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual, u32 timeoutUsecs);
-extern int USB_InterruptTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual, u32 timeoutUsecs);
+/*
+ * Non-blocking interrupt-IN polling.  Arm once (typically at probe), then call
+ * USB_InterruptPoll from a timed-event callback: the CPU never busy-waits on the
+ * bus, so an idle keyboard or hub costs almost nothing.  Call USB_InterruptStop
+ * from the driver's remove().
+ *
+ * USB_InterruptPoll returns:
+ *    1  a new report arrived; up to `length` bytes copied to `data`, count in
+ *       *actual.  The endpoint is automatically re-armed for the next report.
+ *    0  armed, nothing new yet (the common idle case).
+ *  -EPIPE  endpoint halted; caller should USB_ClearHalt then USB_InterruptArm.
+ *  <0  other fatal error.
+ */
+extern int USB_InterruptArm(struct usbDevice *dev, struct usbEndpoint *ep, u32 length);
+extern int USB_InterruptPoll(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual);
+extern void USB_InterruptStop(struct usbDevice *dev, struct usbEndpoint *ep);
 extern int USB_ClearHalt(struct usbDevice *dev, struct usbEndpoint *ep);
 extern int USB_EnumerateChild(struct usbDevice *parent, uint port,
 	enum usbSpeed speed, struct usbDevice **child);

@@ -23,8 +23,6 @@
 #define MAX_USB_KEYBOARDS 8
 #define MAX_USB_DRH 2
 #define KEYBOARD_POLL_US  10000u
-#define KEYBOARD_TIMEOUT_US 30000u
-#define KEYBOARD_ERROR_RETRIES 3u
 #define KEYBOARD_REPEAT_DELAY_US 400000u
 #define KEYBOARD_REPEAT_PERIOD_US 100000u
 
@@ -102,27 +100,19 @@ static u8 reportActionKey(const u8 *report) {
 	return 0;
 }
 
+/*
+ * Non-blocking peek at the resident interrupt endpoint.  Returns 1 when a new
+ * report was copied out (count in *actual), 0 when nothing is queued, or a
+ * negative errno on a fatal error.  A halted endpoint is recovered and re-armed
+ * transparently, reported as "nothing this round".
+ */
 static int hidReadReport(struct usbInterface *interface, struct usbEndpoint *endpoint, void *report, u32 length, u32 *actual) {
-	int ret = -EIO;
-	uint attempt;
+	int ret = USB_InterruptPoll(interface->device, endpoint, report, length, actual);
 
-	for (attempt = 0; attempt < KEYBOARD_ERROR_RETRIES; attempt++) {
-		*actual = 0;
-		ret = USB_InterruptTransfer(interface->device, endpoint, report, length, actual, KEYBOARD_TIMEOUT_US);
-		if (!ret || ret == -ETIMEDOUT)
-			return ret;
-
-		if (ret == -EPIPE) {
-			ret = USB_ClearHalt(interface->device, endpoint);
-			if (ret)
-				return ret;
-		}
-
-		/*
-		 * A changed HID report remains queued until ACKed.  Retry transient
-		 * transaction/toggle errors while that report is still available.
-		 */
-		udelay(1000);
+	if (ret == -EPIPE) {
+		USB_ClearHalt(interface->device, endpoint);
+		USB_InterruptArm(interface->device, endpoint, length);
+		return 0;
 	}
 	return ret;
 }
@@ -239,12 +229,12 @@ static void drhPoll(void) {
 		actual = 0;
 		ret = hidReadReport(drh->interface, drh->endpoint, report, sizeof(report), &actual);
 
-		if (ret == -ETIMEDOUT)
-			continue;
+		if (ret == 0)
+			continue;   /* no new report queued */
 
-		if (ret) {
+		if (ret < 0) {
 			if (!drh->errorLogged) {
-				log_printf("DRH interrupt transfer failed: %d\r\n", ret);
+				log_printf("DRH interrupt poll failed: %d\r\n", ret);
 				drh->errorLogged = true;
 			}
 			continue;
@@ -275,7 +265,8 @@ static void keyboardPoll(void *data) {
 		memset(report, 0, sizeof(report));
 		actual = 0;
 		ret = keyboardReadReport(keyboard, report, &actual);
-		if (ret == -ETIMEDOUT) {
+		if (ret == 0) {
+			/* no new report: drive key auto-repeat off the held key */
 			now = mftb();
 			if (keyboard->repeatKey &&
 			    T_HasElapsed(keyboard->repeatStarted, KEYBOARD_REPEAT_DELAY_US) &&
@@ -285,9 +276,9 @@ static void keyboardPoll(void *data) {
 			}
 			continue;
 		}
-		if (ret) {
+		if (ret < 0) {
 			if (!keyboard->errorLogged) {
-				log_printf("keyboard interrupt transfer failed: %d\r\n", ret);
+				log_printf("keyboard interrupt poll failed: %d\r\n", ret);
 				keyboard->errorLogged = true;
 			}
 			continue;
@@ -370,6 +361,12 @@ static int keyboardProbe(struct usbInterface *interface, const struct usbDeviceI
 	memset(keyboard, 0, sizeof(*keyboard));
 	keyboard->interface = interface;
 	keyboard->endpoint = endpoint;
+
+	ret = USB_InterruptArm(interface->device, endpoint, sizeof(keyboard->report));
+	if (ret) {
+		memset(keyboard, 0, sizeof(*keyboard));
+		return ret;
+	}
 	interface->driverData = keyboard;
 	log_printf("HID boot keyboard bound on bus %u address %u interface %u\r\n",
 		interface->device->hc->bus, interface->device->address,
@@ -384,6 +381,7 @@ static void keyboardRemove(struct usbInterface *interface) {
 	if (!keyboard)
 		return;
 
+	USB_InterruptStop(interface->device, keyboard->endpoint);
 	memset(keyboard, 0, sizeof(*keyboard));
 	interface->driverData = NULL;
 }
@@ -418,6 +416,11 @@ static int drhProbe(struct usbInterface *interface, const struct usbDeviceId *id
 	memset(drh, 0, sizeof(*drh));
 	drh->interface = interface;
 	drh->endpoint = endpoint;
+
+	if (USB_InterruptArm(interface->device, endpoint, DRH_REPORT_SIZE)) {
+		memset(drh, 0, sizeof(*drh));
+		return -EIO;
+	}
 	interface->driverData = drh;
 	log_printf("DRH bound on bus %u address %u interface %u, endpoint %02x/%u\r\n",
 		interface->device->hc->bus, interface->device->address,
@@ -430,6 +433,7 @@ static void drhRemove(struct usbInterface *interface) {
 	struct usbDRH *drh = interface->driverData;
 	if (!drh)
 		return;
+	USB_InterruptStop(interface->device, drh->endpoint);
 	memset(drh, 0, sizeof(*drh));
 	interface->driverData = NULL;
 }

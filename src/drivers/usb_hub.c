@@ -17,7 +17,6 @@
 #define USB_MAX_HUBS 8
 #define USB_HUB_MAX_PORTS 15
 #define USB_HUB_POLL_US 20000u
-#define USB_HUB_TIMEOUT_US 100000u
 
 struct usbHub {
 	struct usbInterface *interface;
@@ -155,13 +154,19 @@ static void hubPoll(void *data) {
 
 		memset(bitmap, 0, sizeof(bitmap));
 		actual = 0;
-		ret = USB_InterruptTransfer(hub->interface->device, hub->interrupt, bitmap, (hub->numPorts + 8u) / 8u, &actual, USB_HUB_TIMEOUT_US);
-		if (ret == -ETIMEDOUT)
-			continue;
+		ret = USB_InterruptPoll(hub->interface->device, hub->interrupt, bitmap, (hub->numPorts + 8u) / 8u, &actual);
+		if (ret == 0)
+			continue;   /* armed, no status change yet */
 
-		if (ret) {
+		if (ret == -EPIPE) {
+			/* status endpoint halted: clear it and re-arm */
+			USB_ClearHalt(hub->interface->device, hub->interrupt);
+			USB_InterruptArm(hub->interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
+			continue;
+		}
+		if (ret < 0) {
 			if (!hub->errorLogged)
-				log_printf("hub interrupt transfer failed: %d\r\n", ret);
+				log_printf("hub interrupt poll failed: %d\r\n", ret);
 			hub->errorLogged = true;
 			continue;
 		}
@@ -225,6 +230,16 @@ static int hubProbe(struct usbInterface *interface, const struct usbDeviceId *id
 		}
 	}
 	udelay((u32)descriptor.powerOnToPowerGood * 2000u);
+
+	/*
+	 * Arm the status-change endpoint as a resident interrupt: the controller
+	 * polls it in hardware, so hubPoll never busy-waits on an idle hub.
+	 */
+	ret = USB_InterruptArm(interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
+	if (ret) {
+		memset(hub, 0, sizeof(*hub));
+		return ret;
+	}
 	interface->driverData = hub;
 	log_printf("hub bound on bus %u address %u, %u ports\r\n", interface->device->hc->bus, interface->device->address, hub->numPorts);
 
@@ -245,6 +260,8 @@ static void hubRemove(struct usbInterface *interface) {
 
 	if (!hub)
 		return;
+
+	USB_InterruptStop(interface->device, hub->interrupt);
 	for (port = 0; port < hub->numPorts; port++)
 		hubDetachPort(hub, port);
 

@@ -123,12 +123,53 @@ enum hcdType {
 	HCD_EHCI,
 	HCD_OHCI
 };
+/*
+ * Resident interrupt-IN state.  Unlike the one-shot transfer schedules above,
+ * these stay linked in the hardware periodic schedule for the lifetime of the
+ * endpoint so the controller polls the device continuously without any CPU
+ * involvement.  The HC-visible descriptors live in a dedicated MEM2 allocation
+ * (separate cache lines from the CPU-only bookkeeping) so invalidating the qTD
+ * on a poll never discards a bookkeeping write.
+ */
+struct ehciIntSched {
+	struct ehciQh qh;
+	struct ehciQtd qtd;
+} __attribute__((aligned(32)));
+
+struct ehciIntEndpoint {
+	struct ehciIntSched *sched;   /* MEM2, HC-visible */
+	void *buffer;                 /* MEM2, HC-visible DMA target */
+	struct ehciIntEndpoint *next;
+	struct usbEndpoint *ep;
+	u32 length;
+	u32 caps;                     /* endpointCaps incl. S-mask/C-mask */
+	u32 endpoint;                 /* qH endpoint characteristics */
+	u8 toggle;
+};
+
+struct ohciIntSched {
+	struct ohciED ed;
+	struct ohciTD td[2];
+} __attribute__((aligned(32)));
+
+struct ohciIntEndpoint {
+	struct ohciIntSched *sched;   /* MEM2, HC-visible */
+	void *buffer;                 /* MEM2, HC-visible DMA target */
+	struct ohciIntEndpoint *next;
+	struct usbEndpoint *ep;
+	u32 length;
+	bool input;
+};
+
 struct hcdPrivate {
 	enum hcdType type;
 	struct ohciHCCA *hcca;
 	struct ehciSchedule *ehci;
 	u32 *periodicList;
 	struct ohciSchedule *ohci;
+	struct ehciIntEndpoint *ehciInt;   /* resident interrupt QH chain */
+	struct ohciIntEndpoint *ohciInt;   /* resident interrupt ED chain */
+	bool periodicOn;
 };
 
 struct ehciSchedule {
@@ -189,6 +230,10 @@ static int ehciStart(struct usbHostController *hc) {
 	 * Keep the schedules in MEM2 as well: MEM1 has additional DMA-write
 	 * hazards on these non-standard controllers.
 	 */
+	/* HC reset above cleared PLE; keep the resident-interrupt tracking in sync */
+	priv->ehciInt = NULL;
+	priv->periodicOn = false;
+
 	priv->ehci = M_PoolAlloc(POOL_MEM2, sizeof(*priv->ehci), 32);
 	memset(priv->ehci, 0, sizeof(*priv->ehci));
 
@@ -300,6 +345,10 @@ static int ohciStart(struct usbHostController *hc) {
 	struct hcdPrivate *priv = hc->priv;
 	u32 control, ports;
 	u64 start;
+
+	/* HC reset below clears PLE; keep the resident-interrupt tracking in sync */
+	priv->ohciInt = NULL;
+	priv->periodicOn = false;
 
 	priv->hcca = M_PoolAlloc(POOL_MEM2, sizeof(*priv->hcca), 256);
 	memset(priv->hcca, 0, sizeof(*priv->hcca));
@@ -491,12 +540,6 @@ static int ehciDisableAsync(struct usbHostController *hc) {
 	u32 command = EHCI_ReadOp32(hc->mmioBase, EHCI_USBCMD_OFF);
 	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command & ~EHCI_CMD_ASYNC);
 	return waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_ASYNC, false) ? 0 : -ETIMEDOUT;
-}
-
-static int ehciDisablePeriodic(struct usbHostController *hc) {
-	u32 command = EHCI_ReadOp32(hc->mmioBase, EHCI_USBCMD_OFF);
-	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command & ~EHCI_CMD_PERIODIC);
-	return waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_PERIODIC, false) ? 0 : -ETIMEDOUT;
 }
 
 static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
@@ -850,123 +893,227 @@ dataFinished:
 	return 0;
 }
 
-static int ehciInterruptTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
-	struct hcdPrivate *priv = hc->priv;
-	struct ehciSchedule *sched = priv->ehci;
-	struct usbEndpoint *endpoint = transfer->endpoint;
-	u32 qhPhys, token, qtdToken, remaining;
-	bool input;
-	u64 start;
-	uint i, intervalMicroframes, framePeriod, smask;
+/*
+ * Resident interrupt-IN endpoints (EHCI).
+ *
+ * The qH stays linked in the periodic frame list and PLE stays enabled for the
+ * endpoint's lifetime, so the controller polls the device every frame with no
+ * CPU involvement.  A poll is just a cache-invalidate of the qTD plus a token
+ * read; the busy-wait that used to burn a full timeout per idle poll is gone.
+ */
+static u32 ehciIntCaps(struct usbTransfer *tmp) {
+	struct usbDevice *dev = tmp->device;
+	struct usbEndpoint *ep = tmp->endpoint;
+	u32 caps = ehciQhCaps(dev);
+	uint intervalMicroframes, i, smask;
 
-	if (!sched || !priv->periodicList || !endpoint ||
-	    !ehciCanTransfer(transfer->device) ||
-	    (endpoint->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_INT ||
-	    !endpoint->maxPacketSize || !endpoint->interval ||
-	    transfer->length > endpoint->maxPacketSize ||
-	    (transfer->length && !transfer->data))
-		return -EINVAL;
-
-	input = !!(endpoint->address & USB_ENDPOINT_DIR_MASK);
-	memset(sched, 0, sizeof(*sched));
-	token = input ? EHCI_QTD_PID_IN : EHCI_QTD_PID_OUT;
-
-	if (endpoint->toggle)
-		token |= EHCI_QTD_TOGGLE;
-
-	ehciBuildQTD(&sched->qtd[0], EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, token | EHCI_QTD_IOC, transfer->data, transfer->length);
-	qhPhys = ehciPhys(&sched->qh);
-	sched->qh.horizontal = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
-	sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(transfer, false));
-	if (transfer->device->speed == USB_SPEED_HIGH) {
-		if (endpoint->interval > 16u)
-			return -EINVAL;
-
-		intervalMicroframes = 1u << (endpoint->interval - 1u);
+	if (dev->speed == USB_SPEED_HIGH) {
+		uint interval = ep->interval ? ep->interval : 1u;
+		if (interval > 16u)
+			interval = 16u;
+		intervalMicroframes = 1u << (interval - 1u);
 		if (intervalMicroframes <= 8u) {
-			framePeriod = 1;
 			smask = 0;
 			for (i = 0; i < 8u; i += intervalMicroframes)
 				smask |= BIT(i);
 		}
-		else {
-			framePeriod = intervalMicroframes / 8u;
+		else
 			smask = BIT(0);
-		}
-		sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device) | smask);
+		caps |= smask;
 	}
 	else {
-		/*
-		 * One start-split followed by three complete-split opportunities.
-		 * Full/low-speed bInterval is expressed in frames.
-		 */
-		framePeriod = endpoint->interval;
-		if (framePeriod > 1024u)
-			framePeriod = 1024u;
-		for (i = 1; (i << 1) <= framePeriod; i <<= 1)
-			;
-		framePeriod = i;
-		smask = BIT(0);
-		sched->qh.endpointCaps = npll_cpu_to_le32(ehciQhCaps(transfer->device) | smask | EHCI_QH_CMASK(0x1cu));
+		/* one start-split and three complete-split opportunities */
+		caps |= BIT(0) | EHCI_QH_CMASK(0x1cu);
 	}
-	sched->qh.overlayNext = npll_cpu_to_le32(ehciPhys(&sched->qtd[0]));
+	return caps;
+}
+
+static void ehciIntArmQtd(struct ehciIntEndpoint *ie) {
+	struct ehciIntSched *sched = ie->sched;
+	u32 token = EHCI_QTD_PID_IN | (ie->toggle ? EHCI_QTD_TOGGLE : 0);
+
+	ehciBuildQTD(&sched->qtd, EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE,
+		token | EHCI_QTD_IOC, ie->buffer, ie->length);
+	dcache_flush(&sched->qtd, sizeof(sched->qtd));
+
+	/*
+	 * Re-point the (still linked, live) qH overlay at the fresh qTD.  The qTD
+	 * is flushed above before overlayNext is written, and overlayNext is a
+	 * single aligned store written last, so the controller only ever follows
+	 * it to a fully-written, already-visible qTD.  The overlay Active bit stays
+	 * clear here (Active lives in the qTD), so a torn read of the other overlay
+	 * words cannot make the HC execute a partial descriptor.
+	 */
+	sched->qh.current = 0;
+	sched->qh.overlayToken = 0;
 	sched->qh.overlayAlternate = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
+	sched->qh.overlayNext = npll_cpu_to_le32(ehciPhys(&sched->qtd));
+	dcache_flush(&sched->qh, sizeof(sched->qh));
+}
 
+static void ehciIntRebuild(struct usbHostController *hc) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ehciIntEndpoint *ie;
+	u32 head = EHCI_LINK_TERMINATE;
+	uint i;
+
+	/* chain every resident interrupt qH: head -> ... -> terminate */
+	for (ie = priv->ehciInt; ie; ie = ie->next) {
+		u32 link = ie->next ? (ehciPhys(&ie->next->sched->qh) | EHCI_LINK_QH)
+				    : EHCI_LINK_TERMINATE;
+		ie->sched->qh.horizontal = npll_cpu_to_le32(link);
+		dcache_flush(&ie->sched->qh, sizeof(ie->sched->qh));
+	}
+	if (priv->ehciInt)
+		head = ehciPhys(&priv->ehciInt->sched->qh) | EHCI_LINK_QH;
+
+	/*
+	 * Anchor the chain at every frame.  We deliberately ignore bInterval for
+	 * placement: over-polling only spends bus bandwidth (the controller does
+	 * the work, not the CPU), and each qH's S-mask still gates the microframe.
+	 * This keeps multi-endpoint periodic scheduling trivial.
+	 */
 	for (i = 0; i < 1024; i++)
-		priv->periodicList[i] = npll_cpu_to_le32((i % framePeriod) ? EHCI_LINK_TERMINATE : (qhPhys | EHCI_LINK_QH));
-
-	if (transfer->length) {
-		if (input)
-			dcache_invalidate(transfer->data, transfer->length);
-		else
-			dcache_flush(transfer->data, transfer->length);
-	}
-
-	dcache_flush(sched, sizeof(*sched));
+		priv->periodicList[i] = npll_cpu_to_le32(head);
 	dcache_flush(priv->periodicList, 4096);
-	EHCI_WriteOp32(hc->mmioBase, EHCI_PERIODICLIST_OFF, ehciPhys(priv->periodicList));
-	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, EHCI_ReadOp32(hc->mmioBase, EHCI_USBCMD_OFF) | EHCI_CMD_PERIODIC);
-	if (!waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_PERIODIC, true)) {
-		ehciDisablePeriodic(hc);
-		transfer->status = USB_TRANSFER_ERROR;
-		return -ETIMEDOUT;
-	}
+}
 
-	start = mftb();
-	do {
-		dcache_invalidate(&sched->qtd[0], sizeof(sched->qtd[0]));
-		qtdToken = npll_le32_to_cpu(sched->qtd[0].token);
-		if (!(qtdToken & EHCI_QTD_ACTIVE))
-			break;
-		if (T_HasElapsed(start, transfer->timeoutUsecs)) {
-			transfer->status = USB_TRANSFER_TIMEOUT;
-			ehciDisablePeriodic(hc);
+static int ehciIntEnsurePeriodic(struct usbHostController *hc, bool on) {
+	struct hcdPrivate *priv = hc->priv;
+	u32 command;
+
+	if (on == priv->periodicOn)
+		return 0;
+
+	command = EHCI_ReadOp32(hc->mmioBase, EHCI_USBCMD_OFF);
+	if (on) {
+		EHCI_WriteOp32(hc->mmioBase, EHCI_PERIODICLIST_OFF, ehciPhys(priv->periodicList));
+		EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command | EHCI_CMD_PERIODIC);
+		if (!waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_PERIODIC, true))
 			return -ETIMEDOUT;
-		}
-	} while (true);
+	}
+	else {
+		EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command & ~EHCI_CMD_PERIODIC);
+		if (!waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_PERIODIC, false))
+			return -ETIMEDOUT;
+	}
+	priv->periodicOn = on;
+	return 0;
+}
 
-	if (ehciDisablePeriodic(hc)) {
-		transfer->status = USB_TRANSFER_ERROR;
+static void ehciInterruptStop(struct usbHostController *hc, struct usbEndpoint *ep) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ehciIntEndpoint *ie = ep->hcData;
+	struct ehciIntEndpoint **link;
+
+	if (!ie)
+		return;
+
+	for (link = &priv->ehciInt; *link; link = &(*link)->next) {
+		if (*link == ie) {
+			*link = ie->next;
+			break;
+		}
+	}
+	ep->hcData = NULL;
+
+	ehciIntRebuild(hc);
+	if (!priv->ehciInt)
+		ehciIntEnsurePeriodic(hc, false);
+
+	/* let the controller finish any in-flight frame before freeing */
+	udelay(2000);
+
+	free(ie->buffer);
+	free(ie->sched);
+	free(ie);
+}
+
+static int ehciInterruptArm(struct usbHostController *hc, struct usbDevice *dev, struct usbEndpoint *ep, u32 length) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ehciIntEndpoint *ie = ep->hcData;
+	struct usbTransfer tmp;
+
+	if (!priv->periodicList || !length || length > 0x400u || !ehciCanTransfer(dev))
+		return -EINVAL;
+
+	if (ie) {
+		/* already armed: reload the qTD (e.g. after a cleared halt) */
+		ie->toggle = 0;
+		ehciIntArmQtd(ie);
+		return 0;
+	}
+
+	ie = malloc(sizeof(*ie));
+	if (!ie)
+		return -ENOMEM;
+
+	memset(ie, 0, sizeof(*ie));
+	ie->sched = M_PoolAlloc(POOL_MEM2, sizeof(*ie->sched), 32);
+	ie->buffer = M_PoolAlloc(POOL_MEM2, alignUpU32(length, 32), 32);
+	ie->ep = ep;
+	ie->length = length;
+
+	memset(&tmp, 0, sizeof(tmp));
+	tmp.device = dev;
+	tmp.endpoint = ep;
+
+	memset(ie->sched, 0, sizeof(*ie->sched));
+	ie->sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(&tmp, false));
+	ie->sched->qh.endpointCaps = npll_cpu_to_le32(ehciIntCaps(&tmp));
+	ehciIntArmQtd(ie);
+
+	ie->next = priv->ehciInt;
+	priv->ehciInt = ie;
+	ep->hcData = ie;
+
+	ehciIntRebuild(hc);
+	if (ehciIntEnsurePeriodic(hc, true)) {
+		ehciInterruptStop(hc, ep);
 		return -ETIMEDOUT;
 	}
-	remaining = EHCI_QTD_REMAIN(qtdToken);
-	if (remaining > transfer->length) {
-		transfer->status = USB_TRANSFER_ERROR;
-		return 0;
-	}
-
-	transfer->actualLength = transfer->length - remaining;
-	if (qtdToken & EHCI_QTD_ERROR) {
-		transfer->status = (qtdToken & (EHCI_QTD_DBE | EHCI_QTD_BABBLE | EHCI_QTD_XACT)) ? USB_TRANSFER_ERROR : USB_TRANSFER_STALL;
-		return 0;
-	}
-
-	endpoint->toggle ^= 1u;
-	if (input && transfer->actualLength)
-		dcache_invalidate(transfer->data, transfer->actualLength);
-	transfer->status = USB_TRANSFER_COMPLETE;
-
 	return 0;
+}
+
+static int ehciInterruptPoll(struct usbHostController *hc, struct usbEndpoint *ep, void *data, u32 length, u32 *actual) {
+	struct ehciIntEndpoint *ie = ep->hcData;
+	struct ehciIntSched *sched;
+	u32 token, remaining, got;
+	(void)hc;
+
+	if (!ie)
+		return -EINVAL;
+
+	sched = ie->sched;
+	dcache_invalidate(&sched->qtd, sizeof(sched->qtd));
+	token = npll_le32_to_cpu(sched->qtd.token);
+
+	if (token & EHCI_QTD_ACTIVE)
+		return 0;   /* still waiting on the device; instant return */
+
+	if (token & EHCI_QTD_ERROR) {
+		if (!(token & (EHCI_QTD_DBE | EHCI_QTD_BABBLE | EHCI_QTD_XACT)))
+			return -EPIPE;   /* halted: caller clears halt then re-arms */
+		/* transient bus error: reload and report nothing this round */
+		ehciIntArmQtd(ie);
+		return 0;
+	}
+
+	remaining = EHCI_QTD_REMAIN(token);
+	got = remaining > ie->length ? 0 : ie->length - remaining;
+	if (got > length)
+		got = length;
+	if (got) {
+		dcache_invalidate(ie->buffer, got);
+		memcpy(data, ie->buffer, got);
+	}
+
+	ie->toggle ^= 1u;
+	ep->toggle = ie->toggle;
+	*actual = got;
+
+	ehciIntArmQtd(ie);   /* reload for the next report */
+	return 1;
 }
 
 static u32 ohciPhys(const void *ptr) {
@@ -1016,12 +1163,26 @@ static void ohciBuildED(struct ohciED *ed, struct usbTransfer *transfer,
 
 enum ohciListType {
 	OHCI_LIST_CONTROL,
-	OHCI_LIST_BULK,
-	OHCI_LIST_PERIODIC
+	OHCI_LIST_BULK
 };
 
-static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched, uint numTDs, enum ohciListType list, u32 period, u32 timeoutUsecs, u32 *conditionCode) {
+/* Busy-wait for the HCCA frame counter to advance by `frames` (each ~1 ms). */
+static void ohciWaitFrames(struct usbHostController *hc, uint frames) {
 	struct hcdPrivate *priv = hc->priv;
+	u64 deadline = mftb();
+	u16 start;
+
+	dcache_invalidate(priv->hcca, sizeof(*priv->hcca));
+	start = npll_le16_to_cpu(priv->hcca->frameNumber);
+
+	do {
+		dcache_invalidate(priv->hcca, sizeof(*priv->hcca));
+		if ((u16)(npll_le16_to_cpu(priv->hcca->frameNumber) - start) >= frames)
+			return;
+	} while (!T_HasElapsed(deadline, 1000u * (frames + 1u)));
+}
+
+static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched, uint numTDs, enum ohciListType list, u32 timeoutUsecs, u32 *conditionCode) {
 	u32 control, tdControl, cc = 0xfu;
 	u64 start;
 	uint i;
@@ -1034,17 +1195,10 @@ static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched,
 		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_CONTROL);
 		OHCI_Write32(hc->mmioBase, OHCI_COMMAND_STATUS, OHCI_CMD_CONTROL_FILLED);
 	}
-	else if (list == OHCI_LIST_BULK) {
+	else {
 		OHCI_Write32(hc->mmioBase, OHCI_BULK_HEAD, ohciPhys(&sched->ed));
 		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_BULK);
 		OHCI_Write32(hc->mmioBase, OHCI_COMMAND_STATUS, OHCI_CMD_BULK_FILLED);
-	}
-	else {
-		for (i = 0; i < 32; i++)
-			priv->hcca->interruptTable[i] = npll_cpu_to_le32((i % period) ? 0 : ohciPhys(&sched->ed));
-
-		dcache_flush(priv->hcca->interruptTable, sizeof(priv->hcca->interruptTable));
-		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_PERIODIC);
 	}
 
 	start = mftb();
@@ -1075,24 +1229,22 @@ ohciDone:
 		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control & ~OHCI_CTRL_CONTROL);
 		OHCI_Write32(hc->mmioBase, OHCI_CONTROL_HEAD, 0);
 	}
-	else if (list == OHCI_LIST_BULK) {
+	else {
 		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control & ~OHCI_CTRL_BULK);
 		OHCI_Write32(hc->mmioBase, OHCI_BULK_HEAD, 0);
 	}
-	else {
-		OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control & ~OHCI_CTRL_PERIODIC);
-		memset(priv->hcca->interruptTable, 0, sizeof(priv->hcca->interruptTable));
-		dcache_flush(priv->hcca->interruptTable, sizeof(priv->hcca->interruptTable));
-	}
-
-	/* let the HC finish the frame before the shared schedule is reused */
-	udelay(2000);
 
 	/*
-	 * A periodic TD can complete after the polling deadline but before PLE
-	 * actually takes effect at the frame boundary.  Reconcile that late
-	 * completion; otherwise the device advances its data toggle while the
-	 * software endpoint incorrectly retains the old one.
+	 * Let the HC drain the ED it may still be walking before the shared
+	 * schedule is reused.  One frame boundary is sufficient and returns as soon
+	 * as the counter ticks, versus the old unconditional 2 ms sleep.
+	 */
+	ohciWaitFrames(hc, 1);
+
+	/*
+	 * A TD can complete right at the polling deadline, just after we stopped
+	 * the list.  Reconcile that late completion; otherwise the device advances
+	 * its data toggle while the software endpoint keeps the stale one.
 	 */
 	if (cc == 0xfu) {
 		complete = true;
@@ -1176,7 +1328,7 @@ static int ohciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 			dcache_flush(transfer->data, transfer->length);
 	}
 
-	ret = ohciRunList(hc, sched, numTDs, OHCI_LIST_CONTROL, 0, transfer->timeoutUsecs, &cc);
+	ret = ohciRunList(hc, sched, numTDs, OHCI_LIST_CONTROL, transfer->timeoutUsecs, &cc);
 	if (ret) {
 		transfer->status = USB_TRANSFER_TIMEOUT;
 		return ret;
@@ -1191,7 +1343,7 @@ static int ohciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 	return 0;
 }
 
-static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer *transfer, void *buffer, u32 length, enum ohciListType list, u32 period, u32 *actual) {
+static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer *transfer, void *buffer, u32 length, u32 *actual) {
 	struct hcdPrivate *priv = hc->priv;
 	struct ohciSchedule *sched = priv->ohci;
 	struct usbEndpoint *endpoint = transfer->endpoint;
@@ -1213,7 +1365,7 @@ static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer 
 			dcache_flush(buffer, length);
 	}
 
-	ret = ohciRunList(hc, sched, 1, list, period, transfer->timeoutUsecs, &cc);
+	ret = ohciRunList(hc, sched, 1, OHCI_LIST_BULK, transfer->timeoutUsecs, &cc);
 	if (ret) {
 		transfer->status = USB_TRANSFER_TIMEOUT;
 		return ret;
@@ -1236,30 +1388,17 @@ static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer 
 	return 0;
 }
 
-static int ohciDataTransfer(struct usbHostController *hc, struct usbTransfer *transfer,
-	enum ohciListType list) {
+static int ohciDataTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
 	u8 *cursor = transfer->data;
-	u32 remaining = transfer->length, chunk, actual, total = 0, period = 1;
+	u32 remaining = transfer->length, chunk, actual, total = 0;
 	int ret;
 
 	if (!transfer->endpoint || !transfer->endpoint->maxPacketSize || transfer->device->speed == USB_SPEED_HIGH || (transfer->length && !transfer->data))
 		return -EINVAL;
 
-	if (list == OHCI_LIST_PERIODIC) {
-		if (!transfer->endpoint->interval || transfer->length > transfer->endpoint->maxPacketSize)
-			return -EINVAL;
-		period = transfer->endpoint->interval;
-
-		if (period > 32u)
-			period = 32u;
-
-		/* OHCI periodic branches are powers of two */
-		for (chunk = 1; (chunk << 1) <= period; chunk <<= 1);
-		period = chunk;
-	}
 	do {
 		chunk = remaining ? ohciDataChunk(cursor, remaining, transfer->endpoint->maxPacketSize) : 0;
-		ret = ohciOneDataTransfer(hc, transfer, cursor, chunk, list, period, &actual);
+		ret = ohciOneDataTransfer(hc, transfer, cursor, chunk, &actual);
 		total += actual;
 
 		if (ret || transfer->status != USB_TRANSFER_COMPLETE || actual < chunk)
@@ -1267,10 +1406,195 @@ static int ohciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 
 		remaining -= chunk;
 		cursor += chunk;
-	} while (remaining && list == OHCI_LIST_BULK);
+	} while (remaining);
 
 	transfer->actualLength = total;
 	return ret;
+}
+
+/*
+ * Resident interrupt-IN endpoints (OHCI).
+ *
+ * The ED stays linked in the HCCA interrupt table with one live TD plus a dummy
+ * tail; PLE stays on for the endpoint's lifetime.  Re-arming pauses the ED with
+ * its SKIP bit (the HC ignores a skipped ED at the next frame boundary) so the
+ * TD queue can be rewritten safely while linked.
+ */
+static void ohciIntArmTD(struct ohciIntEndpoint *ie) {
+	struct ohciIntSched *sched = ie->sched;
+	u32 flags = OHCI_TD_DP_IN | OHCI_TD_ROUNDING | OHCI_TD_TOGGLE_CARRY;
+
+	ohciBuildTD(&sched->td[0], ohciPhys(&sched->td[1]), flags, ie->buffer, ie->length);
+	ohciBuildTD(&sched->td[1], 0, 0, NULL, 0);
+
+	/* head -> live TD (preserve the HC's toggle carry); tail -> dummy */
+	sched->ed.head = npll_cpu_to_le32(ohciPhys(&sched->td[0]) |
+		(ie->ep && ie->ep->toggle ? OHCI_ED_HEAD_CARRY : 0));
+	sched->ed.tail = npll_cpu_to_le32(ohciPhys(&sched->td[1]));
+	dcache_flush(sched, sizeof(*sched));
+}
+
+static void ohciIntRearm(struct ohciIntEndpoint *ie) {
+	struct ohciIntSched *sched = ie->sched;
+	u32 control = npll_le32_to_cpu(sched->ed.control);
+
+	sched->ed.control = npll_cpu_to_le32(control | OHCI_ED_SKIP);
+	dcache_flush(&sched->ed, sizeof(sched->ed));
+
+	ohciIntArmTD(ie);
+
+	sched->ed.control = npll_cpu_to_le32(control & ~OHCI_ED_SKIP);
+	dcache_flush(&sched->ed, sizeof(sched->ed));
+}
+
+static void ohciIntRebuild(struct usbHostController *hc) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ohciIntEndpoint *ie;
+	u32 head = 0;
+	uint i;
+
+	for (ie = priv->ohciInt; ie; ie = ie->next) {
+		ie->sched->ed.next = npll_cpu_to_le32(ie->next ? ohciPhys(&ie->next->sched->ed) : 0);
+		dcache_flush(&ie->sched->ed, sizeof(ie->sched->ed));
+	}
+	if (priv->ohciInt)
+		head = ohciPhys(&priv->ohciInt->sched->ed);
+
+	for (i = 0; i < 32; i++)
+		priv->hcca->interruptTable[i] = npll_cpu_to_le32(head);
+	dcache_flush(priv->hcca->interruptTable, sizeof(priv->hcca->interruptTable));
+}
+
+static void ohciIntEnsurePeriodic(struct usbHostController *hc, bool on) {
+	struct hcdPrivate *priv = hc->priv;
+	u32 control;
+
+	if (on == priv->periodicOn)
+		return;
+
+	control = OHCI_Read32(hc->mmioBase, OHCI_CONTROL);
+	if (on)
+		control |= OHCI_CTRL_PERIODIC;
+	else
+		control &= ~OHCI_CTRL_PERIODIC;
+	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control);
+	priv->periodicOn = on;
+}
+
+static void ohciInterruptStop(struct usbHostController *hc, struct usbEndpoint *ep) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ohciIntEndpoint *ie = ep->hcData;
+	struct ohciIntEndpoint **link;
+	u32 control;
+
+	if (!ie)
+		return;
+
+	/* skip the ED so the HC stops touching it before we unlink and free */
+	control = npll_le32_to_cpu(ie->sched->ed.control);
+	ie->sched->ed.control = npll_cpu_to_le32(control | OHCI_ED_SKIP);
+	dcache_flush(&ie->sched->ed, sizeof(ie->sched->ed));
+
+	for (link = &priv->ohciInt; *link; link = &(*link)->next) {
+		if (*link == ie) {
+			*link = ie->next;
+			break;
+		}
+	}
+	ep->hcData = NULL;
+
+	ohciIntRebuild(hc);
+	if (!priv->ohciInt)
+		ohciIntEnsurePeriodic(hc, false);
+
+	udelay(2000);
+
+	free(ie->buffer);
+	free(ie->sched);
+	free(ie);
+}
+
+static int ohciInterruptArm(struct usbHostController *hc, struct usbDevice *dev, struct usbEndpoint *ep, u32 length) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ohciIntEndpoint *ie = ep->hcData;
+	struct usbTransfer tmp;
+
+	if (!priv->hcca || !length || length > 0x400u || dev->speed == USB_SPEED_HIGH)
+		return -EINVAL;
+
+	if (ie) {
+		ep->toggle = 0;
+		ohciIntRearm(ie);
+		return 0;
+	}
+
+	ie = malloc(sizeof(*ie));
+	if (!ie)
+		return -ENOMEM;
+
+	memset(ie, 0, sizeof(*ie));
+	ie->sched = M_PoolAlloc(POOL_MEM2, sizeof(*ie->sched), 32);
+	ie->buffer = M_PoolAlloc(POOL_MEM2, alignUpU32(length, 32), 32);
+	ie->ep = ep;
+	ie->length = length;
+	ie->input = true;
+
+	memset(ie->sched, 0, sizeof(*ie->sched));
+	memset(&tmp, 0, sizeof(tmp));
+	tmp.device = dev;
+	tmp.endpoint = ep;
+
+	/* build ED control; head/tail are overwritten by ohciIntArmTD */
+	ohciBuildED(&ie->sched->ed, &tmp, 0, 0);
+	ohciIntArmTD(ie);
+
+	ie->next = priv->ohciInt;
+	priv->ohciInt = ie;
+	ep->hcData = ie;
+
+	ohciIntRebuild(hc);
+	ohciIntEnsurePeriodic(hc, true);
+	return 0;
+}
+
+static int ohciInterruptPoll(struct usbHostController *hc, struct usbEndpoint *ep, void *data, u32 length, u32 *actual) {
+	struct ohciIntEndpoint *ie = ep->hcData;
+	struct ohciIntSched *sched;
+	u32 tdControl, cc, got;
+	(void)hc;
+
+	if (!ie)
+		return -EINVAL;
+
+	sched = ie->sched;
+	dcache_invalidate(sched, sizeof(*sched));
+	tdControl = npll_le32_to_cpu(sched->td[0].control);
+	cc = (tdControl & OHCI_TD_CC_MASK) >> OHCI_TD_CC_SHIFT;
+
+	if (cc == 0xfu)
+		return 0;   /* not accessed yet */
+
+	/* the HC maintains the data toggle carry in the ED across reloads */
+	ep->toggle = (u8)!!(npll_le32_to_cpu(sched->ed.head) & OHCI_ED_HEAD_CARRY);
+
+	if (cc) {
+		if (cc == OHCI_TD_CC_STALL)
+			return -EPIPE;
+		ohciIntRearm(ie);
+		return 0;
+	}
+
+	got = ohciTransferred(&sched->td[0], ie->buffer, ie->length);
+	if (got > length)
+		got = length;
+	if (got) {
+		dcache_invalidate(ie->buffer, got);
+		memcpy(data, ie->buffer, got);
+	}
+	*actual = got;
+
+	ohciIntRearm(ie);
+	return 1;
 }
 
 static int hcdTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
@@ -1282,18 +1606,16 @@ static int hcdTransfer(struct usbHostController *hc, struct usbTransfer *transfe
 	if (priv->type == HCD_EHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_BULK)
 		return ehciDataTransfer(hc, transfer);
 
-	if (priv->type == HCD_EHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_INT)
-		return ehciInterruptTransfer(hc, transfer);
-
 	if (priv->type == HCD_OHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_CONTROL)
 		return ohciControlTransfer(hc, transfer);
 
 	if (priv->type == HCD_OHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_BULK)
-		return ohciDataTransfer(hc, transfer, OHCI_LIST_BULK);
+		return ohciDataTransfer(hc, transfer);
 
-	if (priv->type == HCD_OHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_INT)
-		return ohciDataTransfer(hc, transfer, OHCI_LIST_PERIODIC);
-
+	/*
+	 * Interrupt endpoints are driven by the resident-schedule arm/poll ops, not
+	 * one-shot submissions; reaching here with one is a caller bug.
+	 */
 	transfer->status = USB_TRANSFER_ERROR;
 	return -ENOSYS;
 }
@@ -1304,6 +1626,9 @@ static const struct usbHostControllerOps ehciOps = {
 	.poll = NULL,
 	.transfer = hcdTransfer,
 	.cancel = NULL,
+	.interruptArm = ehciInterruptArm,
+	.interruptPoll = ehciInterruptPoll,
+	.interruptStop = ehciInterruptStop,
 	.rootPortStatus = ehciPortStatus,
 	.rootPortReset = ehciPortReset,
 	.rootPortClearChange = ehciClearChange,
@@ -1314,6 +1639,9 @@ static const struct usbHostControllerOps ohciOps = {
 	.poll = NULL,
 	.transfer = hcdTransfer,
 	.cancel = NULL,
+	.interruptArm = ohciInterruptArm,
+	.interruptPoll = ohciInterruptPoll,
+	.interruptStop = ohciInterruptStop,
 	.rootPortStatus = ohciPortStatus,
 	.rootPortReset = ohciPortReset,
 	.rootPortClearChange = ohciClearChange,

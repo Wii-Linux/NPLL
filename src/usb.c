@@ -691,8 +691,34 @@ int USB_BulkTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, 
 	return dataTransfer(dev, ep, data, length, actual, timeout, USB_ENDPOINT_XFER_BULK);
 }
 
-int USB_InterruptTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual, u32 timeout) {
-	return dataTransfer(dev, ep, data, length, actual, timeout, USB_ENDPOINT_XFER_INT);
+int USB_InterruptArm(struct usbDevice *dev, struct usbEndpoint *ep, u32 length) {
+	if (!started || !dev || !dev->connected || !dev->hc || !ep)
+		return -ENODEV;
+	if ((ep->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_INT ||
+	    !(ep->address & USB_ENDPOINT_DIR_MASK))
+		return -EINVAL;
+	if (!dev->hc->ops->interruptArm)
+		return -ENOSYS;
+
+	return dev->hc->ops->interruptArm(dev->hc, dev, ep, length);
+}
+
+int USB_InterruptPoll(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual) {
+	if (actual)
+		*actual = 0;
+	if (!started || !dev || !dev->connected || !dev->hc || !ep || !data || !length)
+		return -ENODEV;
+	if (!dev->hc->ops->interruptPoll)
+		return -ENOSYS;
+
+	return dev->hc->ops->interruptPoll(dev->hc, ep, data, length, actual);
+}
+
+void USB_InterruptStop(struct usbDevice *dev, struct usbEndpoint *ep) {
+	if (!dev || !dev->hc || !ep || !dev->hc->ops->interruptStop)
+		return;
+
+	dev->hc->ops->interruptStop(dev->hc, ep);
 }
 
 int USB_ClearHalt(struct usbDevice *dev, struct usbEndpoint *ep) {
