@@ -113,7 +113,7 @@ SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/usb_hcd.c
 # Video / Output drivers
 SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/usbgecko.c
 # Storage drivers
-SOURCE  += drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/hollywood_nand.c drivers/di.c
+SOURCE  += drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/hollywood_nand.c drivers/di.c drivers/usb_storage.c
 # Input Drivers
 SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c drivers/usb_hid.c
 # Misc Drivers
