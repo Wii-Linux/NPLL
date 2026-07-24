@@ -134,7 +134,7 @@ no_ack:
 
 static struct i2cController gpioI2CController = {
 	.name = "Hollywood I2C over GPIO",
-	.bus = I2C_BUS_DEFAULT,
+	.bus = I2C_BUS_AVE,
 	.priority = 0,
 	.transfer = gpioI2CTransfer,
 };

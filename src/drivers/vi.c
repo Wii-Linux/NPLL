@@ -196,7 +196,7 @@ static void __VIWriteI2CRegister8(u8 reg, u8 data)
 	u8 buf[2];
 	buf[0] = reg;
 	buf[1] = data;
-	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 2);
+	I2C_Write(I2C_BUS_AVE, SLAVE_AVE, buf, 2);
 	udelay(2);
 }
 
@@ -206,7 +206,7 @@ static void __VIWriteI2CRegister16(u8 reg, u16 data)
 	buf[0] = reg;
 	buf[1] = (u8)(data >> 8);
 	buf[2] = (u8)(data & 0xFF);
-	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 3);
+	I2C_Write(I2C_BUS_AVE, SLAVE_AVE, buf, 3);
 	udelay(2);
 }
 
@@ -218,7 +218,7 @@ static void __VIWriteI2CRegister32(u8 reg, u32 data)
 	buf[2] = (u8)(data >> 16) & 0xFF;
 	buf[3] = (u8)(data >> 8) & 0xFF;
 	buf[4] = data & 0xFF;
-	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, 5);
+	I2C_Write(I2C_BUS_AVE, SLAVE_AVE, buf, 5);
 	udelay(2);
 }
 
@@ -227,7 +227,7 @@ static void __VIWriteI2CRegisterBuf(u8 reg, uint size, u8 *data)
 	u8 buf[0x100];
 	buf[0] = reg;
 	memcpy(&buf[1], data, size);
-	I2C_Write(I2C_BUS_DEFAULT, SLAVE_AVE, buf, size + 1);
+	I2C_Write(I2C_BUS_AVE, SLAVE_AVE, buf, size + 1);
 	udelay(2);
 }
 

@@ -8,10 +8,15 @@
 #define _I2C_H
 
 #include <npll/types.h>
+#include <npll/utils.h>
 
-#define I2C_BUS_DEFAULT 0
+#define I2C_BUS_AVE  0
+/* only on Wii U */
+#define I2C_BUS_AVE2 1
+/* only on Wii U */
+#define I2C_BUS_SMC  2
 
-#define I2C_MSG_READ (1u << 0)
+#define I2C_MSG_READ BIT(0)
 
 struct i2cMsg {
 	u16 addr;       /* 7-bit slave address */
