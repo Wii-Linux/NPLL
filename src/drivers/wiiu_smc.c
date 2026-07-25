@@ -58,14 +58,10 @@ static void smcPoll(void) {
 	pollErrorLogged = false;
 
 	pressed = (events & ~previousEvents) & SMC_EVENT_BUTTONS;
-	if (pressed & SMC_EVENT_EJECT_BUTTON) {
-		log_puts("SMC eject button pressed");
+	if (pressed & SMC_EVENT_EJECT_BUTTON)
 		IN_NewEvent(INPUT_EV_SELECT);
-	}
-	if (pressed & SMC_EVENT_POWER_BUTTON) {
-		log_puts("SMC power button pressed");
+	if (pressed & SMC_EVENT_POWER_BUTTON)
 		IN_NewEvent(INPUT_EV_DOWN);
-	}
 	if ((events ^ previousEvents) & SMC_EVENT_DISC_INSERT)
 		log_printf("SMC disc %s\r\n",
 			events & SMC_EVENT_DISC_INSERT ? "inserted" : "removed");
