@@ -90,15 +90,23 @@ int strcmp(const char *str1, const char *str2) {
 }
 
 int strncmp(const char *str1, const char *str2, size_t n) {
-	while (n--) {
-		if (!*str1 || !*str2 || *str1 != *str2)
-			break;
+	uint8_t c1, c2;
+
+	while (n) {
+		c1 = *(const uint8_t *)str1;
+		c2 = *(const uint8_t *)str2;
+
+		if (c1 != c2)
+			return c1 - c2;
+		if (!c1)
+			return 0;
 
 		str1++;
 		str2++;
+		n--;
 	}
 
-	return *(const uint8_t *)str1 - *(const uint8_t *)str2;
+	return 0;
 }
 
 int strcasecmp(const char *str1, const char *str2) {
