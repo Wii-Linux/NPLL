@@ -128,6 +128,32 @@ struct __attribute__((packed)) mbr {
 	u8 sig[2]; /* 55 aa */
 };
 
+struct __attribute__((packed)) gptEntry {
+	u8  typeGUID[16];
+	u8  partGUID[16];
+	u64 startLBA;
+	u64 endLBA;
+	u64 attributes;
+	char name[72];
+};
+
+struct __attribute__((packed)) gpt {
+	char magic[8];
+	u32 hdrRev;
+	u32 hdrSize;
+	u32 hdrCRC32;
+	u32 reserved;
+	u64 curLBA;
+	u64 altGPTHdrLBA;
+	u64 firstUsableLBA;
+	u64 lastUsableLBA;
+	u8  diskGUID[16];
+	u64 entryArrayLBA;
+	u32 numEntries;
+	u32 entrySize;
+	u32 entryArrayCRC32;
+};
+
 void P_ProbePartitions(struct blockDevice *bdev);
 
 #endif /* _PARTITION_H */

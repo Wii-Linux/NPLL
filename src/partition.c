@@ -146,27 +146,116 @@ static uint probeMBR(struct blockDevice *bdev) {
 	return count;
 }
 
+/*
+ * Try to parse a GPT partition table from the device.
+ * Returns the number of valid partitions found, or 0 if no MBR was found.
+ */
+static int probeGPT(struct blockDevice *bdev) {
+	u8 ALIGN(32) _sect[512], nullGUID[16];
+	struct mbr *pmbr;
+	struct gpt *gpt;
+	struct gptEntry *entry;
+	ssize_t ret;
+	size_t numEntries, entrySize, gptLBA, entriesLBA;
+	u64 curOff;
+	uint i, count;
+
+	pmbr = (struct mbr *)_sect;
+	gpt = (struct gpt *)_sect;
+	entry = (struct gptEntry *)_sect;
+
+	ret = B_ReadDevice(bdev, _sect, 512, 0);
+	if (ret != 512) {
+		log_printf("read failed trying to probe for PMBR: %d\r\n", ret);
+		return -1;
+	}
+
+	if (pmbr->sig[0] != 0x55 || pmbr->sig[1] != 0xAA) {
+		log_printf("no PMBR signature, got %02x %02x\r\n", pmbr->sig[0], pmbr->sig[1]);
+		return -1;
+	}
+
+	if (pmbr->entries[0].type != MBR_TYPE_GPT_PMBR)
+		return 0; /* this is probably not a GPT's PMBR, rather a real MBR */
+
+	gptLBA = npll_le32_to_cpu(pmbr->entries[0].lbaStart);
+	ret = B_ReadDevice(bdev, _sect, 512, gptLBA * bdev->blockSize);
+	if (ret != 512) {
+		log_printf("read failed trying to probe for GPT: %d\r\n", ret);
+		return 0;
+	}
+
+	if (memcmp(gpt->magic, "EFI PART", sizeof(gpt->magic))) {
+		log_puts("bad GPT magic");
+		return 0;
+	}
+
+	if (gpt->hdrRev != 0x00000100) {
+		log_printf("bad GPT rev: %08x\r\n", gpt->hdrRev);
+		return 0;
+	}
+
+	entriesLBA = (size_t)npll_le64_to_cpu(gpt->entryArrayLBA);
+	numEntries = npll_le32_to_cpu(gpt->numEntries);
+	entrySize = npll_le32_to_cpu(gpt->entrySize);
+	if (entrySize > 512) {
+		log_printf("refusing to parse absurdly large GPT entries of size %d\r\n", entrySize);
+		return 0;
+	}
+
+	curOff = entriesLBA * bdev->blockSize;
+	count = 0;
+	memset(nullGUID, 0, sizeof(nullGUID));
+
+	for (i = 0; i < numEntries && count < MAX_PARTITIONS; i++) {
+		ret = B_ReadDevice(bdev, _sect, 512, curOff);
+		if (ret != 512) {
+			log_printf("read failed trying to probe for GPT entry: %d\r\n", ret);
+			return (int)count;
+		}
+
+		if (!memcmp(entry->typeGUID, nullGUID, sizeof(entry->typeGUID)))
+			goto skip;
+
+		bdev->partitions[count] = malloc(sizeof(struct partition));
+		memset(bdev->partitions[count], 0, sizeof(struct partition));
+		bdev->partitions[count]->bdev = bdev;
+		bdev->partitions[count]->offset = npll_le64_to_cpu(entry->startLBA) * bdev->blockSize;
+		bdev->partitions[count]->size = (npll_le64_to_cpu(entry->endLBA) - npll_le64_to_cpu(entry->startLBA)) * bdev->blockSize;
+		bdev->partitions[count]->index = count;
+		count++;
+
+	skip:
+		curOff += entrySize;
+	}
+
+	return (int)count;
+}
+
 void P_ProbePartitions(struct blockDevice *bdev) {
-	uint count;
+	int count;
 
 	bdev->numPartitions = 0;
 	memset(bdev->partitions, 0, sizeof(bdev->partitions));
 
-	count = probeMBR(bdev);
-	if (count > 0) {
-		bdev->numPartitions = count;
-		log_printf("found %d MBR partition(s) on %s\r\n", count, bdev->name);
-		return;
-	}
-	#if 0
 	count = probeGPT(bdev);
+	if (count < 0) /* no PMBR or I/O error; don't even bother checking for MBR */
+		goto none;
+
 	if (count > 0) {
-		bdev->numPartitions = count;
+		bdev->numPartitions = (uint)count;
 		log_printf("found %d GPT partition(s) on %s\r\n", count, bdev->name);
 		return;
 	}
-	#endif
 
+	count = (int)probeMBR(bdev);
+	if (count > 0) {
+		bdev->numPartitions = (uint)count;
+		log_printf("found %d MBR partition(s) on %s\r\n", count, bdev->name);
+		return;
+	}
+
+none:
 	/* no recognized partition table; create a pseudo-partition spanning the entire device */
 	bdev->partitions[0] = malloc(sizeof(struct partition));
 	bdev->partitions[0]->bdev = bdev;
