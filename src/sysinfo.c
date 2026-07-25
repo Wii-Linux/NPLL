@@ -170,6 +170,13 @@ static void sysinfoMenuInit(struct menu *m) {
 		strcat(m->content, "\r\n");
 	}
 
+	/* step 3d: report SMC revision if Wii U */
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		sprintf(tmp, "SMC Chip Revision: 0x%02x\r\nSMC Firmware Revision: 0x%02x", H_WiiUSMCChipRev, H_WiiUSMCFWRev);
+		strcat(m->content, tmp);
+		strcat(m->content, "\r\n");
+	}
+
 	/* step 4: report boot method, if applicable */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) /* TODO: Determine */
 		strcat(m->content, "Boot method: Unknown\r\n");

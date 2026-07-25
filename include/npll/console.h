@@ -68,6 +68,7 @@ extern int H_WiiBootIOS;
 extern u64 H_WiiBootTitleID;
 extern void *H_WiiMEM2Top;
 extern enum wiiuRev H_WiiURev;
+extern u8 H_WiiUSMCFWRev, H_WiiUSMCChipRev;
 extern struct platOps *H_PlatOps;
 extern void H_PrepareForExecEntry(void);
 
