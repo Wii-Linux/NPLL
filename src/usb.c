@@ -20,6 +20,12 @@ static struct usbDevice *devices[USB_MAX_DEVICES];
 static u8 configurationData[USB_MAX_DEVICES][USB_MAX_CONFIG_LENGTH] ALIGN(32);
 static bool initialized, started;
 
+#if 0
+#define dbg_printf log_printf
+#else
+#define dbg_printf(...) (void)0
+#endif
+
 static void bindInterface(struct usbInterface *intf);
 
 static void pollEvent(void *data) {
@@ -402,12 +408,12 @@ static int enumerateDevice(struct usbHostController *hc, struct usbDevice *paren
 	if (ret)
 		goto fail;
 
-	log_printf("bus %u address %u: configuration %u, %u interfaces\r\n",
+	dbg_printf("bus %u address %u: configuration %u, %u interfaces\r\n",
 		hc->bus, dev->address, dev->configuration, dev->numInterfaces
 	);
 
 	for (i = 0; i < dev->numInterfaces; i++) {
-		log_printf("bus %u address %u interface %u: class %02x/%02x/%02x, %u endpoints\r\n",
+		dbg_printf("bus %u address %u interface %u: class %02x/%02x/%02x, %u endpoints\r\n",
 			hc->bus, dev->address, dev->interfaces[i].descriptor.interfaceNumber,
 			dev->interfaces[i].descriptor.interfaceClass,
 			dev->interfaces[i].descriptor.interfaceSubclass,
@@ -416,7 +422,7 @@ static int enumerateDevice(struct usbHostController *hc, struct usbDevice *paren
 		);
 
 		if (!dev->interfaces[i].driver) {
-			log_printf("bus %u address %u interface %u: no matching driver, ignored\r\n",
+			dbg_printf("bus %u address %u interface %u: no matching driver, ignored\r\n",
 				hc->bus, dev->address, dev->interfaces[i].descriptor.interfaceNumber
 			);
 		}
@@ -756,7 +762,7 @@ void USB_Start(void) {
 	for (hc = controllers; hc; hc = hc->next) {
 		if (!hc->ops->start(hc)) {
 			hc->running = true;
-			log_printf("started bus %u (%s), %u root ports\r\n", hc->bus, hc->name, hc->numPorts);
+			dbg_printf("started bus %u (%s), %u root ports\r\n", hc->bus, hc->name, hc->numPorts);
 		}
 		else
 			log_printf("failed to start bus %u (%s)\r\n", hc->bus, hc->name);
