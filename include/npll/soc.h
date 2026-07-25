@@ -85,6 +85,18 @@
 #define LATTE_OHCI3_BASE       (AHB_BASE + LATTE_OHCI3_OFFSET)
 
 /*
+ * Things in the ACR/Hollywood Regs space
+ */
+#define BOLLYWOOD_I2C_ENG0_OFFSET 0x250
+#define BOLLYWOOD_I2C_ENG0_BASE (HOLLYWOOD_REGS_BASE + BOLLYWOOD_I2C_ENG0_OFFSET)
+
+/*
+ * Things in the CCR/Latte Regs space
+ */
+#define LATTE_I2C_ENG2_OFFSET 0x170
+#define LATTE_I2C_ENG2_BASE (LATTE_REGS_BASE + LATTE_I2C_ENG2_OFFSET)
+
+/*
  * Register access helpers
  */
 
