@@ -92,7 +92,7 @@ CFLAGS  := -mregnames -mcpu=750 -meabi -mrelocatable -msdata=none -mstack-protec
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-CFLAGS  += -O3 -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
+CFLAGS  += -Os -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
 LDFLAGS := -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -T src/linkerscript.ld
 
 # The fixed-address bootstrap deliberately uses absolute linker symbols while
@@ -161,7 +161,7 @@ $(OUT_DOL): $(OUT_ELF)
 $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lgcc
 	$(HIDE)sh utils/verify-relocatable.sh $@ $(READELF) $(NM)
 	$(HIDE)start=$$($(NM) $@ | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
 	  end=$$($(NM) $@ | awk '$$3=="__sbss_end"{print $$1; exit}'); \
