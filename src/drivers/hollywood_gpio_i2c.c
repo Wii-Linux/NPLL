@@ -140,14 +140,11 @@ static struct i2cController gpioI2CController = {
 };
 
 static void gpioI2CInit(void) {
-	/* TODO: enable once I write that driver */
-	#if 0
-	/* Bollywood and Latte should use the hardware I2C engine instead */
-	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiRev == HW_VERSION_PROD_BOLLYWOOD) {
+	/* Native Wii U uses Latte's hardware I2C engine. */
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		gpioI2CDrv.state = DRIVER_STATE_NO_HARDWARE;
 		return;
 	}
-	#endif
 
 	setSDA(true);
 	setSCL(true);
