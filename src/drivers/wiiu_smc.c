@@ -15,17 +15,6 @@
 
 static REGISTER_DRIVER(smcDrv);
 
-#define SMC_ADDRESS             0x50
-#define SMC_REG_PROGRAM_REV     0x40
-#define SMC_REG_SYSTEM_EVENT    0x41
-#define SMC_REG_ODD_FLAG        0x42
-#define SMC_REG_CHIP_REV        0x48
-
-#define SMC_EVENT_DISC_INSERT   BIT(4)
-#define SMC_EVENT_EJECT_BUTTON  BIT(5)
-#define SMC_EVENT_POWER_BUTTON  BIT(6)
-#define SMC_EVENT_BUTTONS       (SMC_EVENT_EJECT_BUTTON | SMC_EVENT_POWER_BUTTON)
-
 #define SMC_POLL_US             20000
 
 static u8 previousEvents;
