@@ -16,7 +16,7 @@
 
 static struct usbHostController *controllers;
 static struct usbDriver *drivers;
-static struct usbDevice devices[USB_MAX_DEVICES];
+static struct usbDevice *devices[USB_MAX_DEVICES];
 static u8 configurationData[USB_MAX_DEVICES][USB_MAX_CONFIG_LENGTH] ALIGN(32);
 static bool initialized, started;
 
@@ -59,26 +59,27 @@ static struct usbDevice *allocateDevice(struct usbHostController *hc, uint port,
 	uint i;
 
 	for (i = 0; i < USB_MAX_DEVICES; i++) {
-		if (devices[i].connected)
+		if (devices[i])
 			continue;
 
-		memset(&devices[i], 0, sizeof(devices[i]));
-		devices[i].hc = hc;
-		devices[i].port = (u8)port;
-		devices[i].parent = parent;
-		devices[i].depth = parent ? (u8)(parent->depth + 1u) : 0;
-		devices[i].speed = speed;
+		devices[i] = malloc(sizeof(*devices[i]));
+		memset(devices[i], 0, sizeof(*devices[i]));
+		devices[i]->hc = hc;
+		devices[i]->port = (u8)port;
+		devices[i]->parent = parent;
+		devices[i]->depth = parent ? (u8)(parent->depth + 1u) : 0;
+		devices[i]->speed = speed;
 		if (parent && parent->speed == USB_SPEED_HIGH && speed != USB_SPEED_HIGH) {
-			devices[i].ttHubAddress = parent->address;
-			devices[i].ttPort = (u8)(port + 1u);
+			devices[i]->ttHubAddress = parent->address;
+			devices[i]->ttPort = (u8)(port + 1u);
 		}
 		else if (parent && parent->ttHubAddress) {
-			devices[i].ttHubAddress = parent->ttHubAddress;
-			devices[i].ttPort = parent->ttPort;
+			devices[i]->ttHubAddress = parent->ttHubAddress;
+			devices[i]->ttPort = parent->ttPort;
 		}
-		devices[i].connected = true;
-		devices[i].descriptor.maxPacketSize0 = 8;
-		return &devices[i];
+		devices[i]->connected = true;
+		devices[i]->descriptor.maxPacketSize0 = 8;
+		return devices[i];
 	}
 	return NULL;
 }
@@ -90,7 +91,7 @@ static u8 allocateAddress(struct usbHostController *hc) {
 	for (address = 1; address < 128; address++) {
 		used = false;
 		for (i = 0; i < USB_MAX_DEVICES; i++) {
-			if (devices[i].connected && devices[i].hc == hc && devices[i].address == address) {
+			if (devices[i] && devices[i]->connected && devices[i]->hc == hc && devices[i]->address == address) {
 				used = true;
 				break;
 			}
@@ -108,13 +109,20 @@ static void disconnectDevice(struct usbDevice *dev) {
 		return;
 
 	dev->connected = false;
-	for (i = 0; i < USB_MAX_DEVICES; i++)
-		if (devices[i].connected && devices[i].parent == dev)
-			disconnectDevice(&devices[i]);
 	for (i = 0; i < dev->numInterfaces; i++) {
 		if (dev->interfaces[i].driver) {
 			dev->interfaces[i].driver->remove(&dev->interfaces[i]);
 			dev->interfaces[i].driver = NULL;
+		}
+	}
+	for (i = 0; i < USB_MAX_DEVICES; i++)
+		if (devices[i] && devices[i]->connected && devices[i]->parent == dev)
+			disconnectDevice(devices[i]);
+	for (i = 0; i < USB_MAX_DEVICES; i++) {
+		if (devices[i] == dev) {
+			devices[i] = NULL;
+			free(dev);
+			return;
 		}
 	}
 }
@@ -263,8 +271,10 @@ static int configureDevice(struct usbDevice *dev) {
 	if (totalLength < sizeof(*header) || totalLength > USB_MAX_CONFIG_LENGTH)
 		return -EMSGSIZE;
 
-	deviceIndex = (uint)(dev - devices);
-	if (deviceIndex >= USB_MAX_DEVICES)
+	for (deviceIndex = 0; deviceIndex < USB_MAX_DEVICES; deviceIndex++)
+		if (devices[deviceIndex] == dev)
+			break;
+	if (deviceIndex == USB_MAX_DEVICES)
 		return -EINVAL;
 
 	dev->configurationData = configurationData[deviceIndex];
@@ -544,9 +554,9 @@ int USB_RegisterDriver(struct usbDriver *driver) {
 	drivers = driver;
 
 	for (i = 0; i < USB_MAX_DEVICES; i++) {
-		if (devices[i].connected) {
-			for (j = 0; j < devices[i].numInterfaces; j++)
-				bindInterface(&devices[i].interfaces[j]);
+		if (devices[i] && devices[i]->connected) {
+			for (j = 0; j < devices[i]->numInterfaces; j++)
+				bindInterface(&devices[i]->interfaces[j]);
 		}
 	}
 
@@ -558,10 +568,12 @@ void USB_UnregisterDriver(struct usbDriver *driver) {
 	uint i, j;
 
 	for (i = 0; i < USB_MAX_DEVICES; i++) {
-		for (j = 0; j < devices[i].numInterfaces; j++) {
-			if (devices[i].interfaces[j].driver == driver) {
-				driver->remove(&devices[i].interfaces[j]);
-				devices[i].interfaces[j].driver = NULL;
+		if (!devices[i])
+			continue;
+		for (j = 0; j < devices[i]->numInterfaces; j++) {
+			if (devices[i]->interfaces[j].driver == driver) {
+				driver->remove(&devices[i]->interfaces[j]);
+				devices[i]->interfaces[j].driver = NULL;
 			}
 		}
 	}
@@ -844,21 +856,14 @@ void USB_Shutdown(void) {
 	struct usbHostController *hc;
 	struct usbHostController *stopOrder[USB_MAX_CONTROLLERS];
 	uint numControllers = 0;
-	uint i, j;
+	uint i;
 
 	started = false;
 	T_CancelRepeatingEvent(pollEvent, NULL);
 
-	for (i = 0; i < USB_MAX_DEVICES; i++) {
-		if (!devices[i].connected)
-			continue;
-
-		devices[i].connected = false;
-		for (j = 0; j < devices[i].numInterfaces; j++) {
-			if (devices[i].interfaces[j].driver)
-				devices[i].interfaces[j].driver->remove(&devices[i].interfaces[j]);
-		}
-	}
+	for (i = 0; i < USB_MAX_DEVICES; i++)
+		if (devices[i] && !devices[i]->parent)
+			disconnectDevice(devices[i]);
 	for (hc = controllers; hc && numControllers < USB_MAX_CONTROLLERS; hc = hc->next)
 		stopOrder[numControllers++] = hc;
 
