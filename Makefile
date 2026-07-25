@@ -195,7 +195,7 @@ $(LWEXT4_COMBINED): $(LWEXT4_OBJS)
 build/lwext4/%.o: external/lwext4/src/%.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-conversion -Wno-shadow -Wno-strict-overflow -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-shift-count-overflow -o $@ -c $<
+	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -Wno-shadow -Wno-strict-overflow -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-shift-count-overflow -o $@ -c $<
 
 build/libfdt/%.o: external/dtc/libfdt/%.c
 	$(info $s  CC $<)
