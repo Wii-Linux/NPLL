@@ -221,7 +221,7 @@ static int probeGPT(struct blockDevice *bdev) {
 		memset(bdev->partitions[count], 0, sizeof(struct partition));
 		bdev->partitions[count]->bdev = bdev;
 		bdev->partitions[count]->offset = npll_le64_to_cpu(entry->startLBA) * bdev->blockSize;
-		bdev->partitions[count]->size = (npll_le64_to_cpu(entry->endLBA) - npll_le64_to_cpu(entry->startLBA)) * bdev->blockSize;
+		bdev->partitions[count]->size = ((npll_le64_to_cpu(entry->endLBA) - npll_le64_to_cpu(entry->startLBA)) + 1) * bdev->blockSize;
 		bdev->partitions[count]->index = count;
 		count++;
 
