@@ -79,9 +79,20 @@ char *strcat(char *dest, const char *src) {
 
 int strcmp(const char *str1, const char *str2) {
 	while (*str1) {
-		if (*str1 != *str2) {
+		if (*str1 != *str2)
 			break;
-		}
+
+		str1++;
+		str2++;
+	}
+
+	return *(const uint8_t *)str1 - *(const uint8_t *)str2;
+}
+
+int strncmp(const char *str1, const char *str2, size_t n) {
+	while (n--) {
+		if (!*str1 || !*str2 || *str1 != *str2)
+			break;
 
 		str1++;
 		str2++;
