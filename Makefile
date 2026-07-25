@@ -88,7 +88,7 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -meabi -mrelocatable -msdata=none -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -mcpu=750 -meabi -mrelocatable -msdata=none -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -Iexternal/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
@@ -140,6 +140,11 @@ LIBFDT_COMBINED := build/libfdt.o
 LIBFDT_OBJS := $(patsubst %.o,build/libfdt/%.o,$(LIBFDT_OBJS))
 LIBFDT_SRCS := $(patsubst %.c,external/dtc/libfdt/%.c,$(LIBFDT_SRCS))
 
+include external/lwext4/Makefile.npll
+LWEXT4_COMBINED := build/lwext4.o
+LWEXT4_OBJS := $(patsubst %.c,build/lwext4/%.o,$(LWEXT4_SRCS))
+LWEXT4_SRCS := $(patsubst %.c,external/lwext4/src/%.c,$(LWEXT4_SRCS))
+
 OBJ     := $(patsubst %.S,build/%.o,$(patsubst %.c,build/%.o,$(SOURCE)))
 FAT_OBJ := $(patsubst %.c,build/%.o,$(FAT_SOURCE))
 FAT_COMBINED := build/fs/fat/fat.o
@@ -153,7 +158,7 @@ $(OUT_DOL): $(OUT_ELF)
 	$(info $s  ELF2DOL $@)
 	$(HIDE)$(ELF2DOL) $< $@
 
-$(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED)
+$(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
 	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
@@ -182,6 +187,15 @@ $(FAT_COMBINED): $(FAT_OBJ)
 $(LIBFDT_COMBINED): $(LIBFDT_OBJS)
 	$(info $s  LD(r) $@)
 	$(HIDE)$(LD) -r -o $@ $^
+
+$(LWEXT4_COMBINED): $(LWEXT4_OBJS)
+	$(info $s  LD(r) $@)
+	$(HIDE)$(LD) -r -o $@ $^
+
+build/lwext4/%.o: external/lwext4/src/%.c
+	$(info $s  CC $<)
+	$(HIDE)mkdir -p $(@D)
+	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-conversion -Wno-shadow -Wno-strict-overflow -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-shift-count-overflow -o $@ -c $<
 
 build/libfdt/%.o: external/dtc/libfdt/%.c
 	$(info $s  CC $<)
