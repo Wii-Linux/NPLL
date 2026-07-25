@@ -12,7 +12,9 @@
 #include <npll/utils.h>
 #include <npll/drivers.h>
 #include <npll/cpu.h>
+#include <npll/i2c.h>
 #include <npll/latte/ipc.h>
+#include <npll/latte/smc.h>
 
 enum wiiuRev H_WiiURev;
 
@@ -62,6 +64,12 @@ static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 	wiiuReboot();
 }
 
+static void wiiuEject(void) {
+	u8 cmd = SMC_CMD_ODD_EJECT;
+
+	I2C_Write(I2C_BUS_SMC, SMC_ADDRESS, &cmd, sizeof(cmd));
+}
+
 static struct platOps wiiuPlatOps = {
 	.panic = wiiuPanic,
 	.debugWriteChar = wiiuDebugChar,
@@ -69,7 +77,7 @@ static struct platOps wiiuPlatOps = {
 	.reboot = wiiuReboot,
 	.shutdown = wiiuShutdown,
 	.exit = NULL,
-	.ejectDisc = NULL, /* maybe once we do an entire AHCI stack.... */
+	.ejectDisc = wiiuEject
 };
 
 void __attribute__((noreturn)) H_InitWiiU(void) {
