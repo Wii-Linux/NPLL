@@ -38,14 +38,16 @@ static void gpioIRQHandler(enum irqDev dev) {
 	numSet = numClearred = 0;
 	ev = 0;
 
-	if (set & GPIO_POWER)
-		ev |= INPUT_EV_DOWN;
-	if (set & GPIO_EJECT_BTN)
-		ev |= INPUT_EV_SELECT;
-	if (set & GPIO_SLOT_IN)
-		log_puts("Disc inserted");
-	else if (clearred & GPIO_SLOT_IN)
-		log_puts("Disc removed");
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		if (set & GPIO_POWER)
+			ev |= INPUT_EV_DOWN;
+		if (set & GPIO_EJECT_BTN)
+			ev |= INPUT_EV_SELECT;
+		if (set & GPIO_SLOT_IN)
+			log_puts("Disc inserted");
+		else if (clearred & GPIO_SLOT_IN)
+			log_puts("Disc removed");
+	}
 
 	setLog = set & ~gpioButtonMask;
 	clearredLog = clearred & ~gpioButtonMask;
