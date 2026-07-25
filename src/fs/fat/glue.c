@@ -107,7 +107,6 @@ static int check_fs (u8 *_vbr) {
 #define MAX_FILES 16
 struct filesystem FS_FAT, FS_exFAT;
 extern struct partition *partitions[FF_VOLUMES];
-extern const char *VolumeStr[FF_VOLUMES];
 static FATFS fatfsObj;
 static FIL openFiles[MAX_FILES];
 #define VALIDATE_FD(ret) if (fd < 0 || fd >= MAX_FILES || !openFiles[fd].obj.fs) { return ret; }
@@ -169,10 +168,9 @@ static int fatMount(struct filesystem *fs, struct partition *part) {
 	memset(&fatfsObj, 0, sizeof(fatfsObj));
 	memset(&openFiles, 0, sizeof(openFiles));
 	partitions[0] = part;
-	VolumeStr[0] = part->bdev->name;
 
 	/* actually mount it */
-	ret = f_mount(&fatfsObj, part->bdev->name, 1);
+	ret = f_mount(&fatfsObj, "0", 1);
 	if (ret) {
 		log_printf("f_mount failed: %d\r\n", ret);
 		return -1;
@@ -183,9 +181,8 @@ static int fatMount(struct filesystem *fs, struct partition *part) {
 
 static void fatUnmount(struct filesystem *fs) {
 	(void)fs;
-	f_unmount(VolumeStr[0]);
+	f_unmount("0");
 	partitions[0] = NULL;
-	VolumeStr[0] = NULL;
 	memset(&fatfsObj, 0, sizeof(fatfsObj));
 	memset(&openFiles, 0, sizeof(openFiles));
 }
