@@ -12,6 +12,7 @@
 #include <npll/input.h>
 #include <npll/log.h>
 #include <npll/timer.h>
+#include <npll/latte/smc.h>
 
 static REGISTER_DRIVER(smcDrv);
 
