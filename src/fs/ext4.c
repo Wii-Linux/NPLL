@@ -20,7 +20,6 @@
 
 #define MAX_FILES 16
 #define EXT4_DEVICE_NAME "npll-ext"
-#define EXT4_MOUNT_POINT "/"
 #define EXT_SUPERBLOCK_OFFSET 1024
 #define EXT_SUPERBLOCK_MAGIC_OFFSET 56
 #define EXT_SUPERBLOCK_MAGIC 0xef53
@@ -100,23 +99,6 @@ static int blockClose(struct ext4_blockdev *bdev) {
 	return EOK;
 }
 
-static const char *absolutePath(const char *path, char **allocated) {
-	size_t len;
-
-	*allocated = NULL;
-	if (path[0] == '/')
-		return path;
-
-	len = strlen(path);
-	*allocated = malloc(len + 2);
-	if (!*allocated)
-		return NULL;
-
-	(*allocated)[0] = '/';
-	memcpy(*allocated + 1, path, len + 1);
-	return *allocated;
-}
-
 static bool ext4Probe(struct filesystem *fs, struct partition *part) {
 	u8 ALIGN(32) sb[EXT_SUPERBLOCK_MAGIC_OFFSET + sizeof(u16)];
 	u16 magic;
@@ -161,12 +143,12 @@ static int ext4Mount(struct filesystem *fs, struct partition *part) {
 	if (ret != EOK)
 		goto fail;
 
-	ret = ext4_mount(EXT4_DEVICE_NAME, EXT4_MOUNT_POINT, !!(part->bdev->flags & BLOCK_FLAG_READ_ONLY));
+	ret = ext4_mount(EXT4_DEVICE_NAME, !!(part->bdev->flags & BLOCK_FLAG_READ_ONLY));
 	if (ret != EOK)
 		goto unregister;
 
 	if (!(part->bdev->flags & BLOCK_FLAG_READ_ONLY)) {
-		ret = ext4_journal_start(EXT4_MOUNT_POINT);
+		ret = ext4_journal_start();
 		if (ret != EOK)
 			goto unmount;
 		journalStarted = true;
@@ -176,7 +158,7 @@ static int ext4Mount(struct filesystem *fs, struct partition *part) {
 	return 0;
 
 unmount:
-	ext4_umount(EXT4_MOUNT_POINT);
+	ext4_umount();
 unregister:
 	ext4_device_unregister(EXT4_DEVICE_NAME);
 fail:
@@ -190,13 +172,13 @@ static void ext4Unmount(struct filesystem *fs) {
 	int ret;
 
 	if (journalStarted) {
-		ret = ext4_journal_stop(EXT4_MOUNT_POINT);
+		ret = ext4_journal_stop();
 		if (ret != EOK)
 			log_printf("ext4_journal_stop failed: %d\r\n", ret);
 		journalStarted = false;
 	}
 
-	ret = ext4_umount(EXT4_MOUNT_POINT);
+	ret = ext4_umount();
 	if (ret != EOK)
 		log_printf("ext4_umount failed: %d\r\n", ret);
 	ret = ext4_device_unregister(EXT4_DEVICE_NAME);
@@ -211,8 +193,6 @@ static void ext4Unmount(struct filesystem *fs) {
 }
 
 static int ext4Open(struct filesystem *fs, const char *path) {
-	char *allocated;
-	const char *fullPath;
 	int fd, ret;
 
 	(void)fs;
@@ -220,11 +200,7 @@ static int ext4Open(struct filesystem *fs, const char *path) {
 	if (fd < 0)
 		return -EMFILE;
 
-	fullPath = absolutePath(path, &allocated);
-	if (!fullPath)
-		return -ENOMEM;
-	ret = ext4_fopen(&openFiles[fd], fullPath, "r");
-	free(allocated);
+	ret = ext4_fopen(&openFiles[fd], path, "r");
 	if (ret != EOK) {
 		memset(&openFiles[fd], 0, sizeof(openFiles[fd]));
 		return -ret;
@@ -234,8 +210,6 @@ static int ext4Open(struct filesystem *fs, const char *path) {
 }
 
 static int ext4Create(struct filesystem *fs, const char *path) {
-	char *allocated;
-	const char *fullPath;
 	int fd, ret;
 
 	(void)fs;
@@ -243,11 +217,7 @@ static int ext4Create(struct filesystem *fs, const char *path) {
 	if (fd < 0)
 		return -EMFILE;
 
-	fullPath = absolutePath(path, &allocated);
-	if (!fullPath)
-		return -ENOMEM;
-	ret = ext4_fopen(&openFiles[fd], fullPath, "w");
-	free(allocated);
+	ret = ext4_fopen(&openFiles[fd], path, "w");
 	if (ret != EOK) {
 		memset(&openFiles[fd], 0, sizeof(openFiles[fd]));
 		return -ret;
