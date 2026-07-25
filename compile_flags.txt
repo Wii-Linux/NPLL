@@ -1,5 +1,6 @@
 -Iinclude
 -Iexternal/dtc/libfdt
+-Iexternal/lwext4/include
 -nostdinc
 -ffreestanding
 -nostdlib
