@@ -397,9 +397,16 @@ void M_PoolStats(enum pool_idx pool_idx, u32 *total, u32 *used, u32 *free_bytes,
 	*largest_free = bottom_free;
 }
 
-/* C stdlib malloc() implementation */
+/* C stdlib malloc()/calloc() implementation */
 void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size) {
 	return M_PoolAlloc(POOL_ANY, size, MIN_ALIGN);
+}
+
+void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) calloc(size_t num, size_t size) {
+	void *buf = malloc(num * size);
+	memset(buf, 0, num * size);
+
+	return buf;
 }
 
 void M_Init(void) {

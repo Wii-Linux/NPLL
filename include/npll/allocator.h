@@ -29,6 +29,7 @@ extern void *__attribute__((malloc, assume_aligned(32))) M_PoolAllocAvoid(
 extern void M_PoolStats(enum pool_idx pool, u32 *total, u32 *used, u32 *free_bytes, u32 *largest_alloc, u32 *largest_free);
 
 extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) malloc(size_t size);
+extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) calloc(size_t num, size_t size);
 extern void free(void *ptr);
 
 #endif /* _ALLOCATOR_H */
