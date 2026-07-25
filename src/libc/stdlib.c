@@ -2,11 +2,16 @@
  * NPLL - libc - stdlib
  *
  * Copyright (C) 2026 Techflash
+ *
+ * qsort() based on code from uClibc-ng 1.0.58:
+ * https://uclibc-ng.org/
+ * Copyright (C) 2002     Manuel Novoa III
  */
 
 #include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <npll/utils.h>
 
 /*
@@ -154,4 +159,46 @@ long long strtoll(const char *str, char **endPtr, int base) {
 unsigned long long strtoull(const char *str, char **endPtr, int base) {
 	/* strtoull is supposed to be able to handle negatives too */
 	return (unsigned long long)strtoll(str, endPtr, base);
+}
+
+void qsort(void *base, size_t nel, size_t width, qsortCmpFn_t comp) {
+	size_t wgap, i, j, k;
+	char tmp;
+
+	if ((nel > 1) && (width > 0)) {
+		assert(nel <= ((size_t)(-1)) / width); /* check for overflow */
+		wgap = 0;
+		do {
+			wgap = 3 * wgap + 1;
+		} while (wgap < (nel-1)/3);
+		/* From the above, we know that either wgap == 1 < nel or */
+		/* ((wgap-1)/3 < (int) ((nel-1)/3) <= (nel-1)/3 ==> wgap <  nel. */
+		wgap *= width;			/* So this can not overflow if wnel doesn't. */
+		nel *= width;			/* Convert nel to 'wnel' */
+		do {
+			i = wgap;
+			do {
+				j = i;
+				do {
+					register char *a;
+					register char *b;
+
+					j -= wgap;
+					a = j + ((char *)base);
+					b = a + wgap;
+					if ((*comp)(a, b) <= 0) {
+						break;
+					}
+					k = width;
+					do {
+						tmp = *a;
+						*a++ = *b;
+						*b++ = tmp;
+					} while (--k);
+				} while (j >= wgap);
+				i += width;
+			} while (i < nel);
+			wgap = (wgap - width)/3;
+		} while (wgap);
+	}
 }
