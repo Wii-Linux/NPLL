@@ -59,4 +59,7 @@
 /* seems to also be important for GamePad */
 #define GPIO_PADPD       BIT(8)
 
+/* BCM2045A doesn't enumerate on Wii U without this */
+#define GPIO_BLUETOOTHMODE BIT(27)
+
 #endif /* _GPIO_H */
