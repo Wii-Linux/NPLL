@@ -154,14 +154,14 @@ static void hubPoll(void *data) {
 
 		memset(bitmap, 0, sizeof(bitmap));
 		actual = 0;
-		ret = USB_InterruptPoll(hub->interface->device, hub->interrupt, bitmap, (hub->numPorts + 8u) / 8u, &actual);
+		ret = USB_ResidentInPoll(hub->interface->device, hub->interrupt, bitmap, (hub->numPorts + 8u) / 8u, &actual);
 		if (ret == 0)
 			continue;   /* armed, no status change yet */
 
 		if (ret == -EPIPE) {
 			/* status endpoint halted: clear it and re-arm */
 			USB_ClearHalt(hub->interface->device, hub->interrupt);
-			USB_InterruptArm(hub->interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
+			USB_ResidentInArm(hub->interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
 			continue;
 		}
 		if (ret < 0) {
@@ -235,7 +235,7 @@ static int hubProbe(struct usbInterface *interface, const struct usbDeviceId *id
 	 * Arm the status-change endpoint as a resident interrupt: the controller
 	 * polls it in hardware, so hubPoll never busy-waits on an idle hub.
 	 */
-	ret = USB_InterruptArm(interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
+	ret = USB_ResidentInArm(interface->device, hub->interrupt, (hub->numPorts + 8u) / 8u);
 	if (ret) {
 		memset(hub, 0, sizeof(*hub));
 		return ret;
@@ -261,7 +261,7 @@ static void hubRemove(struct usbInterface *interface) {
 	if (!hub)
 		return;
 
-	USB_InterruptStop(interface->device, hub->interrupt);
+	USB_ResidentInStop(interface->device, hub->interrupt);
 	for (port = 0; port < hub->numPorts; port++)
 		hubDetachPort(hub, port);
 

@@ -107,11 +107,11 @@ static u8 reportActionKey(const u8 *report) {
  * transparently, reported as "nothing this round".
  */
 static int hidReadReport(struct usbInterface *interface, struct usbEndpoint *endpoint, void *report, u32 length, u32 *actual) {
-	int ret = USB_InterruptPoll(interface->device, endpoint, report, length, actual);
+	int ret = USB_ResidentInPoll(interface->device, endpoint, report, length, actual);
 
 	if (ret == -EPIPE) {
 		USB_ClearHalt(interface->device, endpoint);
-		USB_InterruptArm(interface->device, endpoint, length);
+		USB_ResidentInArm(interface->device, endpoint, length);
 		return 0;
 	}
 	return ret;
@@ -362,7 +362,7 @@ static int keyboardProbe(struct usbInterface *interface, const struct usbDeviceI
 	keyboard->interface = interface;
 	keyboard->endpoint = endpoint;
 
-	ret = USB_InterruptArm(interface->device, endpoint, sizeof(keyboard->report));
+	ret = USB_ResidentInArm(interface->device, endpoint, sizeof(keyboard->report));
 	if (ret) {
 		memset(keyboard, 0, sizeof(*keyboard));
 		return ret;
@@ -381,7 +381,7 @@ static void keyboardRemove(struct usbInterface *interface) {
 	if (!keyboard)
 		return;
 
-	USB_InterruptStop(interface->device, keyboard->endpoint);
+	USB_ResidentInStop(interface->device, keyboard->endpoint);
 	memset(keyboard, 0, sizeof(*keyboard));
 	interface->driverData = NULL;
 }
@@ -417,7 +417,7 @@ static int drhProbe(struct usbInterface *interface, const struct usbDeviceId *id
 	drh->interface = interface;
 	drh->endpoint = endpoint;
 
-	if (USB_InterruptArm(interface->device, endpoint, DRH_REPORT_SIZE)) {
+	if (USB_ResidentInArm(interface->device, endpoint, DRH_REPORT_SIZE)) {
 		memset(drh, 0, sizeof(*drh));
 		return -EIO;
 	}
@@ -433,7 +433,7 @@ static void drhRemove(struct usbInterface *interface) {
 	struct usbDRH *drh = interface->driverData;
 	if (!drh)
 		return;
-	USB_InterruptStop(interface->device, drh->endpoint);
+	USB_ResidentInStop(interface->device, drh->endpoint);
 	memset(drh, 0, sizeof(*drh));
 	interface->driverData = NULL;
 }

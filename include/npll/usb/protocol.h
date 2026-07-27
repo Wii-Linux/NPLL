@@ -43,6 +43,9 @@
 #define USB_CLASS_HID               3u
 #define USB_CLASS_MASS_STORAGE      8u
 #define USB_CLASS_HUB               9u
+#define USB_CLASS_WIRELESS_CONTROLLER 0xe0u
+#define USB_SUBCLASS_RF_CONTROLLER  1u
+#define USB_PROTOCOL_BLUETOOTH      1u
 #define USB_SUBCLASS_SCSI           6u
 #define USB_PROTOCOL_HID_KEYBOARD   1u
 #define USB_PROTOCOL_BOT            0x50u

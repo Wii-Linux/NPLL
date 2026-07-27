@@ -518,6 +518,11 @@ static int matchScore(const struct usbDeviceId *id, struct usbInterface *intf) {
 			return -1;
 		score += 4;
 	}
+	if (id->matchFlags & USB_MATCH_INTERFACE_NUMBER) {
+		if (id->interfaceNumber != intf->descriptor.interfaceNumber)
+			return -1;
+		score += 2;
+	}
 
 	return score;
 }
@@ -525,7 +530,7 @@ static int matchScore(const struct usbDeviceId *id, struct usbInterface *intf) {
 static void bindInterface(struct usbInterface *intf) {
 	struct usbDriver *drv, *best = NULL;
 	const struct usbDeviceId *id, *bestId = NULL;
-	int score, bestScore = -1;
+	int ret, score, bestScore = -1;
 
 	if (intf->driver)
 		return;
@@ -541,8 +546,15 @@ static void bindInterface(struct usbInterface *intf) {
 		}
 	}
 
-	if (best && !best->probe(intf, bestId))
-		intf->driver = best;
+	if (best) {
+		ret = best->probe(intf, bestId);
+		if (!ret)
+			intf->driver = best;
+		else
+			log_printf("bus %u address %u interface %u: %s probe failed: %d\r\n",
+				intf->device->hc->bus, intf->device->address,
+				intf->descriptor.interfaceNumber, best->name, ret);
+	}
 }
 
 int USB_RegisterDriver(struct usbDriver *driver) {
@@ -709,34 +721,37 @@ int USB_BulkTransfer(struct usbDevice *dev, struct usbEndpoint *ep, void *data, 
 	return dataTransfer(dev, ep, data, length, actual, timeout, USB_ENDPOINT_XFER_BULK);
 }
 
-int USB_InterruptArm(struct usbDevice *dev, struct usbEndpoint *ep, u32 length) {
+int USB_ResidentInArm(struct usbDevice *dev, struct usbEndpoint *ep, u32 length) {
+	u8 type;
+
 	if (!started || !dev || !dev->connected || !dev->hc || !ep)
 		return -ENODEV;
-	if ((ep->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_INT ||
-	    !(ep->address & USB_ENDPOINT_DIR_MASK))
+	type = ep->attributes & USB_ENDPOINT_XFER_MASK;
+	if ((type != USB_ENDPOINT_XFER_INT && type != USB_ENDPOINT_XFER_BULK) ||
+	    !(ep->address & USB_ENDPOINT_DIR_MASK) || !length)
 		return -EINVAL;
-	if (!dev->hc->ops->interruptArm)
+	if (!dev->hc->ops->residentInArm)
 		return -ENOSYS;
 
-	return dev->hc->ops->interruptArm(dev->hc, dev, ep, length);
+	return dev->hc->ops->residentInArm(dev->hc, dev, ep, length);
 }
 
-int USB_InterruptPoll(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual) {
+int USB_ResidentInPoll(struct usbDevice *dev, struct usbEndpoint *ep, void *data, u32 length, u32 *actual) {
 	if (actual)
 		*actual = 0;
 	if (!started || !dev || !dev->connected || !dev->hc || !ep || !data || !length)
 		return -ENODEV;
-	if (!dev->hc->ops->interruptPoll)
+	if (!dev->hc->ops->residentInPoll)
 		return -ENOSYS;
 
-	return dev->hc->ops->interruptPoll(dev->hc, ep, data, length, actual);
+	return dev->hc->ops->residentInPoll(dev->hc, ep, data, length, actual);
 }
 
-void USB_InterruptStop(struct usbDevice *dev, struct usbEndpoint *ep) {
-	if (!dev || !dev->hc || !ep || !dev->hc->ops->interruptStop)
+void USB_ResidentInStop(struct usbDevice *dev, struct usbEndpoint *ep) {
+	if (!dev || !dev->hc || !ep || !dev->hc->ops->residentInStop)
 		return;
 
-	dev->hc->ops->interruptStop(dev->hc, ep);
+	dev->hc->ops->residentInStop(dev->hc, ep);
 }
 
 int USB_ClearHalt(struct usbDevice *dev, struct usbEndpoint *ep) {

@@ -1108,7 +1108,12 @@ static int ehciInterruptPoll(struct usbHostController *hc, struct usbEndpoint *e
 		memcpy(data, ie->buffer, got);
 	}
 
-	ie->toggle ^= 1u;
+	/*
+	 * HID reports fit in one transaction, but resident bulk-IN can span many
+	 * packets.  Advance DATA0/DATA1 by the parity of packets transferred.
+	 */
+	if (got)
+		ie->toggle ^= (u8)(((got + ep->maxPacketSize - 1u) / ep->maxPacketSize) & 1u);
 	ep->toggle = ie->toggle;
 	*actual = got;
 
@@ -1626,9 +1631,9 @@ static const struct usbHostControllerOps ehciOps = {
 	.poll = NULL,
 	.transfer = hcdTransfer,
 	.cancel = NULL,
-	.interruptArm = ehciInterruptArm,
-	.interruptPoll = ehciInterruptPoll,
-	.interruptStop = ehciInterruptStop,
+	.residentInArm = ehciInterruptArm,
+	.residentInPoll = ehciInterruptPoll,
+	.residentInStop = ehciInterruptStop,
 	.rootPortStatus = ehciPortStatus,
 	.rootPortReset = ehciPortReset,
 	.rootPortClearChange = ehciClearChange,
@@ -1639,9 +1644,9 @@ static const struct usbHostControllerOps ohciOps = {
 	.poll = NULL,
 	.transfer = hcdTransfer,
 	.cancel = NULL,
-	.interruptArm = ohciInterruptArm,
-	.interruptPoll = ohciInterruptPoll,
-	.interruptStop = ohciInterruptStop,
+	.residentInArm = ohciInterruptArm,
+	.residentInPoll = ohciInterruptPoll,
+	.residentInStop = ohciInterruptStop,
 	.rootPortStatus = ohciPortStatus,
 	.rootPortReset = ohciPortReset,
 	.rootPortClearChange = ohciClearChange,
