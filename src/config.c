@@ -1218,7 +1218,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 		if (npllEnsureFS(ne, ne->dtbPath, &path))
 			goto fail;
 		fd = FS_Open(path);
-		dtbExtra = 1024u + (ne->cmdline ? (u32)strlen(ne->cmdline) + 1u : 0u);
+		dtbExtra = 2048u + (ne->cmdline ? (u32)strlen(ne->cmdline) + 1u : 0u);
 		if (fd < 0 || L_LoadAuxFile(fd, POOL_ANY, &temporaryDtb, 0, &files.dtbSize)) {
 			log_printf("npllBootLinux: failed to load device tree: %d\r\n", fd);
 			goto fail;
