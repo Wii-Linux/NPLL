@@ -29,12 +29,15 @@
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/fs.h>
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/soc.h>
 #include <npll/utils.h>
+#include <npll/wiimote.h>
+#include "../fs/sffs.h"
 
 static REGISTER_DRIVER(nandDrv);
 #define NAND_ECC_SIZE 64
@@ -377,6 +380,13 @@ static void nandInit(void) {
 			goto failed;
 
 		B_Register(&wiiBdev);
+		/*
+		 * B_Register has just probed and mounted the Wii SFFS partition.
+		 * Capture BT.DINF now, before a later block device replaces the
+		 * process-global filesystem mount.
+		 */
+		if (FS_Mounted == &FS_SFFS)
+			WM_LoadPairingsFromSFFS();
 	}
 
 	nandDrv.state = DRIVER_STATE_READY;

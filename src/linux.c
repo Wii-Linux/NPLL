@@ -15,8 +15,9 @@
 #include <npll/linux.h>
 #include <npll/log.h>
 #include <npll/utils.h>
+#include <npll/wiimote.h>
 
-#define DTB_SLACK 1024u
+#define DTB_SLACK 2048u
 
 static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut,
 		       const struct memRange *avoid, size_t avoidCount) {
@@ -274,6 +275,33 @@ static int fixupWiiMemory(void *fdt) {
 	return 0;
 }
 
+static int addWiiRemotePairings(void *fdt, int chosen) {
+	const struct wiimotePairing *pairings;
+	u8 addresses[WIIMOTE_MAX_PAIRINGS * 6u];
+	char names[WIIMOTE_MAX_PAIRINGS * (WIIMOTE_NAME_LENGTH + 1u)];
+	size_t nameLength, namesLength = 0;
+	uint count, i;
+	int ret;
+
+	if (H_ConsoleType != CONSOLE_TYPE_WII)
+		return 0;
+	pairings = WM_GetPairings(&count);
+	if (!count)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		nameLength = strlen(pairings[i].name) + 1u;
+		memcpy(addresses + (i * 6u), pairings[i].bdaddr, 6);
+		memcpy(names + namesLength, pairings[i].name, nameLength);
+		namesLength += nameLength;
+	}
+
+	ret = fdt_setprop(fdt, chosen, "nintendo,wii-remote-bdaddrs", addresses, (int)(count * 6u));
+	if (ret)
+		return ret;
+	return fdt_setprop(fdt, chosen, "nintendo,wii-remote-names", names, (int)namesLength);
+}
+
 int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	void *fdt;
 	u32 capacity, initrdStart, initrdEnd;
@@ -311,6 +339,10 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 		if (ret)
 			goto fail;
 	}
+
+	ret = addWiiRemotePairings(fdt, chosen);
+	if (ret)
+		goto fail;
 
 	if (files->initrd) {
 		initrdStart = (u32)(uintptr_t)virtToPhys(files->initrd);
