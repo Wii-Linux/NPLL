@@ -15,7 +15,8 @@
 
 static REGISTER_DRIVER(fbDrv);
 
-static void fbFlush(void);
+static void fbFlush(uint x, uint y, uint width, uint height);
+static void fbScroll(uint rows);
 
 /* TV */
 #define REAL_FB (u32 *)(MEM2_CACHED_BASE + 0x07500000)
@@ -39,13 +40,34 @@ static struct videoInfo fbVidInfo = {
 	.height = 504,
 #endif
 	.flush = fbFlush,
+	.scroll = fbScroll,
 	.driver = &fbDrv
 };
 
 
-static void fbFlush(void) {
-	memcpy((void *)realFb, shadowFb, FB_SIZE);
-	dcache_flush(realFb, FB_SIZE);
+static void fbFlush(uint x, uint y, uint width, uint height) {
+	uint row;
+	u32 *src = shadowFb + y * fbVidInfo.width + x;
+	u32 *dest = (u32 *)realFb + y * fbVidInfo.width + x;
+	uint rowSize = width * (uint)sizeof(u32);
+
+	for (row = 0; row < height; row++) {
+		memcpy(dest, src, rowSize);
+		src += fbVidInfo.width;
+		dest += fbVidInfo.width;
+	}
+
+	/* Flush one span to avoid paying for a sync on every scanline. */
+	dcache_flush((u32 *)realFb + y * fbVidInfo.width + x,
+	    ((height - 1) * fbVidInfo.width + width) * sizeof(u32));
+}
+
+static void fbScroll(uint rows) {
+	uint rowSize = fbVidInfo.width * (uint)sizeof(u32);
+	uint size = (fbVidInfo.height - rows) * rowSize;
+
+	memmove((void *)realFb, (const u8 *)realFb + rows * rowSize, size);
+	dcache_flush(realFb, size);
 }
 
 static void fbInit(void) {

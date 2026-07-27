@@ -365,20 +365,40 @@ static void clear_fb_rgb(rgb fill_rgb) {
 
 static struct videoInfo viVidInfo;
 
-static void viFlush(void) {
+static void viScroll(uint rows) {
+	u8 *dest = (u8 *)xfb +
+	    XFB_OS_COMP_PIX * XFB_WIDTH * (uint)sizeof(u16);
+	uint rowSize = XFB_WIDTH * (uint)sizeof(u16);
+	uint size = (viVidInfo.height - rows) * rowSize;
+
+	memmove(dest, dest + rows * rowSize, size);
+	dcache_flush(dest, size);
+}
+
+static void viFlush(uint x, uint y, uint width, uint height) {
 	u32 *dest, *src;
 	rgb rgb1, rgb2;
-	uint i;
+	uint endX, row, col;
 
-	src  = rgbFb;
-	dest = (u32 *)xfb;
-	for (i = 0; i < (XFB_WIDTH * XFB_HEIGHT) / 2; i++) {
-		rgb1 = (rgb)src[i * 2];
-		rgb2 = (rgb)src[(i * 2) + 1];
+	/* YUYV stores pairs of pixels, so expand odd dirty edges to a pair. */
+	endX = (x + width + 1u) & ~1u;
+	x &= ~1u;
+	width = endX - x;
+	y += XFB_OS_COMP_PIX;
 
-		dest[i] = make_yuv(rgb1, rgb2);
+	for (row = 0; row < height; row++) {
+		src = rgbFb + (y + row) * XFB_WIDTH + x;
+		dest = (u32 *)xfb + ((y + row) * XFB_WIDTH + x) / 2;
+		for (col = 0; col < width; col += 2) {
+			rgb1 = (rgb)src[col];
+			rgb2 = (rgb)src[col + 1];
+			dest[col / 2] = make_yuv(rgb1, rgb2);
+		}
 	}
-	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
+
+	/* Flush one span to avoid paying for a sync on every scanline. */
+	dcache_flush((u16 *)xfb + y * XFB_WIDTH + x,
+	    ((height - 1) * XFB_WIDTH + width) * sizeof(u16));
 }
 
 static struct videoInfo viVidInfo = {
@@ -386,6 +406,7 @@ static struct videoInfo viVidInfo = {
 	.width = XFB_WIDTH,
 	.height = XFB_HEIGHT - (XFB_OS_COMP_PIX * 2),
 	.flush = viFlush,
+	.scroll = viScroll,
 	.driver = &viDrv
 };
 
@@ -413,7 +434,7 @@ static void viDrvInit(void) {
 }
 
 static void viDrvCleanup(void) {
-	viFlush();
+	viFlush(0, 0, viVidInfo.width, viVidInfo.height);
 	free(rgbFb);
 	free(xfb);
 	viDrv.state = DRIVER_STATE_NOT_READY;

@@ -40,6 +40,8 @@ static volatile bool fbLocked = false;
  * full flush every 66ms with an identical framebuffer. Starts true so
  * the first flush always happens. */
 static volatile bool fbDirty = true;
+/* Bounds are inclusive at the start and exclusive at the end. */
+static volatile uint dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY;
 
 /* 15 FPS */
 #define FRAME_MS_TARGET 66
@@ -72,6 +74,31 @@ static u32 colors[16] = {
 static uint colorIdx[2];
 static u32 color[2];
 static void odevWriteChar(char c);
+
+static void markDirty(uint x, uint y, uint width, uint height) {
+	bool irqs;
+	uint maxX = x + width;
+	uint maxY = y + height;
+
+	irqs = IRQ_DisableSave();
+	if (!fbDirty) {
+		dirtyMinX = x;
+		dirtyMinY = y;
+		dirtyMaxX = maxX;
+		dirtyMaxY = maxY;
+		fbDirty = true;
+	} else {
+		if (x < dirtyMinX)
+			dirtyMinX = x;
+		if (y < dirtyMinY)
+			dirtyMinY = y;
+		if (maxX > dirtyMaxX)
+			dirtyMaxX = maxX;
+		if (maxY > dirtyMaxY)
+			dirtyMaxY = maxY;
+	}
+	IRQ_Restore(irqs);
+}
 
 static char *parsenum(const char *s, uint *num) {
 	char *end;
@@ -186,7 +213,7 @@ static void handleEscape(char c) {
 
 		if (mode == 2) {
 			memset(V_FbPtr, 0, V_FbStride * V_FbHeight);
-			fbDirty = true;
+			markDirty(0, 0, V_FbWidth, V_FbHeight);
 			posX = 0;
 			posY = 0;
 		} else {
@@ -309,17 +336,32 @@ static void maybeScroll(void) {
 	fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
 	srcAddr = (((u8 *)V_FbPtr) + fontSz);
 	size = ((V_FbWidth * 4u) * V_FbHeight) - fontSz;
+
+	/*
+	 * Bring the driver's native framebuffer up to date before shifting it.
+	 * Otherwise a line written since the previous periodic flush would be
+	 * missing from the scrolled native framebuffer.
+	 */
+	if (V_ActiveDriver->scroll)
+		V_Flush();
+
 	memmove(V_FbPtr, srcAddr, size);
 
 	startZeroAddr = (srcAddr + size) - fontSz;
 	memset(startZeroAddr, 0, fontSz);
-	fbDirty = true;
+	if (V_ActiveDriver->scroll) {
+		V_ActiveDriver->scroll(FONT_HEIGHT);
+		markDirty(0, V_FbHeight - FONT_HEIGHT,
+		    V_FbWidth, FONT_HEIGHT);
+	} else {
+		markDirty(0, 0, V_FbWidth, V_FbHeight);
+	}
 }
 
 static void odevWriteChar(char c) {
 	u8 *row, dat;
-	u32 pix;
-	uint x, y, spc, off;
+	u32 *dst;
+	uint x, y, spc;
 
 	/* handle ANSI escape code */
 	if (isInEscape) {
@@ -368,25 +410,23 @@ static void odevWriteChar(char c) {
 	}
 
 	row = font + ((u8)c * FONT_HEIGHT);
+	dst = V_FbPtr + (posY * FONT_HEIGHT * V_FbWidth) +
+	      (posX * FONT_WIDTH);
 
 	for (y = 0; y < FONT_HEIGHT; y++) {
 		dat = *row;
 		for (x = 0; x < FONT_WIDTH; x++) {
-			off = (V_FbWidth * FONT_HEIGHT * posY) + /* v offset in buf */
-				  (V_FbWidth * y) + /* v offset within char */
-				  (FONT_WIDTH * posX) + /* h offset in buf */
-				  x; /* h offset within char */
-
 			if (dat & (1 << (7 - x)))
-				pix = color[0]; /* fg */
+				dst[x] = color[0]; /* fg */
 			else
-				pix = color[1]; /* bg */
-			V_FbPtr[off] = pix;
+				dst[x] = color[1]; /* bg */
 		}
 
 		row++;
+		dst += V_FbWidth;
 	}
-	fbDirty = true;
+	markDirty(posX * FONT_WIDTH, posY * FONT_HEIGHT,
+	    FONT_WIDTH, FONT_HEIGHT);
 
 	/* done writing */
 	posX++;
@@ -415,6 +455,7 @@ static uint numFlushes = 0;
 extern u32 ticksPerUsec;
 #endif
 void V_Flush(void) {
+	uint x, y, width, height;
 	#ifdef VID_BENCH
 	u64 total;
 	int i;
@@ -433,12 +474,16 @@ void V_Flush(void) {
 	/* Clear before flushing, not after: a write that lands mid-flush must
 	 * leave the flag set so the next tick picks it up. Clearing afterwards
 	 * would swallow it. */
+	x = dirtyMinX;
+	y = dirtyMinY;
+	width = dirtyMaxX - dirtyMinX;
+	height = dirtyMaxY - dirtyMinY;
 	fbDirty = false;
 
 	#ifdef VID_BENCH
 	tbStart[numFlushes] = mftb();
 	#endif
-	V_ActiveDriver->flush();
+	V_ActiveDriver->flush(x, y, width, height);
 	#ifdef VID_BENCH
 	tbEnd[numFlushes] = mftb();
 	numFlushes++;
@@ -478,6 +523,11 @@ void V_Register(struct videoInfo *info) {
 	V_FbHeight = info->height;
 	V_FbStride = info->width * sizeof(u32);
 	V_ActiveDriver = info;
+	dirtyMinX = 0;
+	dirtyMinY = 0;
+	dirtyMaxX = V_FbWidth;
+	dirtyMaxY = V_FbHeight;
+	fbDirty = true;
 
 	colorIdx[0] = C_LGRAY;
 	colorIdx[1] = C_BLACK;
