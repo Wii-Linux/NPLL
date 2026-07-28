@@ -120,6 +120,7 @@ enum MINI_Err MINI_Init(void) {
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_PING, 6, 3, 0);
 	log_printf(" * fast ping: %d\r\n", ret);
 	if (ret != MINI_OK)
+		return ret;
 	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 6, 3, 0);
 	log_printf(" * slow ping: %d\r\n", ret);
 	if (ret != MINI_OK)
