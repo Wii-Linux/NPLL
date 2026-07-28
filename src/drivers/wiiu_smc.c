@@ -84,7 +84,7 @@ static void smcInit(void) {
 		smcDrv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
-	ret = smcReadRegister(SMC_REG_CHIP_REV, &H_WiiUSMCFWRev);
+	ret = smcReadRegister(SMC_REG_CHIP_REV, &H_WiiUSMCChipRev);
 	if (ret) {
 		log_printf("SMC chip revision read failed: %d\r\n", ret);
 		smcDrv.state = DRIVER_STATE_FAULTED;
