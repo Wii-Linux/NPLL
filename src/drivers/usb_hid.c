@@ -459,7 +459,10 @@ static const struct usbDeviceId drhIds[] = {
 	{
 		.vendor = USB_VENDOR_NINTENDO,
 		.product = USB_PRODUCT_WIIU_DRH,
-		.matchFlags = USB_MATCH_VENDOR_PRODUCT,
+		.interfaceClass = USB_CLASS_HID,
+		.interfaceSubclass = 0,
+		.interfaceProtocol = 0,
+		.matchFlags = USB_MATCH_VENDOR_PRODUCT | USB_MATCH_INTERFACE,
 	},
 	{ 0 }
 };
