@@ -26,6 +26,7 @@ static void drcFlush(uint x, uint y, uint width, uint height);
 
 static u32 *tvShadowFB;
 static u32 *drcShadowFB;
+static u32 *drcSavedFB;
 
 static struct videoInfo tvVidInfo = {
 	.fb = NULL,
@@ -97,6 +98,17 @@ static void tvScroll(uint rows) {
 }
 
 static void fbInit(void) {
+	tvShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(tvVidInfo), 32);
+	drcShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(drcVidInfo), 32);
+	drcSavedFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(drcVidInfo), 32);
+
+	/*
+	 * Preserve linux-loader's console before taking over its DRC surface.
+	 * It only redraws pixels that its console considers dirty after handoff.
+	 */
+	dcache_invalidate(DRC_FB, FB_SIZE(drcVidInfo));
+	memcpy(drcSavedFB, DRC_FB, FB_SIZE(drcVidInfo));
+
 	/* clean up the format so it presents itself as XRGB like we expect */
 	DGRPH_SWAP_CNTL = DGRPH_CROSSBAR_RGBA(R, G, B, A) | DGRPH_ENDIAN_SWAP_32;
 	DGRPH_CONTROL = DGRPH_DEPTH_32BPP | DGRPH_FORMAT_32BPP_ARGB8888 | DGRPH_ARRAY_LINEAR_ALIGNED;
@@ -106,8 +118,6 @@ static void fbInit(void) {
 	dcache_flush(TV_FB, FB_SIZE(tvVidInfo));
 	memset(DRC_FB, 0, FB_SIZE(drcVidInfo));
 	dcache_flush(DRC_FB, FB_SIZE(drcVidInfo));
-	tvShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(tvVidInfo), 32);
-	drcShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(drcVidInfo), 32);
 	memset(tvShadowFB, 0, FB_SIZE(tvVidInfo));
 	memset(drcShadowFB, 0, FB_SIZE(drcVidInfo));
 
@@ -121,6 +131,9 @@ static void fbInit(void) {
 }
 
 static void fbCleanup(void) {
+	memcpy(DRC_FB, drcSavedFB, FB_SIZE(drcVidInfo));
+	dcache_flush(DRC_FB, FB_SIZE(drcVidInfo));
+	free(drcSavedFB);
 	free(drcShadowFB);
 	free(tvShadowFB);
 	fbDrv.state = DRIVER_STATE_NOT_READY;
