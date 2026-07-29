@@ -33,31 +33,48 @@
 struct videoInfo *V_ActiveDriver = NULL;
 u32 *V_FbPtr;
 uint V_FbWidth, V_FbHeight, V_FbStride;
+#define MAX_FRAMEBUFFERS 4
+#define MAX_NAME 128
+struct videoConsole {
+	struct videoInfo *info;
+	struct outputDevice outDev;
+	char name[MAX_NAME];
+	uint posX, posY;
+	bool isInEscape;
+	uint escapeLen;
+	char escapeBuf[8];
+	uint stateColorIdx[2];
+	u32 stateColor[2];
+	volatile bool dirty;
+	volatile uint dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY;
+};
+static struct videoConsole consoles[MAX_FRAMEBUFFERS];
+static uint numConsoles;
+static struct videoConsole *activeConsole;
 static volatile bool fbLocked = false;
-/* Set by anything that writes V_FbPtr, cleared by V_Flush. The flush is
- * expensive on GC/Wii, and the periodic flush event fires regardless of
- * whether anything actually changed -- during a kernel load that is a
- * full flush every 66ms with an identical framebuffer. Starts true so
- * the first flush always happens. */
-static volatile bool fbDirty = true;
-/* Bounds are inclusive at the start and exclusive at the end. */
-static volatile uint dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY;
-
+/*
+ * Each console tracks its own dirty rectangle. This avoids redundant native
+ * framebuffer copies while allowing displays with different dimensions to
+ * wrap and scroll independently.
+ */
 /* 15 FPS */
 #define FRAME_MS_TARGET 66
-#define MAX_NAME 128
 #define FONT_WIDTH 8
 #define FONT_HEIGHT 16
 
 extern u8 font[];
 
-static struct outputDevice videoOutDev;
-
-static char odevName[MAX_NAME];
-static uint posX = 0, posY = 0;
-static bool isInEscape = false;
-static uint escapeLen = 0;
-static char escapeBuf[8];
+#define videoOutDev (activeConsole->outDev)
+#define posX (activeConsole->posX)
+#define posY (activeConsole->posY)
+#define isInEscape (activeConsole->isInEscape)
+#define escapeLen (activeConsole->escapeLen)
+#define escapeBuf (activeConsole->escapeBuf)
+#define colorIdx (activeConsole->stateColorIdx)
+#define color (activeConsole->stateColor)
+#define CUR_FB (activeConsole->info->fb)
+#define CUR_WIDTH (activeConsole->info->width)
+#define CUR_HEIGHT (activeConsole->info->height)
 
 /* stolen from the VGA color palette */
 static u32 colors[16] = {
@@ -71,8 +88,6 @@ static u32 colors[16] = {
 	0xFFAAAAAA, /* light gray */ 0xFFFFFFFF, /* white */
 };
 
-static uint colorIdx[2];
-static u32 color[2];
 static void odevWriteChar(char c);
 
 static void markDirty(uint x, uint y, uint width, uint height) {
@@ -81,21 +96,21 @@ static void markDirty(uint x, uint y, uint width, uint height) {
 	uint maxY = y + height;
 
 	irqs = IRQ_DisableSave();
-	if (!fbDirty) {
-		dirtyMinX = x;
-		dirtyMinY = y;
-		dirtyMaxX = maxX;
-		dirtyMaxY = maxY;
-		fbDirty = true;
+	if (!activeConsole->dirty) {
+		activeConsole->dirtyMinX = x;
+		activeConsole->dirtyMinY = y;
+		activeConsole->dirtyMaxX = maxX;
+		activeConsole->dirtyMaxY = maxY;
+		activeConsole->dirty = true;
 	} else {
-		if (x < dirtyMinX)
-			dirtyMinX = x;
-		if (y < dirtyMinY)
-			dirtyMinY = y;
-		if (maxX > dirtyMaxX)
-			dirtyMaxX = maxX;
-		if (maxY > dirtyMaxY)
-			dirtyMaxY = maxY;
+		if (x < activeConsole->dirtyMinX)
+			activeConsole->dirtyMinX = x;
+		if (y < activeConsole->dirtyMinY)
+			activeConsole->dirtyMinY = y;
+		if (maxX > activeConsole->dirtyMaxX)
+			activeConsole->dirtyMaxX = maxX;
+		if (maxY > activeConsole->dirtyMaxY)
+			activeConsole->dirtyMaxY = maxY;
 	}
 	IRQ_Restore(irqs);
 }
@@ -212,8 +227,8 @@ static void handleEscape(char c) {
 		parsenum(escapeBuf + 1, &mode);
 
 		if (mode == 2) {
-			memset(V_FbPtr, 0, V_FbStride * V_FbHeight);
-			markDirty(0, 0, V_FbWidth, V_FbHeight);
+			memset(CUR_FB, 0, CUR_WIDTH * CUR_HEIGHT * sizeof(u32));
+			markDirty(0, 0, CUR_WIDTH, CUR_HEIGHT);
 			posX = 0;
 			posY = 0;
 		} else {
@@ -333,28 +348,28 @@ static void maybeScroll(void) {
 		return;
 
 	posY = videoOutDev.rows - 1;
-	fontSz = ((V_FbWidth * 4) * FONT_HEIGHT);
-	srcAddr = (((u8 *)V_FbPtr) + fontSz);
-	size = ((V_FbWidth * 4u) * V_FbHeight) - fontSz;
+	fontSz = CUR_WIDTH * sizeof(u32) * FONT_HEIGHT;
+	srcAddr = (u8 *)CUR_FB + fontSz;
+	size = CUR_WIDTH * sizeof(u32) * (CUR_HEIGHT - FONT_HEIGHT);
 
 	/*
 	 * Bring the driver's native framebuffer up to date before shifting it.
 	 * Otherwise a line written since the previous periodic flush would be
 	 * missing from the scrolled native framebuffer.
 	 */
-	if (V_ActiveDriver->scroll)
+	if (activeConsole->info->scroll)
 		V_Flush();
 
-	memmove(V_FbPtr, srcAddr, size);
-
-	startZeroAddr = (srcAddr + size) - fontSz;
+	memmove(CUR_FB, srcAddr, size);
+	startZeroAddr = (u8 *)CUR_FB + size;
 	memset(startZeroAddr, 0, fontSz);
-	if (V_ActiveDriver->scroll) {
-		V_ActiveDriver->scroll(FONT_HEIGHT);
-		markDirty(0, V_FbHeight - FONT_HEIGHT,
-		    V_FbWidth, FONT_HEIGHT);
+
+	if (activeConsole->info->scroll) {
+		activeConsole->info->scroll(FONT_HEIGHT);
+		markDirty(0, videoOutDev.rows * FONT_HEIGHT - FONT_HEIGHT,
+		    CUR_WIDTH, FONT_HEIGHT);
 	} else {
-		markDirty(0, 0, V_FbWidth, V_FbHeight);
+		markDirty(0, 0, CUR_WIDTH, CUR_HEIGHT);
 	}
 }
 
@@ -410,8 +425,8 @@ static void odevWriteChar(char c) {
 	}
 
 	row = font + ((u8)c * FONT_HEIGHT);
-	dst = V_FbPtr + (posY * FONT_HEIGHT * V_FbWidth) +
-	      (posX * FONT_WIDTH);
+	dst = CUR_FB + (posY * FONT_HEIGHT * CUR_WIDTH) +
+	    (posX * FONT_WIDTH);
 
 	for (y = 0; y < FONT_HEIGHT; y++) {
 		dat = *row;
@@ -423,7 +438,7 @@ static void odevWriteChar(char c) {
 		}
 
 		row++;
-		dst += V_FbWidth;
+		dst += CUR_WIDTH;
 	}
 	markDirty(posX * FONT_WIDTH, posY * FONT_HEIGHT,
 	    FONT_WIDTH, FONT_HEIGHT);
@@ -433,19 +448,18 @@ static void odevWriteChar(char c) {
 
 }
 
-static void odevWriteStr(const char *str) {
+static void videoWriteChar(const struct outputDevice *dev, const char c) {
+	activeConsole = dev->priv;
+	odevWriteChar(c);
+}
+
+static void videoWriteStr(const struct outputDevice *dev, const char *str) {
+	activeConsole = dev->priv;
 	while (*str) {
 		odevWriteChar(*str);
 		str++;
 	}
 }
-
-static struct outputDevice videoOutDev = {
-	.name = odevName,
-	.writeChar = odevWriteChar,
-	.writeStr = odevWriteStr,
-	.ansiEscSupport = true
-};
 
 #ifdef VID_BENCH
 static u64 flushTB;
@@ -455,43 +469,43 @@ static uint numFlushes = 0;
 extern u32 ticksPerUsec;
 #endif
 void V_Flush(void) {
-	uint x, y, width, height;
+	struct videoConsole *console;
+	struct videoInfo *info;
+	uint x, y, width, height, i;
 	#ifdef VID_BENCH
 	u64 total;
-	int i;
+	int benchIdx;
 	#endif
 	assert_msg(V_ActiveDriver, "Tried to V_Flush with no driver");
-
-	if (!V_ActiveDriver->flush)
-		return;
-
-	if (!fbDirty)
-		return;
 
 	if (!V_LockFB())
 		return;
 
-	/* Clear before flushing, not after: a write that lands mid-flush must
-	 * leave the flag set so the next tick picks it up. Clearing afterwards
-	 * would swallow it. */
-	x = dirtyMinX;
-	y = dirtyMinY;
-	width = dirtyMaxX - dirtyMinX;
-	height = dirtyMaxY - dirtyMinY;
-	fbDirty = false;
-
 	#ifdef VID_BENCH
 	tbStart[numFlushes] = mftb();
 	#endif
-	V_ActiveDriver->flush(x, y, width, height);
+	for (i = 0; i < numConsoles; i++) {
+		console = &consoles[i];
+		info = console->info;
+		if (!console->dirty || !info->flush)
+			continue;
+
+		/* clear first so a write during the flush remains pending */
+		x = console->dirtyMinX;
+		y = console->dirtyMinY;
+		width = console->dirtyMaxX - x;
+		height = console->dirtyMaxY - y;
+		console->dirty = false;
+		info->flush(x, y, width, height);
+	}
 	#ifdef VID_BENCH
 	tbEnd[numFlushes] = mftb();
 	numFlushes++;
 
 	if (T_HasElapsed(flushTB, 5000 * 1000)) {
 		total = 0;
-		for (i = 0; i < numFlushes; i++)
-			total += tbEnd[i] - tbStart[i];
+		for (benchIdx = 0; benchIdx < numFlushes; benchIdx++)
+			total += tbEnd[benchIdx] - tbStart[benchIdx];
 		total /= ticksPerUsec;
 		total /= numFlushes;
 		log_printf("avg V_Flush us: %u\r\n", total);
@@ -510,35 +524,47 @@ static void flushWrapper(void *arg) {
 }
 
 void V_Register(struct videoInfo *info) {
+	struct videoConsole *console;
+
 	assert_msg(info, "Tried to register NULL videoInfo");
-	assert_msg(!V_ActiveDriver, "Tried to register video driver but there's already an active one");
+	assert_msg(info->fb, "Tried to register videoInfo with no framebuffer");
+	assert_msg(numConsoles < MAX_FRAMEBUFFERS, "Too many framebuffer drivers");
 
 	log_printf("Registering driver %s: %dx%d @ 0x%08x\r\n", info->driver->name, info->width, info->height, info->fb);
-	snprintf(odevName, MAX_NAME, "%s - Framebuffer console", info->driver->name);
-	videoOutDev.columns = info->width / FONT_WIDTH;
-	videoOutDev.rows = info->height / FONT_HEIGHT;
+	console = &consoles[numConsoles++];
+	memset(console, 0, sizeof(*console));
+	console->info = info;
+	snprintf(console->name, MAX_NAME, "%s %dx%d - Framebuffer console", info->driver->name, info->width, info->height);
+	console->outDev.name = console->name;
+	console->outDev.writeChar = videoWriteChar;
+	console->outDev.writeStr = videoWriteStr;
+	console->outDev.ansiEscSupport = true;
+	console->outDev.columns = info->width / FONT_WIDTH;
+	console->outDev.rows = info->height / FONT_HEIGHT;
+	console->outDev.driver = info->driver;
+	console->outDev.priv = console;
+	console->dirtyMaxX = info->width;
+	console->dirtyMaxY = info->height;
+	console->dirty = true;
+	console->stateColorIdx[0] = C_LGRAY;
+	console->stateColorIdx[1] = C_BLACK;
+	console->stateColor[0] = colors[C_LGRAY];
+	console->stateColor[1] = colors[C_BLACK];
+	activeConsole = console;
 
-	V_FbPtr = info->fb;
-	V_FbWidth = info->width;
-	V_FbHeight = info->height;
-	V_FbStride = info->width * sizeof(u32);
-	V_ActiveDriver = info;
-	dirtyMinX = 0;
-	dirtyMinY = 0;
-	dirtyMaxX = V_FbWidth;
-	dirtyMaxY = V_FbHeight;
-	fbDirty = true;
-
-	colorIdx[0] = C_LGRAY;
-	colorIdx[1] = C_BLACK;
-	color[0] = colors[colorIdx[0]];
-	color[1] = colors[colorIdx[1]];
+	if (!V_ActiveDriver) {
+		V_FbPtr = info->fb;
+		V_FbWidth = info->width;
+		V_FbHeight = info->height;
+		V_FbStride = info->width * sizeof(u32);
+		V_ActiveDriver = info;
 
 	#ifdef VID_BENCH
 	flushTB = mftb();
 	#endif
-	O_AddDevice(&videoOutDev);
-	T_QueueRepeatingEvent(FRAME_MS_TARGET * 1000, flushWrapper, NULL);
+		T_QueueRepeatingEvent(FRAME_MS_TARGET * 1000, flushWrapper, NULL);
+	}
+	O_AddDevice(&console->outDev);
 }
 
 bool V_LockFB(void) {

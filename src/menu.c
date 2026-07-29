@@ -162,11 +162,11 @@ void UI_Init(void) {
 static void outputToDevice(char c, void *arg) {
 	struct outputDevice *odev = arg;
 
-	odev->writeChar(c);
+	odev->writeChar(odev, c);
 }
 static void putsDev(const struct outputDevice *odev, const char *str) {
-	odev->writeStr(str);
-	odev->writeStr("\r\n");
+	odev->writeStr(odev, str);
+	odev->writeStr(odev, "\r\n");
 }
 
 static uint countTextLines(const char *str) {
@@ -308,7 +308,7 @@ static void drawTextLine(const struct outputDevice *odev, const char *text, uint
 	while (text && *text) {
 		if (currentLine == targetLine) {
 			if (*text != '\r' && *text != '\n')
-				odev->writeChar(*text);
+				odev->writeChar(odev, *text);
 		}
 
 		if (*text == '\n') {
@@ -321,7 +321,7 @@ static void drawTextLine(const struct outputDevice *odev, const char *text, uint
 		text++;
 	}
 
-	odev->writeStr("\r\n");
+	odev->writeStr(odev, "\r\n");
 }
 
 static void drawEntryLine(const struct outputDevice *odev, uint entryIdx) {
@@ -338,13 +338,13 @@ static void drawLine(const struct outputDevice *odev) {
 	/* some of our output devices can benefit from bulk transfers */
 	for (i = (int)odev->columns; i > 0; i -= 4) {
 		if (i >= 4)
-			odev->writeStr("====");
+			odev->writeStr(odev, "====");
 		else if (i == 3)
-			odev->writeStr("===");
+			odev->writeStr(odev, "===");
 		else if (i == 2)
-			odev->writeStr("==");
+			odev->writeStr(odev, "==");
 		else if (i == 1)
-			odev->writeChar('=');
+			odev->writeChar(odev, '=');
 	}
 }
 
@@ -373,10 +373,10 @@ static void drawBodySeparator(const struct outputDevice *odev, uint bodyHeight) 
 
 	lineLen = odev->columns - indicatorLen;
 	for (i = 0; i < (int)(lineLen / 2); i++)
-		odev->writeChar('=');
-	odev->writeStr(indicator);
+		odev->writeChar(odev, '=');
+	odev->writeStr(odev, indicator);
 	for (i = 0; i < (int)(lineLen - (lineLen / 2)); i++)
-		odev->writeChar('=');
+		odev->writeChar(odev, '=');
 }
 
 static void drawLogs(const struct outputDevice *odev, uint logHeight) {
@@ -420,15 +420,15 @@ static void drawLogs(const struct outputDevice *odev, uint logHeight) {
 			/* some of our output devices can benefit from bulk transfers */
 			for (j = (int)odev->columns; j > 0; j -= 4) {
 				if (j >= 4)
-					odev->writeStr("    ");
+					odev->writeStr(odev, "    ");
 				else if (j == 3)
-					odev->writeStr("   ");
+					odev->writeStr(odev, "   ");
 				else if (j == 2)
-					odev->writeStr("  ");
+					odev->writeStr(odev, "  ");
 				else if (j == 1)
-					odev->writeChar(' ');
+					odev->writeChar(odev, ' ');
 			}
-			odev->writeStr("\r\n");
+			odev->writeStr(odev, "\r\n");
 			continue;
 		}
 
@@ -441,12 +441,12 @@ static void drawLogs(const struct outputDevice *odev, uint logHeight) {
 		}
 
 		for (j = 0; (uint)j < maxLen; j++)
-			odev->writeChar(lineStarts[(firstLine + i) % MENU_LOG_LINES_MAX][j]);
+			odev->writeChar(odev, lineStarts[(firstLine + i) % MENU_LOG_LINES_MAX][j]);
 
 		if (cutOff)
-			odev->writeStr("...");
+			odev->writeStr(odev, "...");
 
-		odev->writeStr("\r\n");
+		odev->writeStr(odev, "\r\n");
 	}
 }
 
@@ -481,7 +481,7 @@ static void drawBody(const struct outputDevice *odev, uint bodyHeight) {
 		uint bodyLine = bodyScroll + i;
 
 		if (bodyLine >= bodyLines) {
-			odev->writeStr("\r\n");
+			odev->writeStr(odev, "\r\n");
 			continue;
 		}
 
@@ -491,7 +491,7 @@ static void drawBody(const struct outputDevice *odev, uint bodyHeight) {
 		}
 
 		if (contentLines && bodyLine == contentLines) {
-			odev->writeStr("\r\n");
+			odev->writeStr(odev, "\r\n");
 			continue;
 		}
 
@@ -592,30 +592,30 @@ void UI_Redraw(void) {
 		bodyHeight = currentBodyHeightForDevice(odev);
 		logHeight = logHeightForRows(odev->rows, curFooterLines, headerLineCount);
 
-		odev->writeStr("\x1b[1;1H\x1b[2J");
+		odev->writeStr(odev, "\x1b[1;1H\x1b[2J");
 		if (curMenu->header)
 			putsDev(odev, curMenu->header);
 
 		drawBodySeparator(odev, bodyHeight);
-		odev->writeStr("\r\n");
+		odev->writeStr(odev, "\r\n");
 		drawBody(odev, bodyHeight);
 
-		odev->writeStr("\x1b[0m");
+		odev->writeStr(odev, "\x1b[0m");
 		logRow = odev->rows - (curMenu->footer ? (3 + curFooterLines + logHeight) : (2 + logHeight));
 
 		if (curMenu->footer) {
 			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", logRow);
 			drawLine(odev);
-			odev->writeStr("\r\n");
+			odev->writeStr(odev, "\r\n");
 			drawLogs(odev, logHeight);
 			drawLine(odev);
-			odev->writeStr("\r\n");
-			odev->writeStr(curMenu->footer);
+			odev->writeStr(odev, "\r\n");
+			odev->writeStr(odev, curMenu->footer);
 		}
 		else {
 			fctprintf(outputToDevice, (void *)odev, "\x1b[%d;1H\rDebug Logs:\r\n", logRow);
 			drawLine(odev);
-			odev->writeStr("\r\n");
+			odev->writeStr(odev, "\r\n");
 			drawLogs(odev, logHeight);
 		}
 

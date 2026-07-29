@@ -18,9 +18,10 @@ struct outputDevice {
 	uint rows;
 	uint columns;
 	struct driver *driver;
+	void *priv;
 
-	void (*writeChar)(const char c);
-	void (*writeStr)(const char *str);
+	void (*writeChar)(const struct outputDevice *dev, const char c);
+	void (*writeStr)(const struct outputDevice *dev, const char *str);
 };
 
 extern uint O_NumDevices;

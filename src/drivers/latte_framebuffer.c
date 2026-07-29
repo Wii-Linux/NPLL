@@ -15,59 +15,85 @@
 
 static REGISTER_DRIVER(fbDrv);
 
-static void fbFlush(uint x, uint y, uint width, uint height);
-static void fbScroll(uint rows);
+static void tvFlush(uint x, uint y, uint width, uint height);
+static void tvScroll(uint rows);
+static void drcFlush(uint x, uint y, uint width, uint height);
 
-/* TV */
-#define REAL_FB (u32 *)(MEM2_CACHED_BASE + 0x07500000)
-#if 0
-/* DRC/Gamepad */
-#define REAL_FB (u32 *)(MEM2_CACHED_BASE + 0x078c0000)
-#endif
+#define TV_FB  ((u32 *)(MEM2_CACHED_BASE + 0x07500000))
+#define DRC_FB ((u32 *)(MEM2_CACHED_BASE + 0x078c0000))
 
-#define FB_SIZE (uint)(fbVidInfo.width * fbVidInfo.height * (uint)sizeof(u32))
+#define FB_SIZE(info) ((info).width * (info).height * (uint)sizeof(u32))
 
-static const u32 *realFb = REAL_FB;
-static u32 *shadowFb;
+static u32 *tvShadowFB;
+static u32 *drcShadowFB;
 
-static struct videoInfo fbVidInfo = {
-	.fb = NULL, /* TV */
+static struct videoInfo tvVidInfo = {
+	.fb = NULL,
 	.width = 1280,
 	.height = 720,
-#if 0
-	.fb = NULL, /* DRC/Gamepad */
-	.width = 896, /* weird width/height, comes from linux-loader, check this? */
-	.height = 504,
-#endif
-	.flush = fbFlush,
-	.scroll = fbScroll,
+	.flush = tvFlush,
+	.scroll = tvScroll,
 	.driver = &fbDrv
 };
 
+static struct videoInfo drcVidInfo = {
+	.fb = NULL,
+	.width = 896,
+	/* linux-loader says it's 504 but that places the bottom line offsecreen for me */
+	.height = 480,
+	.flush = drcFlush,
+	.scroll = NULL,
+	.driver = &fbDrv
+};
 
-static void fbFlush(uint x, uint y, uint width, uint height) {
+static void flushFB(u32 *realFB, u32 *shadowFB, uint stride,
+    uint x, uint y, uint width, uint height) {
 	uint row;
-	u32 *src = shadowFb + y * fbVidInfo.width + x;
-	u32 *dest = (u32 *)realFb + y * fbVidInfo.width + x;
+	u32 *src = shadowFB + y * stride + x;
+	u32 *dest = realFB + y * stride + x;
 	uint rowSize = width * (uint)sizeof(u32);
 
 	for (row = 0; row < height; row++) {
 		memcpy(dest, src, rowSize);
-		src += fbVidInfo.width;
-		dest += fbVidInfo.width;
+		src += stride;
+		dest += stride;
 	}
 
 	/* Flush one span to avoid paying for a sync on every scanline. */
-	dcache_flush((u32 *)realFb + y * fbVidInfo.width + x,
-	    ((height - 1) * fbVidInfo.width + width) * sizeof(u32));
+	dcache_flush(realFB + y * stride + x,
+	    ((height - 1) * stride + width) * sizeof(u32));
 }
 
-static void fbScroll(uint rows) {
-	uint rowSize = fbVidInfo.width * (uint)sizeof(u32);
-	uint size = (fbVidInfo.height - rows) * rowSize;
+static void tvFlush(uint x, uint y, uint width, uint height) {
+	flushFB(TV_FB, tvShadowFB, tvVidInfo.width, x, y, width, height);
+}
 
-	memmove((void *)realFb, (const u8 *)realFb + rows * rowSize, size);
-	dcache_flush(realFb, size);
+static void drcFlush(uint x, uint y, uint width, uint height) {
+	uint row, col;
+	u32 pixel, *src, *dest;
+
+	for (row = 0; row < height; row++) {
+		src = drcShadowFB + (y + row) * drcVidInfo.width + x;
+		dest = DRC_FB + (y + row) * drcVidInfo.width + x;
+		for (col = 0; col < width; col++) {
+			pixel = src[col];
+			/* linux-loader's DRC surface uses G/R/B? */
+			pixel = (pixel & 0xff0000ffu) |
+			    ((pixel & 0x00ff0000u) >> 8) |
+			    ((pixel & 0x0000ff00u) << 8);
+			dest[col] = pixel;
+		}
+	}
+	dcache_flush(DRC_FB + y * drcVidInfo.width + x,
+	    ((height - 1) * drcVidInfo.width + width) * sizeof(u32));
+}
+
+static void tvScroll(uint rows) {
+	uint rowSize = tvVidInfo.width * (uint)sizeof(u32);
+	uint size = (tvVidInfo.height - rows) * rowSize;
+
+	memmove(TV_FB, (const u8 *)TV_FB + rows * rowSize, size);
+	dcache_flush(TV_FB, size);
 }
 
 static void fbInit(void) {
@@ -76,21 +102,27 @@ static void fbInit(void) {
 	DGRPH_CONTROL = DGRPH_DEPTH_32BPP | DGRPH_FORMAT_32BPP_ARGB8888 | DGRPH_ARRAY_LINEAR_ALIGNED;
 
 	/* clear to black */
-	memset((void *)realFb, 0, FB_SIZE);
-	dcache_flush(realFb, FB_SIZE);
-	shadowFb = M_PoolAlloc(POOL_MEM2, FB_SIZE, 32);
-	memset(shadowFb, 0, FB_SIZE);
+	memset(TV_FB, 0, FB_SIZE(tvVidInfo));
+	dcache_flush(TV_FB, FB_SIZE(tvVidInfo));
+	memset(DRC_FB, 0, FB_SIZE(drcVidInfo));
+	dcache_flush(DRC_FB, FB_SIZE(drcVidInfo));
+	tvShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(tvVidInfo), 32);
+	drcShadowFB = M_PoolAlloc(POOL_MEM2, FB_SIZE(drcVidInfo), 32);
+	memset(tvShadowFB, 0, FB_SIZE(tvVidInfo));
+	memset(drcShadowFB, 0, FB_SIZE(drcVidInfo));
 
-	/* register w/ video subsys */
-	fbVidInfo.fb = (void *)shadowFb;
-	V_Register(&fbVidInfo);
+	tvVidInfo.fb = tvShadowFB;
+	drcVidInfo.fb = drcShadowFB;
+	V_Register(&tvVidInfo);
+	V_Register(&drcVidInfo);
 
 	/* we're all good */
 	fbDrv.state = DRIVER_STATE_READY;
 }
 
 static void fbCleanup(void) {
-	free(shadowFb);
+	free(drcShadowFB);
+	free(tvShadowFB);
 	fbDrv.state = DRIVER_STATE_NOT_READY;
 }
 

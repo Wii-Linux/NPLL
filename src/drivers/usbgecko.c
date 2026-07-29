@@ -81,7 +81,8 @@ static void usbgeckoWriteCharRaw(const char c) {
 	usbgeckoTransaction(0xb000u | (u16)(c << 4), slot);
 }
 
-static void usbgeckoWriteChar(const char c) {
+static void usbgeckoWriteChar(const struct outputDevice *dev, const char c) {
+	(void)dev;
 	if (suppressOutput)
 		return;
 
@@ -103,7 +104,8 @@ static void usbgeckoWriteBufRaw(const char *buf, uint len) {
 	}
 }
 
-static void usbgeckoWriteStr(const char *str) {
+static void usbgeckoWriteStr(const struct outputDevice *dev, const char *str) {
+	(void)dev;
 	if (suppressOutput)
 		return;
 
@@ -334,9 +336,9 @@ static int usbgeckoEXIProbe(struct exi_device *dev) {
 	dev->drv_data = &usbgeckoDrv;
 	usbgeckoDrv.state = DRIVER_STATE_READY;
 
-	usbgeckoWriteStr("USB Gecko driver is now enabled in ");
-	usbgeckoWriteStr(dev->name);
-	usbgeckoWriteStr("\r\n");
+	usbgeckoWriteStr(&outDev, "USB Gecko driver is now enabled in ");
+	usbgeckoWriteStr(&outDev, dev->name);
+	usbgeckoWriteStr(&outDev, "\r\n");
 	O_AddDevice(&outDev);
 
 	if (!pollQueued) {

@@ -9,14 +9,16 @@
 #include <npll/drivers.h>
 #include <npll/output.h>
 
-static void debugConWriteChar(const char c) {
+static void debugConWriteChar(const struct outputDevice *dev, const char c) {
+	(void)dev;
 	if (!H_PlatOps || !H_PlatOps->debugWriteChar)
 		return;
 
 	H_PlatOps->debugWriteChar(c);
 }
 
-static void debugConWriteStr(const char *str) {
+static void debugConWriteStr(const struct outputDevice *dev, const char *str) {
+	(void)dev;
 	if (!H_PlatOps)
 		return;
 
@@ -26,7 +28,7 @@ static void debugConWriteStr(const char *str) {
 	}
 	else if (H_PlatOps->debugWriteChar) {
 		while (*str) {
-			debugConWriteChar(*str);
+			debugConWriteChar(dev, *str);
 			str++;
 		}
 	}
@@ -52,8 +54,8 @@ void O_DebugInit(void) {
 	initialized = true;
 
 	O_AddDevice(&outDev);
-	debugConWriteStr("H_PlatOps Debug Console initialized\r\n");
-	debugConWriteStr("Leaving O_DebugInit\r\n");
+	debugConWriteStr(&outDev, "H_PlatOps Debug Console initialized\r\n");
+	debugConWriteStr(&outDev, "Leaving O_DebugInit\r\n");
 }
 
 void O_DebugCleanup(void) {

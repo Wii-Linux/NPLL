@@ -111,7 +111,7 @@ SOURCE  += libc/printf.c libc/output.c libc/string.c libc/ctype.c libc/stdlib.c 
 # Bus drivers
 SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/bollywood_i2c.c drivers/usb_hcd.c drivers/usb_hub.c
 # Video / Output drivers
-SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/drc_ipc_text.c drivers/usbgecko.c
+SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/usbgecko.c
 # Storage drivers
 SOURCE  += drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/hollywood_nand.c drivers/di.c drivers/usb_storage.c
 # Input Drivers
