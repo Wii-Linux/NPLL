@@ -90,7 +90,13 @@ static void ELF_InstallLinuxData(u32 entry, const void *initrd, u32 initrdSize, 
 		setbat(6, SETBAT_TYPE_DATA, 0xe0001fffu, 0x8000002au);
 		loader = (struct wiiuLoaderData *)WIIU_LOADER_EA;
 
-		if (loader->magic == WIIU_LOADER_MAGIC) {
+		/*
+		 * linux-loader clears this block on startup, but only writes the
+		 * magic when its own profile supplies a command line or initrd.
+		 * A zero magic therefore still denotes its initial ABI layout.
+		 * Preserve the version check for unknown nonzero layouts.
+		 */
+		if (!loader->magic || loader->magic == WIIU_LOADER_MAGIC) {
 			if (cmdline) {
 				copyLen = len;
 				if (copyLen > sizeof(loader->cmdline))
@@ -102,9 +108,10 @@ static void ELF_InstallLinuxData(u32 entry, const void *initrd, u32 initrdSize, 
 				loader->initrd = virtToPhys(initrd);
 				loader->initrdSize = initrdSize;
 			}
+			loader->magic = WIIU_LOADER_MAGIC;
 			sync();
 		} else
-			log_puts("linux_loader_cmdline requested but loader magic is absent");
+			log_puts("linux_loader_cmdline requested but loader ABI is unknown");
 
 		setbat(6, SETBAT_TYPE_DATA, oldBatu, oldBatl);
 	}
