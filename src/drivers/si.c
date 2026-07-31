@@ -267,7 +267,7 @@ static enum si_comerr_res siHandleCOMERR(uint ch) {
 	if (regs->comcsr & SI_COMCSR_COMERR) {
 		sr = regs->sr;
 		/* Latte always reports collision, even when there was none; ignore it */
-		if (H_ConsoleType == CONSOLE_TYPE_WII_U)
+		if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
 			sr &= ~SI_SR_COLL(ch);
 
 		/*
