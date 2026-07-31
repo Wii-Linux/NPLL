@@ -1052,11 +1052,12 @@ static const struct usbDeviceId btIds[] = {
 	{
 		.vendor = BT_VENDOR_NINTENDO,
 		.product = BT_PRODUCT_INTERNAL,
-		.interfaceClass = USB_CLASS_WIRELESS_CONTROLLER,
-		.interfaceSubclass = USB_SUBCLASS_RF_CONTROLLER,
-		.interfaceProtocol = USB_PROTOCOL_BLUETOOTH,
+		/*
+		 * don't match interface info, as Wii U and vWii uses
+		 * ff/01/01 whereas Wii uses e0/01/01
+		 */
 		.interfaceNumber = 0,
-		.matchFlags = USB_MATCH_VENDOR_PRODUCT | USB_MATCH_INTERFACE | USB_MATCH_INTERFACE_NUMBER,
+		.matchFlags = USB_MATCH_VENDOR_PRODUCT | USB_MATCH_INTERFACE_NUMBER
 	},
 	{ 0 }
 };
