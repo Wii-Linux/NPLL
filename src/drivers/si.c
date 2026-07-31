@@ -329,7 +329,7 @@ static void checkConnected(void) {
 	u64 startTB;
 	u32 resp, poll;
 	u16 id;
-	u8 status;
+	u8 status = 0;
 	uint i, j, tries;
 	enum si_device_type type;
 	enum si_comerr_res comerr;
