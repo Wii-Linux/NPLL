@@ -449,7 +449,7 @@ void M_Init(void) {
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
 
 		/* MEM2 */
-		pools[1].top = (void *)NPLL_WIIU_MEMLOG_BASE;
+		pools[1].top = (void *)(MEM2_CACHED_BASE + MEM2_SIZE_WIIU);
 		pools[1].bottom = (void *)MEM2_CACHED_BASE;
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";

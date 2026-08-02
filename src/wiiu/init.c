@@ -153,11 +153,17 @@ void __attribute__((noreturn)) H_InitWiiU(void) {
 	batu = (MEM2_CACHED_BASE + 0x10000000) | 0x1fff;
 
 	setbat(4, SETBAT_TYPE_BOTH, batu, batl);
-	batl += 0x10000000; batu += 0x10000000;
+
+	/* BPRN = second 256MB of MEM2, WIMG=0101, PP=RW */
+	batl = (MEM2_PHYS_BASE + 0x10000000) | 0x2a;
+
+	/* BEPI = second 256MB of uncached MEM2, BL=256MB, Vs=1, Vp=1 */
+	batu = (MEM2_UNCACHED_BASE + 0x10000000) | 0x1fff;
+
 	setbat(5, SETBAT_TYPE_BOTH, batu, batl);
 	/*
 	 * we can't map anything later due to intersecting w/ uncached MEM1+MMIO
-	 * so this only gives us the first 768MB of MEM2.... that's still plenty
+	 * so this only gives us the first 512MB of MEM2.... that's still plenty
 	 * though.
 	 */
 

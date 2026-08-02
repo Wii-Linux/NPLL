@@ -83,11 +83,11 @@
 #define MEM2_SIZE_WII      0x04000000
 #define MEM2_SIZE_NDEV     0x08000000
 /* lie, but this is all that we map */
-#define MEM2_SIZE_WIIU     0x10000000
+#define MEM2_SIZE_WIIU     0x20000000
 
 /* Native Wii U reserves the final MiB of mapped MEM2 for NPLL itself and
  * the preceding 256 KiB for the in-memory log. */
-#define NPLL_WIIU_RUNTIME_BASE (MEM2_CACHED_BASE + MEM2_SIZE_WIIU - 0x00100000)
+#define NPLL_WIIU_RUNTIME_BASE (MEM2_CACHED_BASE + 0x0ff00000)
 #define NPLL_WIIU_MEMLOG_BASE  (NPLL_WIIU_RUNTIME_BASE - 0x00040000)
 
 #ifndef __ASSEMBLY__
