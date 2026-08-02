@@ -90,6 +90,16 @@
 #define NPLL_WIIU_RUNTIME_BASE (MEM2_CACHED_BASE + 0x0ff00000)
 #define NPLL_WIIU_MEMLOG_BASE  (NPLL_WIIU_RUNTIME_BASE - 0x00040000)
 
+/*
+ * linux-loader hands us fixed TV and DRC scanout buffers in MEM2. They are not
+ * tracked by the allocator, so the pool must reserve them (see M_Init) and the
+ * framebuffer driver renders into them.
+ */
+#define NPLL_WIIU_TV_FB_BASE   (MEM2_CACHED_BASE + 0x07500000)
+#define NPLL_WIIU_TV_FB_SIZE   (1280u * 720u * 4u)
+#define NPLL_WIIU_DRC_FB_BASE  (MEM2_CACHED_BASE + 0x078c0000)
+#define NPLL_WIIU_DRC_FB_SIZE  (896u * 480u * 4u)
+
 #ifndef __ASSEMBLY__
 
 static inline bool addrIsValidCached(void *_addr) {

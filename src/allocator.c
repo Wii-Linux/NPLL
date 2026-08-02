@@ -133,9 +133,12 @@ static inline bool _poolPtr(struct pool *pool, void *ptr, int what) {
 }
 
 /* actually allocate from a pool */
+static uintptr_t _reservedRetryTop(uintptr_t blockStart, uintptr_t allocEnd);
+
 static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolAlloc(struct pool *pool, size_t size, size_t align) {
 	struct block *block;
 	void *mem;
+	uintptr_t candidateTop, retryTop;
 
 	if (__unlikely(!pool))
 		panic("_poolAlloc: trying to allocate from NULL pool");
@@ -147,11 +150,20 @@ static void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) _poolA
 	if (__unlikely(!pool->top && !pool->bottom && !pool->cur_bottom))
 		panic("_poolAlloc: trying to allocate from nonexistent pool");
 
-	/* write out a 'struct block' at it's start */
-	mem = (void *)ALIGN_DOWN(((uintptr_t)pool->cur_bottom - size), align);
-	block = (struct block *)(((uintptr_t)mem) - sizeof(struct block));
-	if (__unlikely((void *)block < pool->bottom))
-		panic("_poolAlloc: out of memory");
+	/* write out a 'struct block' at it's start, skipping any reserved regions */
+	candidateTop = (uintptr_t)pool->cur_bottom;
+	for (;;) {
+		if (__unlikely(candidateTop < size + sizeof(struct block)))
+			panic("_poolAlloc: out of memory");
+		mem = (void *)ALIGN_DOWN((candidateTop - size), align);
+		block = (struct block *)(((uintptr_t)mem) - sizeof(struct block));
+		if (__unlikely((void *)block < pool->bottom))
+			panic("_poolAlloc: out of memory");
+		retryTop = _reservedRetryTop((uintptr_t)block, (uintptr_t)mem + size);
+		if (!retryTop)
+			break;
+		candidateTop = retryTop;
+	}
 
 	memcpy(&block->magic[0], BLOCK_HDR_MAGIC, BLOCK_HDR_MAGIC_SIZE);
 	block->size = (u32)((uintptr_t)pool->cur_bottom - (uintptr_t)mem); /* to the next block */
@@ -172,6 +184,37 @@ static bool _rangesOverlap(uintptr_t start, uintptr_t end, const struct memRange
 		return false;
 	rangeEnd = range->start + range->size;
 	return start < rangeEnd && range->start < end;
+}
+
+/*
+ * Regions of a pool's address space that must never be handed out: the
+ * relocated NPLL image and the fixed scanout buffers that share MEM2 with the
+ * heap. Starts are physical, to match the virtToPhys() comparisons below.
+ */
+static struct memRange reservedRanges[8];
+static size_t reservedCount;
+
+void M_Reserve(u32 start, u32 size) {
+	if (reservedCount >= sizeof(reservedRanges) / sizeof(reservedRanges[0]))
+		panic("M_Reserve: too many reserved ranges");
+	reservedRanges[reservedCount].start = start;
+	reservedRanges[reservedCount].size = size;
+	reservedCount++;
+}
+
+/*
+ * If a candidate block [blockStart, allocEnd) (cached EAs) overlaps a globally
+ * reserved range, return the cached EA to retry the allocation below; else 0.
+ */
+static uintptr_t _reservedRetryTop(uintptr_t blockStart, uintptr_t allocEnd) {
+	uintptr_t startPhys = (uintptr_t)virtToPhys(blockStart);
+	uintptr_t endPhys = (uintptr_t)virtToPhys(allocEnd);
+	size_t i;
+
+	for (i = 0; i < reservedCount; i++)
+		if (_rangesOverlap(startPhys, endPhys, &reservedRanges[i]))
+			return (uintptr_t)physToCached(reservedRanges[i].start);
+	return 0;
 }
 
 static void *_poolAllocAvoid(struct pool *pool, size_t size, size_t align,
@@ -206,6 +249,13 @@ static void *_poolAllocAvoid(struct pool *pool, size_t size, size_t align,
 				candidateTop = (uintptr_t)physToCached(avoid[i].start);
 				retry = true;
 				break;
+			}
+		}
+		if (!retry) {
+			uintptr_t reservedTop = _reservedRetryTop(blockStart, allocEnd);
+			if (reservedTop) {
+				candidateTop = reservedTop;
+				retry = true;
 			}
 		}
 		if (!retry)
@@ -277,8 +327,8 @@ void *__attribute__((malloc, assume_aligned(32))) M_PoolAllocAvoid(
 	void *mem1, *mem2;
 	u32 mem1Free, mem2Free;
 
-	if (!avoid || !avoidCount)
-		return M_PoolAlloc(pool, size, align);
+	if (!avoid)
+		avoidCount = 0;
 	if (align == 0)
 		align = MIN_ALIGN;
 	else if (!IS_POWER_OF_2(align))
@@ -454,6 +504,16 @@ void M_Init(void) {
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";
 		memcpy(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
+
+		/*
+		 * The pool spans all of mapped MEM2, which now includes three fixed
+		 * regions it must never hand out: the relocated NPLL image (plus the
+		 * memlog just below it) at the top of the first 256 MiB, and the TV and
+		 * DRC scanout buffers.
+		 */
+		M_Reserve((u32)(uintptr_t)virtToPhys(NPLL_WIIU_MEMLOG_BASE), (MEM2_CACHED_BASE + 0x10000000) - NPLL_WIIU_MEMLOG_BASE);
+		M_Reserve((u32)(uintptr_t)virtToPhys(NPLL_WIIU_TV_FB_BASE), NPLL_WIIU_TV_FB_SIZE);
+		M_Reserve((u32)(uintptr_t)virtToPhys(NPLL_WIIU_DRC_FB_BASE), NPLL_WIIU_DRC_FB_SIZE);
 		break;
 	}
 	}

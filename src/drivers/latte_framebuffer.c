@@ -19,8 +19,8 @@ static void tvFlush(uint x, uint y, uint width, uint height);
 static void tvScroll(uint rows);
 static void drcFlush(uint x, uint y, uint width, uint height);
 
-#define TV_FB  ((u32 *)(MEM2_CACHED_BASE + 0x07500000))
-#define DRC_FB ((u32 *)(MEM2_CACHED_BASE + 0x078c0000))
+#define TV_FB  ((u32 *)NPLL_WIIU_TV_FB_BASE)
+#define DRC_FB ((u32 *)NPLL_WIIU_DRC_FB_BASE)
 
 #define FB_SIZE(info) ((info).width * (info).height * (uint)sizeof(u32))
 

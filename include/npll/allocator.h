@@ -22,6 +22,14 @@ struct memRange {
 };
 
 extern void M_Init(void);
+
+/*
+ * Permanently exclude a physical memory range from all pool allocations. Must
+ * be called before the first allocation (e.g. from M_Init). `start` is a
+ * physical address.
+ */
+extern void M_Reserve(u32 start, u32 size);
+
 extern void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) M_PoolAlloc(enum pool_idx pool, size_t size, size_t align);
 extern void *__attribute__((malloc, assume_aligned(32))) M_PoolAllocAvoid(
 	enum pool_idx pool, size_t size, size_t align, const struct memRange *avoid, size_t avoidCount);
