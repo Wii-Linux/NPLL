@@ -32,6 +32,7 @@
 #include <npll/fs.h>
 #include <npll/irq.h>
 #include <npll/log.h>
+#include <npll/scfm.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/soc.h>
@@ -366,6 +367,8 @@ static int nandResetWii(void) {
 }
 
 static void nandInit(void) {
+	int ret;
+
 	log_printf("NAND_CONFIG=%08x\r\n", regs->config);
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -373,6 +376,16 @@ static void nandInit(void) {
 			goto failed;
 
 		B_Register(&wiiuSLCBdev);
+		/*
+		 * The SLC's SFFS is now the mounted FS. Pull the SCFM write-cache
+		 * image into RAM before the next B_Register remounts something else;
+		 * the MLC WFS reads through it so recent (SCFM-only) writes are seen.
+		 * Non-fatal: without it, MLC reads fall back to the (stale) eMMC.
+		 */
+		ret = S_SCFMLoadFile("scfm.img");
+		if (ret)
+			log_printf("SCFM load failed (%d); MLC view will be stale\r\n", ret);
+
 		B_Register(&wiiuSLCCmptBdev);
 	}
 	else {

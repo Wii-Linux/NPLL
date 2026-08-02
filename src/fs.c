@@ -15,6 +15,7 @@
 #include "fs/ext4.h"
 #include "fs/sffs.h"
 #include "fs/iso9660.h"
+#include "fs/wfs.h"
 
 struct filesystem *FS_Mounted = NULL;
 struct partition *FS_MountedPartition = NULL;
@@ -24,6 +25,7 @@ static struct filesystem *filesystems[] = {
 	&FS_FAT,
 	&FS_exFAT,
 	&FS_EXT4,
+	&FS_WFS,
 	&FS_SFFS,
 	&FS_ISO9660
 };

@@ -113,13 +113,17 @@ SOURCE  += drivers/exi.c drivers/hollywood_gpio_i2c.c drivers/bollywood_i2c.c dr
 # Video / Output drivers
 SOURCE  += drivers/vi.c drivers/latte_framebuffer.c drivers/usbgecko.c
 # Storage drivers
-SOURCE  += drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/hollywood_nand.c drivers/di.c drivers/usb_storage.c
+# NAND must init before SDMMC: on Wii U the eMMC (MLC) WFS reads through the
+# SCFM overlay, which nandInit() loads from the SLC. Both are DRIVER_TYPE_BLOCK
+# and BLOCK is the last init pass, so a NEED_DEP gate could never retry —
+# ordering is enforced here by link order instead.
+SOURCE  += drivers/hollywood_nand.c drivers/hollywood_sdmmc.c drivers/sdgecko.c drivers/sdmmc/mmc.c drivers/sdmmc/sdhc.c drivers/sdmmc/sdspi.c drivers/di.c drivers/usb_storage.c
 # Input Drivers
 SOURCE  += drivers/hollywood_gpio.c drivers/si.c drivers/reset_switch.c drivers/usb_hid.c drivers/usb_bluetooth.c drivers/wiiu_smc.c
 # Misc Drivers
 SOURCE  += drivers/hollywood_aes.c drivers/hollywood_sha1.c drivers/hollywood_otp.c
 # Filesystems
-SOURCE  += fs/sffs.c fs/iso9660.c fs/ext4.c
+SOURCE  += fs/sffs.c fs/iso9660.c fs/ext4.c fs/wfs.c fs/scfm.c
 FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
 FAT_EXPORTS := FS_FAT FS_exFAT
 OUT_ELF := bin/npll.elf
