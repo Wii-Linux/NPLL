@@ -19,8 +19,7 @@
 
 #define DTB_SLACK 2048u
 
-static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut,
-		       const struct memRange *avoid, size_t avoidCount) {
+static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut, const struct memRange *avoid, size_t avoidCount) {
 	ssize_t size, got;
 	void *data;
 
@@ -38,8 +37,10 @@ static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u3
 		FS_Close(fd);
 		return -1;
 	}
+
 	got = FS_Read(fd, data, (size_t)size);
 	FS_Close(fd);
+
 	if (got != size) {
 		free(data);
 		return -1;
@@ -47,6 +48,7 @@ static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u3
 
 	*dataOut = data;
 	*sizeOut = (u32)size;
+
 	return 0;
 }
 
@@ -54,18 +56,17 @@ int L_LoadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *si
 	return loadAuxFile(fd, pool, dataOut, extra, sizeOut, NULL, 0);
 }
 
-int L_LoadAuxFileAvoid(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut,
-		       const struct memRange *avoid, size_t avoidCount) {
+int L_LoadAuxFileAvoid(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut, const struct memRange *avoid, size_t avoidCount) {
 	return loadAuxFile(fd, pool, dataOut, extra, sizeOut, avoid, avoidCount);
 }
 
-static int addReservedRange(struct memRange *ranges, size_t capacity, size_t *count,
-			    u64 start, u64 size) {
-	if (!size || start > 0xffffffffu || size > 0xffffffffu ||
-	    start + size > 0x100000000ull)
+static int addReservedRange(struct memRange *ranges, size_t capacity, size_t *count, u64 start, u64 size) {
+	if (!size || start > 0xffffffffu || size > 0xffffffffu || start + size > 0x100000000ull)
 		return 0;
+
 	if (*count >= capacity)
 		return -FDT_ERR_NOSPACE;
+
 	ranges[*count].start = (u32)start;
 	ranges[*count].size = (u32)size;
 	(*count)++;
@@ -78,6 +79,7 @@ static u64 readCells(const fdt32_t *cells, int count) {
 
 	for (i = 0; i < count; i++)
 		value = (value << 32) | fdt32_to_cpu(cells[i]);
+
 	return value;
 }
 
@@ -93,23 +95,30 @@ static int readNodeCellCount(const void *fdt, int node, const char *wanted, int 
 	offset = next;
 	for (;;) {
 		tag = fdt_next_tag(fdt, offset, &next);
+
 		if (next < 0)
 			return next;
+
 		if (tag != FDT_PROP)
 			return fallback;
+
 		prop = fdt_offset_ptr(fdt, offset, sizeof(*prop));
 		if (!prop)
 			return -FDT_ERR_TRUNCATED;
+
 		propLen = (int)fdt32_to_cpu(prop->len);
+
 		if (fdt32_to_cpu(prop->nameoff) >= fdt_size_dt_strings(fdt))
 			return -FDT_ERR_BADSTRUCTURE;
-		name = (const char *)fdt + fdt_off_dt_strings(fdt) +
-		       fdt32_to_cpu(prop->nameoff);
+
+		name = (const char *)fdt + fdt_off_dt_strings(fdt) + fdt32_to_cpu(prop->nameoff);
 		if (!strcmp(name, wanted)) {
 			if (propLen != (int)sizeof(fdt32_t))
 				return -FDT_ERR_BADNCELLS;
+
 			return (int)fdt32_to_cpu(*(const fdt32_t *)prop->data);
 		}
+
 		offset = next;
 	}
 }
@@ -120,23 +129,27 @@ int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity,
 	const char *name;
 	u64 start, size;
 	u32 tag;
-	int addrCells, sizeCells, child, depth, entries, i, next, node, regLen, ret;
+	int addrCells, sizeCells, child, depth, entries, i, next, node, regLen, ret, propLen;
 	bool disabled;
 
 	if (!fdt || !ranges || !count)
 		return -FDT_ERR_BADVALUE;
+
 	ret = fdt_check_header(fdt);
 	if (ret)
 		return ret;
+
 	*count = 0;
 
 	entries = fdt_num_mem_rsv(fdt);
 	if (entries < 0)
 		return entries;
+
 	for (i = 0; i < entries; i++) {
 		ret = fdt_get_mem_rsv(fdt, i, &start, &size);
 		if (ret)
 			return ret;
+
 		ret = addReservedRange(ranges, capacity, count, start, size);
 		if (ret)
 			return ret;
@@ -147,6 +160,7 @@ int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity,
 		return 0;
 	if (node < 0)
 		return node;
+
 	addrCells = readNodeCellCount(fdt, node, "#address-cells", 2);
 	sizeCells = readNodeCellCount(fdt, node, "#size-cells", 1);
 	if (addrCells < 1 || addrCells > 2 || sizeCells < 1 || sizeCells > 2)
@@ -163,44 +177,49 @@ int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity,
 		child = fdt_next_node(fdt, child, &depth);
 		if (child < 0 || depth <= 0)
 			break;
+
 		if (depth != 1)
 			continue;
 
 		reg = NULL;
 		regLen = 0;
 		disabled = false;
+
 		tag = fdt_next_tag(fdt, child, &next);
 		if (tag != FDT_BEGIN_NODE || next < 0)
 			return -FDT_ERR_BADSTRUCTURE;
-		for (;;) {
-			int propLen;
 
+		for (;;) {
 			tag = fdt_next_tag(fdt, next, &ret);
 			if (ret < 0)
 				return ret;
 			if (tag != FDT_PROP)
 				break;
+
 			prop = fdt_offset_ptr(fdt, next, sizeof(*prop));
 			if (!prop)
 				return -FDT_ERR_TRUNCATED;
+
 			propLen = (int)fdt32_to_cpu(prop->len);
 			if (fdt32_to_cpu(prop->nameoff) >= fdt_size_dt_strings(fdt))
 				return -FDT_ERR_BADSTRUCTURE;
-			name = (const char *)fdt + fdt_off_dt_strings(fdt) +
-			       fdt32_to_cpu(prop->nameoff);
+
+			name = (const char *)fdt + fdt_off_dt_strings(fdt) + fdt32_to_cpu(prop->nameoff);
 			if (!strcmp(name, "reg")) {
 				reg = (const fdt32_t *)prop->data;
 				regLen = propLen;
-			} else if (!strcmp(name, "status") && propLen >= 8 &&
-				   !memcmp(prop->data, "disabled", 8)) {
-				disabled = true;
 			}
+			else if (!strcmp(name, "status") && propLen >= 8 && !memcmp(prop->data, "disabled", 8))
+				disabled = true;
+
 			next = ret;
 		}
 		if (!reg || disabled)
 			continue; /* Dynamic or disabled reservation. */
+
 		if (regLen % ((addrCells + sizeCells) * (int)sizeof(*reg)))
 			return -FDT_ERR_BADVALUE;
+
 		entries = regLen / ((addrCells + sizeCells) * (int)sizeof(*reg));
 		for (i = 0; i < entries; i++) {
 			start = readCells(reg, addrCells);
@@ -212,8 +231,10 @@ int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity,
 				return ret;
 		}
 	}
+
 	if (child < 0 && child != -FDT_ERR_NOTFOUND)
 		return child;
+
 	return 0;
 }
 
@@ -224,16 +245,21 @@ bool L_RangeReserved(const void *fdt, u32 start, u32 size) {
 
 	if (!size || start > 0xffffffffu - size)
 		return true;
+
 	if (L_CollectReserved(fdt, ranges, 64, &count))
 		return true;
+
 	end = start + size;
+
 	for (i = 0; i < count; i++) {
 		if (ranges[i].start > 0xffffffffu - ranges[i].size)
 			continue;
+
 		rangeEnd = ranges[i].start + ranges[i].size;
 		if (start < rangeEnd && ranges[i].start < end)
 			return true;
 	}
+
 	return false;
 }
 
@@ -244,6 +270,7 @@ static int setAddressProp(void *fdt, int node, const char *name, u32 addr) {
 		return fdt_setprop_u64(fdt, node, name, addr);
 	if (cells == 1)
 		return fdt_setprop_u32(fdt, node, name, addr);
+
 	return -FDT_ERR_BADNCELLS;
 }
 
@@ -260,6 +287,7 @@ static int fixupWiiMemory(void *fdt) {
 	memory = fdt_path_offset(fdt, "/memory");
 	if (memory < 0)
 		return memory;
+
 	prop = fdt_getprop(fdt, memory, "reg", &len);
 	if (!prop || len != (int)sizeof(reg))
 		return 0; /* A different memory layout is not one the wrapper adjusts. */
@@ -272,6 +300,7 @@ static int fixupWiiMemory(void *fdt) {
 		reg[3] = cpu_to_fdt32(boundary - mem2Base);
 		return fdt_setprop(fdt, memory, "reg", reg, sizeof(reg));
 	}
+
 	return 0;
 }
 
@@ -285,6 +314,7 @@ static int addWiiRemotePairings(void *fdt, int chosen) {
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII)
 		return 0;
+
 	pairings = WM_GetPairings(&count);
 	if (!count)
 		return 0;
@@ -299,6 +329,7 @@ static int addWiiRemotePairings(void *fdt, int chosen) {
 	ret = fdt_setprop(fdt, chosen, "nintendo,wii-remote-bdaddrs", addresses, (int)(count * 6u));
 	if (ret)
 		return ret;
+
 	return fdt_setprop(fdt, chosen, "nintendo,wii-remote-names", names, (int)namesLength);
 }
 
@@ -322,6 +353,7 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	ret = fdt_open_into(fdt, fdt, (int)capacity);
 	if (ret)
 		goto fail;
+
 	ret = fixupWiiMemory(fdt);
 	if (ret)
 		goto fail;
@@ -329,6 +361,7 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	chosen = fdt_path_offset(fdt, "/chosen");
 	if (chosen == -FDT_ERR_NOTFOUND)
 		chosen = fdt_add_subnode(fdt, 0, "chosen");
+
 	if (chosen < 0) {
 		ret = chosen;
 		goto fail;
@@ -350,17 +383,21 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 			ret = -FDT_ERR_BADVALUE;
 			goto fail;
 		}
+
 		initrdEnd = initrdStart + files->initrdSize;
 
 		ret = setAddressProp(fdt, chosen, "linux,initrd-start", initrdStart);
 		if (ret)
 			goto fail;
+
 		ret = setAddressProp(fdt, chosen, "linux,initrd-end", initrdEnd);
 		if (ret)
 			goto fail;
+
 		ret = fdt_add_mem_rsv(fdt, initrdStart, files->initrdSize);
 		if (ret && ret != -FDT_ERR_EXISTS)
 			goto fail;
+
 		dcache_flush(files->initrd, files->initrdSize);
 	}
 
