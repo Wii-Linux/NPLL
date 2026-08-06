@@ -242,12 +242,16 @@ bool L_RangeReserved(const void *fdt, u32 start, u32 size) {
 	struct memRange ranges[64];
 	u32 end, rangeEnd;
 	size_t count, i;
+	int ret;
 
 	if (!size || start > 0xffffffffu - size)
 		return true;
 
-	if (L_CollectReserved(fdt, ranges, 64, &count))
+	ret = L_CollectReserved(fdt, ranges, 64, &count);
+	if (ret) {
+		log_printf("L_CollectReserved failed: %d (%s)\r\n", ret, fdt_strerror(ret));
 		return true;
+	}
 
 	end = start + size;
 
