@@ -23,5 +23,7 @@ extern int L_LoadAuxFileAvoid(int fd, enum pool_idx pool, void **dataOut, u32 ex
 extern int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity, size_t *count);
 extern bool L_RangeReserved(const void *fdt, u32 start, u32 size);
 extern int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline);
+extern int L_LoadNetConfigDatFromSFFS(void);
+extern void L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount);
 
 #endif /* _LINUX_H */

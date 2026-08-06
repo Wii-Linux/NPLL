@@ -1232,6 +1232,8 @@ static void npllBootLinux(struct npllEntry *ne) {
 			goto fail;
 		}
 
+		L_RelocateNetConfigDat(reserved, reservedCount);
+
 		files.dtb = M_PoolAllocAvoid(POOL_MEM1, files.dtbSize + dtbExtra, 64, reserved, reservedCount);
 		if (!files.dtb) {
 			log_puts("npllBootLinux: no non-reserved space available for DTB");

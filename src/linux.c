@@ -6,9 +6,12 @@
 
 #define MODULE "linux"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <libfdt.h>
+#include <npll/allocator.h>
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/fs.h>
@@ -18,6 +21,52 @@
 #include <npll/wiimote.h>
 
 #define DTB_SLACK 2048u
+#define NETCFG_SIZE 0x1b5cu
+#define NETCFG_PATH "/shared2/sys/net/02/config.dat"
+static const u8 netcfgMagic[8] = {
+	'W', 'I', 'I', 'N', 'E', 'T', 'C', '\0'
+};
+
+static u8 *netcfg;
+static u8 netcfgTmp[NETCFG_SIZE];
+static bool netcfgLoaded = false;
+
+int L_LoadNetConfigDatFromSFFS(void) {
+	ssize_t size;
+	int fd = FS_Open(NETCFG_PATH);
+
+	if (fd < 0)
+		return fd;
+
+	size = FS_GetSize(fd);
+	if (size != NETCFG_SIZE) {
+		log_printf("net config.dat wrong size: %d != %d\r\n", size, NETCFG_SIZE);
+		FS_Close(fd);
+		return -EINVAL;
+	}
+
+	size = FS_Read(fd, netcfgTmp, NETCFG_SIZE);
+	if (size != NETCFG_SIZE) {
+		log_printf("net config.dat read failed: %d\r\n", size);
+		return (int)size;
+	}
+
+	FS_Close(fd);
+	netcfgLoaded = true;
+	return 0;
+}
+
+void L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount) {
+	if (!netcfgLoaded)
+		return;
+
+	/* must be page-aligned for Linux */
+	netcfg = M_PoolAllocAvoid(POOL_MEM2, NETCFG_SIZE + 8, 4096, avoid, avoidCount);
+	memcpy(netcfg, netcfgMagic, 8);
+	memcpy(netcfg + 8, netcfgTmp, NETCFG_SIZE);
+	dcache_flush(netcfg, NETCFG_SIZE + 8);
+}
+
 
 static int loadAuxFile(int fd, enum pool_idx pool, void **dataOut, u32 extra, u32 *sizeOut, const struct memRange *avoid, size_t avoidCount) {
 	ssize_t size, got;
@@ -311,7 +360,9 @@ static int fixupWiiMemory(void *fdt) {
 int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	void *fdt;
 	u32 capacity, initrdStart, initrdEnd;
-	int chosen, ret;
+	int chosen, reserved, netcfgNode, ret;
+	char netcfgName[64];
+	fdt32_t reg[2];
 
 	if (!files || !files->dtb)
 		return -1;
@@ -372,6 +423,35 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 		dcache_flush(files->initrd, files->initrdSize);
 	}
 
+	if (netcfgLoaded) {
+		reserved = fdt_path_offset(fdt, "/reserved-memory");
+		if (reserved == -FDT_ERR_NOTFOUND)
+			goto out; /* meh, not fatal */
+
+		sprintf(netcfgName, "netcfg@%x", virtToPhys(netcfg));
+		netcfgNode = fdt_add_subnode(fdt, reserved, netcfgName);
+		if (netcfgNode < 0) {
+			log_printf("fdt_add_subnode: %d\r\n", netcfgNode);
+			goto out;
+		}
+
+		ret = fdt_setprop_string(fdt, netcfgNode, "compatible", "nintendo,wii-netcfg");
+		if (ret < 0) {
+			log_printf("fdt_setprop_string: %d\r\n", ret);
+			goto out;
+		}
+
+		reg[0] = cpu_to_fdt32((u32)(uintptr_t)virtToPhys(netcfg));
+		reg[1] = cpu_to_fdt32(NETCFG_SIZE + 8);
+		ret = fdt_setprop(fdt, netcfgNode, "reg", reg, sizeof(reg));
+		if (ret < 0) {
+			log_printf("fdt_ap_adr: %d\r\n", ret);
+			goto out;
+		}
+		log_puts("fdt netcfg done");
+	}
+
+out:
 	ret = fdt_pack(fdt);
 	if (ret)
 		goto fail;

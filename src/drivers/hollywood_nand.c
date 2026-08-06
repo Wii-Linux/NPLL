@@ -31,6 +31,7 @@
 #include <npll/drivers.h>
 #include <npll/fs.h>
 #include <npll/irq.h>
+#include <npll/linux.h>
 #include <npll/log.h>
 #include <npll/scfm.h>
 #include <npll/timer.h>
@@ -393,13 +394,17 @@ static void nandInit(void) {
 			goto failed;
 
 		B_Register(&wiiBdev);
+
 		/*
 		 * B_Register has just probed and mounted the Wii SFFS partition.
 		 * Capture BT.DINF now, before a later block device replaces the
 		 * process-global filesystem mount.
+		 * Also capture the networking config.dat at the same time.
 		 */
-		if (FS_Mounted == &FS_SFFS)
+		if (FS_Mounted == &FS_SFFS) {
 			WM_LoadPairingsFromSFFS();
+			L_LoadNetConfigDatFromSFFS();
+		}
 	}
 
 	nandDrv.state = DRIVER_STATE_READY;
