@@ -1207,7 +1207,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 	const char *path;
 	struct linuxBootFiles files;
 	struct memRange reserved[64];
-	void *temporaryDtb = NULL;
+	void *temporaryDTB = NULL;
 	size_t reservedCount = 0;
 	u32 dtbExtra, cmdlineFlags = 0;
 
@@ -1217,34 +1217,38 @@ static void npllBootLinux(struct npllEntry *ne) {
 	if (ne->dtbPath) {
 		if (npllEnsureFS(ne, ne->dtbPath, &path))
 			goto fail;
+
 		fd = FS_Open(path);
 		dtbExtra = 2048u + (ne->cmdline ? (u32)strlen(ne->cmdline) + 1u : 0u);
-		if (fd < 0 || L_LoadAuxFile(fd, POOL_ANY, &temporaryDtb, 0, &files.dtbSize)) {
+
+		if (fd < 0 || L_LoadAuxFile(fd, POOL_ANY, &temporaryDTB, 0, &files.dtbSize)) {
 			log_printf("npllBootLinux: failed to load device tree: %d\r\n", fd);
 			goto fail;
 		}
-		ret = L_CollectReserved(temporaryDtb, reserved, 64, &reservedCount);
+
+		ret = L_CollectReserved(temporaryDTB, reserved, 64, &reservedCount);
 		if (ret) {
 			log_printf("npllBootLinux: failed to collect DT reservations: %d\r\n", ret);
 			goto fail;
 		}
-		files.dtb = M_PoolAllocAvoid(POOL_MEM1, files.dtbSize + dtbExtra, 64,
-					    reserved, reservedCount);
+
+		files.dtb = M_PoolAllocAvoid(POOL_MEM1, files.dtbSize + dtbExtra, 64, reserved, reservedCount);
 		if (!files.dtb) {
 			log_puts("npllBootLinux: no non-reserved space available for DTB");
 			goto fail;
 		}
-		memcpy(files.dtb, temporaryDtb, files.dtbSize);
-		free(temporaryDtb);
-		temporaryDtb = NULL;
+
+		memcpy(files.dtb, temporaryDTB, files.dtbSize);
+		free(temporaryDTB);
+		temporaryDTB = NULL;
 	}
 
 	if (ne->initrdPath) {
 		if (npllEnsureFS(ne, ne->initrdPath, &path))
 			goto fail;
+
 		fd = FS_Open(path);
-		if (fd < 0 || L_LoadAuxFileAvoid(fd, POOL_ANY, &files.initrd, 0,
-						 &files.initrdSize, reserved, reservedCount)) {
+		if (fd < 0 || L_LoadAuxFileAvoid(fd, POOL_ANY, &files.initrd, 0, &files.initrdSize, reserved, reservedCount)) {
 			log_printf("npllBootLinux: failed to load initrd: %d\r\n", fd);
 			goto fail;
 		}
@@ -1270,12 +1274,11 @@ static void npllBootLinux(struct npllEntry *ne) {
 		cmdlineFlags |= ELF_LINUX_CMDLINE_LNXLDR;
 
 	installPreEntryHook(ne);
-	ret = ELF_LoadLinuxFile(fd, files.dtb, files.initrd, files.initrdSize,
-				ne->cmdline, cmdlineFlags);
+	ret = ELF_LoadLinuxFile(fd, files.dtb, files.initrd, files.initrdSize, ne->cmdline, cmdlineFlags);
 	log_printf("npllBootLinux: ELF_LoadLinuxFile returned %d\r\n", ret);
 
 fail:
-	sfree(temporaryDtb);
+	sfree(temporaryDTB);
 	sfree(files.dtb);
 	sfree(files.initrd);
 }
