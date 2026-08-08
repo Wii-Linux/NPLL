@@ -38,7 +38,16 @@ struct menu UI_SysInfoMenu = {
 
 static const char *pvrToName(u32 pvr) {
 	switch (pvr) {
-	case 0x00083410: return "Gekko";
+	/*
+	 * Gekko DDx.x labels calculated from Swiss.
+	 * 83214 PVR assumed to exist in retail since gc-linux lists it.
+	 * Swiss's mapping suggests other revisions may exist but I've not
+	 * seen evidence of any others actually making their way into retail
+	 * boards (until checking gc-linux DD4.0 was the only one I'd ever
+	 *         seen, I assume DD2.4e was pretty-quickly replaced by 4.0).
+	 */
+	case 0x00083214: return "Gekko DD2.4e";
+	case 0x00083410: return "Gekko DD4.0";
 	case 0x00087200: return "Broadway";
 	case 0x70010201: return "Espresso";
 	default: return "Unknown";
