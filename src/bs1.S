@@ -4,7 +4,7 @@
 # Copyright (C) 2026 Techflash
 #
 
-.section .bs1
+.section .bs1,"ax",@progbits
 .extern _start
 
 _bs1_start:
