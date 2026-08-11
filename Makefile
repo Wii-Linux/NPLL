@@ -8,6 +8,7 @@ ifeq ($(HOSTCC),)
 HOSTCC := $(CC)
 endif
 
+ifneq ($(LLVM),1)
 ifneq ($(uname -m),ppc)
 CROSS_PREFIX ?= $(word 1, \
 	$(if $(shell command -v powerpc-unknown-linux-gnu-gcc),powerpc-unknown-linux-gnu-) \
@@ -22,7 +23,30 @@ AR := $(CROSS_PREFIX)ar
 OBJCOPY := $(CROSS_PREFIX)objcopy
 NM := $(CROSS_PREFIX)nm
 READELF := $(CROSS_PREFIX)readelf
+LIBS := -lgcc
 endif
+endif
+else
+ifeq ($(LLVM_PREFIX),)
+LLVM_PREFIX := llvm-
+endif
+ifeq ($(CLANG),)
+CLANG := clang
+endif
+ifeq ($(LLD),)
+LLD := $(shell command -v ld.lld)
+ifeq ($(LLD),)
+$(warning WARNING: No system LLD detected while trying to do LLVM build, will attempt to use system LD, which whill probably fail)
+endif
+endif
+
+CC := $(CLANG) -target powerpc-none-eabi
+LD := $(CC)
+AR := $(LLVM_PREFIX)ar
+OBJCOPY := $(LLVM_PREFIX)objcopy
+NM := $(LLVM_PREFIX)nm
+READELF := $(LLVM_PREFIX)readelf
+LIBS :=
 endif
 
 VERSION := $(word 1, \
@@ -88,12 +112,29 @@ endif
 HOSTCFLAGS := -O3 -Wall -Wextra -Wformat=2
 
 ASFLAGS :=
-CFLAGS  := -mregnames -mcpu=750 -meabi -mrelocatable -msdata=none -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -Iexternal/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+ifeq ($(LLVM),1)
+COMPILER_SPECIFIC_CFLAGS := -Wshift-overflow
+ifneq ($(LLD),)
+COMPILER_SPECIFIC_LDFLAGS := --ld-path=$(LLD)
+else
+COMPILER_SPECIFIC_LDFLAGS :=
+endif
+else
+COMPILER_SPECIFIC_CFLAGS := -meabi -Wshift-overflow=2 -msdata=none -mrelocatable
+COMPILER_SPECIFIC_LDFLAGS :=
+endif
+# NPLL doesn't save FP state yet, even though Gekko/Broadway/Espresso all have hardware FPUs
+CFLAGS  := -mregnames -msoft-float -mcpu=750 -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -Iexternal/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-CFLAGS  += -Os -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wshift-overflow=2 -Wtype-limits
-LDFLAGS := -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -T src/linkerscript.ld
+CFLAGS  += -Os -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
+LDFLAGS := $(COMPILER_SPECIFIC_LDFLAGS) -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -ffreestanding
+ifeq ($(LLVM),1)
+LDFLAGS_TMP_OBJ := $(LDFLAGS)
+else
+LDFLAGS_TMP_OBJ := $(COMPILER_SPECIFIC_LDFLAGS)
+endif
 
 # The fixed-address bootstrap deliberately uses absolute linker symbols while
 # it copies and fixes the relocatable runtime image.
@@ -165,8 +206,12 @@ $(OUT_DOL): $(OUT_ELF)
 $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED)
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lgcc
+	$(HIDE)$(CC) $(LDFLAGS) -T src/linkerscript.ld -o $@ $^ $(LIBS)
+
+# it doesn't understand Clang-generated dynamic sections
+ifneq ($(LLVM),1)
 	$(HIDE)sh utils/verify-relocatable.sh $@ $(READELF) $(NM)
+endif
 	$(HIDE)start=$$($(NM) $@ | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
 	  end=$$($(NM) $@ | awk '$$3=="__sbss_end"{print $$1; exit}'); \
 	  if [ -n "$$start" ] && [ -n "$$end" ]; then \
@@ -184,17 +229,17 @@ $(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED)
 
 $(FAT_COMBINED): $(FAT_OBJ)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) -r -o $@ $^
+	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
 
 $(LIBFDT_COMBINED): $(LIBFDT_OBJS)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) -r -o $@ $^
+	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
 
 $(LWEXT4_COMBINED): $(LWEXT4_OBJS)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) -r -o $@ $^
+	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
 
 build/lwext4/%.o: external/lwext4/src/%.c
 	$(info $s  CC $<)
