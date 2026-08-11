@@ -19,17 +19,17 @@ memset:
 	# r6 = dest end
 
 	# compute dest end
-	mr r6, r3
-	add r6, r6, r5
+	mr %r6, %r3
+	add %r6, %r6, %r5
 
 _memsetLoop:
-	stb r4, 0(r3)
+	stb %r4, 0(%r3)
 
 	# move forward by 1 byte
-	addi r3, r3, 1
+	addi %r3, %r3, 1
 
 	# are we done?
-	cmplw r3, r6
+	cmplw %r3, %r6
 
 	# yes
 	bge _memsetDone

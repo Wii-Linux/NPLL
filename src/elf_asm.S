@@ -23,44 +23,44 @@ ELF_DoEntry:
 	# r12 = phys function pointer
 
 	# r7 is reused for MSR below, so retain the handoff mode.
-	mr r10, r7
+	mr %r10, %r7
 
 	# Generic ELF entry historically disables and invalidates L1.  Linux's
 	# early 32-bit entry code expects usable caches before its CPU setup runs.
-	cmpwi r7, 0
+	cmpwi %r7, 0
 	bne 1f
-	mfspr r8, HID0
-	lis r11, 0xffff
-	ori r11, r11, (0xffff & ~(HID0_ICE | HID0_DCE))
-	and r8, r8, r11
-	mtspr HID0, r8
+	mfspr %r8, HID0
+	lis %r11, 0xffff
+	ori %r11, %r11, (0xffff & ~(HID0_ICE | HID0_DCE))
+	and %r8, %r8, %r11
+	mtspr HID0, %r8
 	sync
 	isync
-	ori r8, r8, (HID0_ICFI | HID0_DCFI)
-	mtspr HID0, r8
+	ori %r8, %r8, (HID0_ICFI | HID0_DCFI)
+	mtspr HID0, %r8
 	sync
 	isync
 
 1:
 	# read MSR
-	mfmsr r7
+	mfmsr %r7
 
 	# set up MSR
-	lis r11, 0xffff
-	ori r11, r11, (0xffff & ~(MSR_EE | MSR_IR | MSR_DR))
-	and r7, r7, r11
+	lis %r11, 0xffff
+	ori %r11, %r11, (0xffff & ~(MSR_EE | MSR_IR | MSR_DR))
+	and %r7, %r7, %r11
 
 	# Calculate the current (relocated) address of _elfEntryStep2 without an
 	# absolute text relocation, then strip the cached alias to get physical.
 	bcl 20, 31, 1f
 1:
-	mflr r12
-	addi r12, r12, _elfEntryStep2-1b
-	clrlwi r12, r12, 2
+	mflr %r12
+	addi %r12, %r12, _elfEntryStep2-1b
+	clrlwi %r12, %r12, 2
 
 	# set up SRR0/SRR1 so we can return with our new MSR and entry
-	mtsrr0 r12
-	mtsrr1 r7
+	mtsrr0 %r12
+	mtsrr1 %r7
 
 	# hop over to _elfEntryStep2
 	rfi
@@ -71,13 +71,13 @@ _elfEntryStep2:
 	# NPLL's stack uses a standard cached MEM1 or MEM2 alias. Linux calls C code
 	# before installing its own stack/MMU mappings, so give it the underlying
 	# physical stack rather than an unmapped effective address.
-	cmpwi r10, 0
+	cmpwi %r10, 0
 	beq 1f
-	clrlwi r1, r1, 2
+	clrlwi %r1, %r1, 2
 
 	# The client calling convention is already installed by the caller.
 1:
-	mtlr r6
+	mtlr %r6
 	blr
 
 .section .note.GNU-stack
