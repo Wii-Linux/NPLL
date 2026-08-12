@@ -248,11 +248,6 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 	(void)cmd;
 	return DMA_MODE_NONE;
 #else
-	const uintptr_t sdhc_dma_boundary = 512u * 1024u;
-	const uintptr_t sdhc_dma_boundary_mask = sdhc_dma_boundary - 1u;
-	uintptr_t boundary_off;
-	size_t data_len;
-
 	if (cmd->data == NULL) {
 		return DMA_MODE_NONE;
 	}
@@ -262,9 +257,6 @@ static inline enum dma_mode get_dma_mode(struct sdhc *host UNUSED, struct mmc_cm
 	if (cmd->data->pbuf == 0) {
 		return DMA_MODE_NONE;
 	}
-	data_len = (size_t)cmd->data->block_size * (size_t)cmd->data->blocks;
-	boundary_off = cmd->data->pbuf & sdhc_dma_boundary_mask;
-
 	/* Currently only SDMA supported */
 	return DMA_MODE_SDMA;
 #endif
@@ -300,7 +292,7 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 	u32 val32;
 	u16 val16;
 	u8 val8;
-	u32 mix_ctrl;
+	u32 mix_ctrl = 0;
 
 	/* Clear error flags before issuing a new command.
 	 * INT_STATUS (0x30) and ERR_INT_STATUS (0x32) share a 32-bit word
