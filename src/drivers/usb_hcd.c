@@ -1395,7 +1395,7 @@ static int ohciOneDataTransfer(struct usbHostController *hc, struct usbTransfer 
 
 static int ohciDataTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
 	u8 *cursor = transfer->data;
-	u32 remaining = transfer->length, chunk, actual, total = 0;
+	u32 remaining = transfer->length, chunk, actual = 0, total = 0;
 	int ret;
 
 	if (!transfer->endpoint || !transfer->endpoint->maxPacketSize || transfer->device->speed == USB_SPEED_HIGH || (transfer->length && !transfer->data))
@@ -1403,6 +1403,7 @@ static int ohciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 
 	do {
 		chunk = remaining ? ohciDataChunk(cursor, remaining, transfer->endpoint->maxPacketSize) : 0;
+		actual = 0;
 		ret = ohciOneDataTransfer(hc, transfer, cursor, chunk, &actual);
 		total += actual;
 
