@@ -394,7 +394,8 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	}
 
 	if (cmdline) {
-		ret = fdt_setprop_string(fdt, chosen, "bootargs", cmdline);
+		ret = fdt_setprop(fdt, chosen, "bootargs", cmdline,
+			(int)(strlen(cmdline) + 1u));
 		if (ret)
 			goto fail;
 	}
@@ -435,7 +436,8 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 			goto out;
 		}
 
-		ret = fdt_setprop_string(fdt, netcfgNode, "compatible", "nintendo,wii-netcfg");
+		ret = fdt_setprop(fdt, netcfgNode, "compatible", "nintendo,wii-netcfg",
+			(int)sizeof("nintendo,wii-netcfg"));
 		if (ret < 0) {
 			log_printf("fdt_setprop_string: %d\r\n", ret);
 			goto out;
