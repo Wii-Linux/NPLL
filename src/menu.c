@@ -721,8 +721,8 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 
 void UI_AddPart(struct partition *part) {
 	bool irqs, bootNow = false;
-	int i, num, timeout;
-	uint defaultEntry;
+	int num, timeout;
+	uint defaultEntry, i;
 	struct menuEntry *entries;
 
 	num = C_Probe(&entries, &timeout, &defaultEntry);
@@ -736,8 +736,8 @@ void UI_AddPart(struct partition *part) {
 		partitions[numParts].part = part;
 		partitions[numParts].numEntries = (uint)num;
 		partitions[numParts].entries = entries;
-		for (i = num - 1; i >= 0; i--)
-			UI_PrependEntry(&rootMenu, &entries[i]);
+		for (i = (uint)num; i > 0; i--)
+			UI_PrependEntry(&rootMenu, &entries[i - 1]);
 		numParts++;
 		if (!autobootCanceled && !IN_HasReceivedInput() && timeout >= 0 &&
 			defaultEntry < (uint)num && rootMenu.entries[defaultEntry] != &sysInfoEntry) {
