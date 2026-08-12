@@ -152,7 +152,7 @@ static void IRQ_DoHandle(enum irqDev dev) {
 }
 
 void __attribute__((noreturn)) IRQ_Handle(void) {
-	u32 intsr, ppcirqflag, ppc0intsts;
+	u32 intsr = 0, ppcirqflag, ppc0intsts;
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII_U)
 		intsr = PI_INTSR;
