@@ -82,11 +82,11 @@ It provides an interface to load Linux on these platforms, all in one universal 
 		5. Go to top-level step 3
 3. Common initialization, like exception handling
 4. Driver initialization - in-order:
-	1. critical (mainly for logging, e.g. EXI, USB Gecko)
+	1. critical (EXI, USB Gecko, USB, i2c, i2c-over-GPIO)
 	2. graphics (VI, Latte FB)
-	3. input (SI, PI RSW)
-	4. other (GPIO)
-	5. block (e.g. Hollywood/Latte Front SD)
+	3. input (SI, PI RSW, Wii U SMC, USB HID (DRH and Keyboard), Bluetooth)
+	4. other (SHA-1 Engine, AES Engine, OTP/eFuse, GPIO)
+	5. block (DI, SDHCI, USB Mass Storage, SDGecko, NAND I/F)
 5. Enter main loop, running driver callbacks indefinitely
 
 ## Subsystem IDs
