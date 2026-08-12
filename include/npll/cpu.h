@@ -127,8 +127,6 @@
 
 #define mtspr(rn, v) asm volatile("mtspr " __stringifyResult(rn) ", %0" : : "r" (v))
 
-/* Somehow GCC generates garbage */
-__attribute__((optimize("no-jump-tables")))
 static inline void setbat(uint idx, uint typeMask, u32 batu, u32 batl) {
 	switch (idx) {
 	case 0:
