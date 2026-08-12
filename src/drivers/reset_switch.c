@@ -97,7 +97,7 @@ static REGISTER_DRIVER(rswDrv) = {
 	.name = "PI Reset Button",
 	.mask = DRIVER_ALLOW_WII, /* Wii U doesn't have it, GCN has it but we don't have other face buttons */
 	.state = DRIVER_STATE_NOT_READY,
-	.type = DRIVER_TYPE_OTHER,
+	.type = DRIVER_TYPE_INPUT,
 	.init = rswInit,
 	.cleanup = rswCleanup
 };
