@@ -124,7 +124,7 @@ COMPILER_SPECIFIC_CFLAGS := -meabi -Wshift-overflow=2 -msdata=none -mrelocatable
 COMPILER_SPECIFIC_LDFLAGS :=
 endif
 # NPLL doesn't save FP state yet, even though Gekko/Broadway/Espresso all have hardware FPUs
-CFLAGS  := -mregnames -msoft-float -mcpu=750 -mstack-protector-guard=global -Iinclude -Iexternal/dtc/libfdt -Iexternal/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -msoft-float -mcpu=750 -mstack-protector-guard=global -Iinclude -isystem external/dtc/libfdt -isystem external/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
