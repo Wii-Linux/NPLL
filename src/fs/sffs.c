@@ -96,6 +96,11 @@ struct sffs_superblock {
 	u8 pad[20];
 } __attribute__((packed));
 
+struct sffs_superblock_header {
+	char magic[4];
+	u32 genNum;
+} __attribute__((packed));
+
 static struct partition *mountedPart = NULL;
 static const struct sffsLayout *mountedLayout = NULL;
 static struct sffs_superblock *sb ALIGN(32);
@@ -169,23 +174,23 @@ static int findNewestSuperblock(struct partition *part, const struct sffsLayout 
 	bool found = false;
 	ssize_t ret;
 	u8 buf[NAND_PAGE_SIZE] ALIGN(32);
-	struct sffs_superblock *_sb = (struct sffs_superblock *)buf;
+	struct sffs_superblock_header *header = (struct sffs_superblock_header *)buf;
 
 	for (i = 0; i < layout->superCount; i++) {
 		offset = layout->superblockOffset + i * SFFS_SUPERBLOCK_PAGES;
 
-		ret = nandReadPage(part, _sb, NAND_PAGE_SIZE, offset);
+		ret = nandReadPage(part, buf, NAND_PAGE_SIZE, offset);
 		if (ret != NAND_PAGE_SIZE) {
 			log_printf("findNewestSuperblock: nandReadPage failed: %d\r\n", ret);
 			return -EIO;
 		}
 
-		if (memcmp(_sb->magic, layout->magic, 4) != 0)
+		if (memcmp(header->magic, layout->magic, 4) != 0)
 			continue;
 
-		if (!found || _sb->genNum > bestGen) {
+		if (!found || header->genNum > bestGen) {
 			found = true;
-			bestGen = _sb->genNum;
+			bestGen = header->genNum;
 			bestOffset = offset;
 		}
 	}
@@ -195,7 +200,7 @@ static int findNewestSuperblock(struct partition *part, const struct sffsLayout 
 
 	*off = bestOffset;
 	sb = malloc(sizeof(*sb));
-	memcpy(sb, _sb, sizeof(buf));
+	memcpy(sb, buf, sizeof(buf));
 	return 0;
 }
 
