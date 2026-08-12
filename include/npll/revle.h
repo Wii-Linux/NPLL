@@ -26,7 +26,7 @@ static inline void _revLEwritew(volatile void *a, u16 v) {
 	sync(); barrier();
 	tmp = *(vu32*)base;
 	tmp &= ~(0xffffu << shift);
-	tmp |= (v << shift);
+	tmp |= (u32)v << shift;
 	*(vu32*)base = tmp;
 	sync(); barrier();
 
@@ -45,7 +45,7 @@ static inline void _revLEwriteb(volatile void *a, u8 v) {
 	sync(); barrier();
 	tmp = *(vu32*)base;
 	tmp &= ~(0xffu << shift);
-	tmp |= (v << shift);
+	tmp |= (u32)v << shift;
 	*(vu32*)base = tmp;
 	sync(); barrier();
 
