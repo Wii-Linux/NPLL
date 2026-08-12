@@ -244,7 +244,7 @@ $(LWEXT4_COMBINED): $(LWEXT4_OBJS)
 build/lwext4/%.o: external/lwext4/src/%.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -Wno-shadow -Wno-strict-overflow -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-shift-count-overflow -o $@ -c $<
+	$(HIDE)$(CC) $(CFLAGS) -Wno-sign-conversion -Wno-int-conversion -Wno-conversion -Wno-shadow -Wno-strict-overflow -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-function -Wno-shift-count-overflow -Wno-null-pointer-arithmetic -Wno-null-pointer-subtraction -o $@ -c $<
 
 build/libfdt/%.o: external/dtc/libfdt/%.c
 	$(info $s  CC $<)
@@ -255,7 +255,7 @@ build/libfdt/%.o: external/dtc/libfdt/%.c
 build/fs/fat/ff.o: src/fs/fat/ff.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -Wno-conversion -Wno-sign-conversion -o $@ -c $<
+	$(HIDE)$(CC) $(CFLAGS) -Wno-conversion -Wno-sign-conversion -Wno-unused-function -o $@ -c $<
 
 build/libc/cc-runtime.o: src/libc/cc-runtime.c
 	$(info $s  CC $<)
