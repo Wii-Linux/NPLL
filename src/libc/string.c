@@ -55,8 +55,8 @@ void *memchr(const void *s, int c, size_t n) {
 	const u8 *ptr = s;
 
 	for (i = 0; i < n; i++) {
-		if ((int)*ptr == c)
-			return (void *)ptr;
+		if (ptr[i] == (unsigned char)c)
+			return (void *)(ptr + i);
 	}
 
 	return NULL;
