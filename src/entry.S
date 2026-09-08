@@ -159,12 +159,13 @@ setupBATs:
 	rfi # no need to flip address bits - it's already correct
 
 relocate:
-	# Select a load bias.  GC, Wii, and vWii retain the linked high-MEM1
-	# address.  Native Wii U uses the final 1 MiB of the lower 256 MiB MEM2
-	# mapping (cached EA 0x9ff00000, physical 0x1ff00000).
+	# Select a load bias from the linked low-MEM1 image to high MEM1 for
+	# GC, Wii, and vWii.  Native Wii U uses the final 1 MiB of its lower
+	# 256 MiB MEM2 mapping (cached EA 0x9ff00000, physical 0x1ff00000).
 	#
 	# r31 remains the load bias until the runtime stack is established.
-	li %r31, 0
+	lis %r31, __reloc_mem1_bias@h
+	ori %r31, %r31, __reloc_mem1_bias@l
 
 	# A native Wii U has a production Hollywood version, Latte's CAFE chip
 	# signature, and a non-zero PIMCOMPAT register.  vWii fails the last test.
@@ -204,7 +205,7 @@ relocate:
 	# load and convert addresses
 	lis %r3, __reloc_source_start@h
 	ori %r3, %r3, __reloc_source_start@l
-	oris %r3, %r3, 0x8000       # physical load address -> cached MEM1
+	oris %r3, %r3, 0x8000       # ensure the cached MEM1 alias
 
 	lis %r4, __reloc_source_end@h
 	ori %r4, %r4, __reloc_source_end@l

@@ -167,15 +167,19 @@ SOURCE  += drivers/hollywood_aes.c drivers/hollywood_sha1.c drivers/hollywood_ot
 SOURCE  += fs/sffs.c fs/iso9660.c fs/ext4.c fs/wfs.c fs/scfm.c
 FAT_SOURCE := fs/fat/ff.c fs/fat/ffsystem.c fs/fat/ffunicode.c fs/fat/diskio.c fs/fat/glue.c
 FAT_EXPORTS := FS_FAT FS_exFAT
-OUT_ELF := bin/npll.elf
+OUT_ELF_VIRT := bin/npll_virt.elf
+OUT_ELF_VIRT_PHYSENTRY := bin/npll_virt_physentry.elf
+OUT_ELF_PHYS := bin/npll_phys.elf
+OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY := bin/npll_virtvma_physlma_physentry.elf
+OUT_ELFS := $(OUT_ELF_VIRT) $(OUT_ELF_VIRT_PHYSENTRY) $(OUT_ELF_PHYS) $(OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY)
 OUT_DOL := bin/npll.dol
 OUT_DOL_VIRT := bin/npll_virt.dol
 
 # need to put this before the libfdt include
 ifeq ($(BUILD_DOL),0)
-all: $(OUT_ELF)
+all: $(OUT_ELFS)
 else
-all: $(OUT_ELF) $(OUT_DOL) $(OUT_DOL_VIRT)
+all: $(OUT_ELFS) $(OUT_DOL) $(OUT_DOL_VIRT)
 endif
 
 
@@ -199,14 +203,26 @@ FAT_COMBINED := build/fs/fat/fat.o
 $(OUT_DOL_VIRT): $(OUT_DOL) external/dol-tools/bin/dol-info external/dol-tools/bin/dol-patch
 	util/fixup_virt_dol.sh $< $@
 
-$(OUT_DOL): $(OUT_ELF)
+$(OUT_DOL): $(OUT_ELF_PHYS)
 	$(info $s  ELF2DOL $@)
 	$(HIDE)$(ELF2DOL) $< $@
 
-$(OUT_ELF): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED)
+$(OUT_ELF_VIRT_PHYSENTRY): $(OUT_ELF_VIRT) Makefile
+	$(info $s  OBJCOPY $@)
+	$(HIDE)$(OBJCOPY) --change-start=-0x80000000 $< $@
+
+$(OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY): $(OUT_ELF_VIRT) Makefile
+	$(info $s  OBJCOPY $@)
+	$(HIDE)$(OBJCOPY) --change-section-lma '*'-0x80000000 --change-start=-0x80000000 $< $@
+
+$(OUT_ELF_PHYS): $(OUT_ELF_VIRT) Makefile
+	$(info $s  OBJCOPY $@)
+	$(HIDE)$(OBJCOPY) --change-addresses=-0x80000000 $< $@
+
+$(OUT_ELF_VIRT): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED) src/linkerscript.ld utils/verify-relocatable.sh Makefile
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(LDFLAGS) -T src/linkerscript.ld -o $@ $^ $(LIBS)
+	$(HIDE)$(CC) $(LDFLAGS) -T src/linkerscript.ld -o $@ $(filter %.o,$^) $(LIBS)
 
 # it doesn't understand Clang-generated dynamic sections
 ifneq ($(LLVM),1)

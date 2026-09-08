@@ -109,6 +109,41 @@ This codebase uses subsystem IDs for global variables and functions - similar in
 ## Config format
 For info about the dedicated NPLL config format, see `CONFIG_FORMAT.txt`.  
 
+## Output files
+- `npll_virtvma_physlma_physentry.elf` - NPLL with physical LMA, virtual VMA, physical entrypoint; was previously output as `npll.elf`
+  - [x] Swiss
+  - [x] HBC
+  - [x] MINI
+  - [x] linux-loader
+  - [ ] NDEV Boot Program
+- `npll_phys.elf` - NPLL with physical LMA and VMA, physical entrypoint
+  - [x] Swiss
+  - [x] HBC
+  - [x] MINI
+  - [x] linux-loader
+  - [ ] NDEV Boot Program
+- `npll_virt.elf` - NPLL with virtual LMA and VMA, virtual entrypoint
+  - [x] Swiss
+  - [x] HBC
+  - [ ] MINI
+  - [ ] linux-loader
+  - [x] NDEV Boot Program
+- `npll_virt_physentry.elf` - NPLL with virtual LMA and VMA, physical entrypoint
+  - [x] Swiss
+  - [x] HBC
+  - [ ] MINI
+  - [ ] linux-loader
+  - [ ] NDEV Boot Program
+- `npll.dol` - NPLL with physical load addresses, physical entrypoint
+  - [x] Swiss
+  - [ ] HBC
+  - [ ] Wii System Menu -> FOSS Apploader
+- `npll_virt.dol` - NPLL with virtual load addresses, virtual entrypoint
+  - [x] Swiss
+  - [x] HBC
+  - [x] Wii System Menu -> FOSS Apploader
+
+
 ## Copyright / Legal / Disclaimers
 "Nintendo®" is a registered trademark of Nintendo of America Inc.  
 "GameCube™" is a trademark of Nintendo of America Inc.  

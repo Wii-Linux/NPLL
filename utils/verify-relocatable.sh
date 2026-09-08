@@ -5,9 +5,19 @@ elf=$1
 readelf=$2
 nm=$3
 
+segments=$($readelf -lW "$elf")
 sections=$($readelf -S "$elf")
 relocs=$($readelf -r "$elf")
 dynamic=$($readelf -d "$elf")
+
+# Loaders must see the same address whether they use p_vaddr or p_paddr.
+printf '%s\n' "$segments" | awk '
+	$1 == "LOAD" { seen = 1; if ($3 != $4) mismatch = 1 }
+	END { exit (!seen || mismatch) }
+' || {
+	echo "verify-relocatable: ELF load segments must have VMA == LMA" >&2
+	exit 1
+}
 
 printf '%s\n' "$sections" | grep -q '\.got2' || {
 	echo "verify-relocatable: missing .got2" >&2

@@ -4,8 +4,8 @@
 
 OUTPUT_FORMAT("elf32-powerpc", "elf32-powerpc", "elf32-powerpc");
 OUTPUT_ARCH(powerpc:common);
-_entry = 0x00004000;
-ENTRY(_entry); /* we can't rely on the linker since technically _start = 0x80004000 */
+_entry = _start;
+ENTRY(_entry);
 
 MEMORY {
 	/*
@@ -16,12 +16,9 @@ MEMORY {
 	 * don't like putting us at 0x0.
 	 */
 
-	BS1PHYS (rwx): ORIGIN = 0x00003400, LENGTH = 0x00000c00 /* physical MEM1, BS1 */
-	LOWPHYS (rwx): ORIGIN = 0x00004000, LENGTH = 0x016fc000 /* physical MEM1, the load address of our ELF */
-	HIPHYS (rwx): ORIGIN = 0x01700000, LENGTH = 0x000c0000 /* physical MEM1, the load address of our relocated code+data */
-	BS1VIRT (rwx): ORIGIN = 0x80003400, LENGTH = 0x00000c00 /* physical MEM1, BS1 */
-	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x016fc000 /* virtual runtime addresses after BAT setup */
-	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x000c0000 /* virtual runtime address after relocation */
+	BS1VIRT (rwx): ORIGIN = 0x80003400, LENGTH = 0x00000c00 /* cached MEM1, BS1 */
+	LOWVIRT (rwx): ORIGIN = 0x80004000, LENGTH = 0x016fc000 /* ELF load/link addresses, including the bootstrap */
+	HIVIRT (rwx): ORIGIN = 0x81700000, LENGTH = 0x000c0000 /* runtime reservation after relocation */
 }
 
 
@@ -33,112 +30,103 @@ PHDRS {
 	bss  PT_LOAD FLAGS(6);
 }
 
-/* keep track of current LMA */
-_lma = ORIGIN(BS1PHYS);
-
 SECTIONS
 {
 	/* start linker VMA at the virtual address where the BS1 stub will run */
 	. = ORIGIN(BS1VIRT);
-	.bs1 : AT(_lma) {
+	.bs1 : {
 		KEEP(*(.bs1 .bs1*))
 		. = ALIGN(32);
 	} > BS1VIRT :bs1
 
-	_lma = ORIGIN(LOWPHYS);
 	/* start linker VMA at the virtual address where init code will run */
 	. = ORIGIN(LOWVIRT);
-	.init : AT(_lma) {
+	.init : {
 		KEEP(*(.init .init*))
 		. = ALIGN(32);
 	} > LOWVIRT :init
-	_lma = _lma + SIZEOF(.init);
 
-	/* start linker VMA at the virtual address where relocated code will run */
-	. = ORIGIN(HIVIRT);
-	PROVIDE(__reloc_source_start = _lma);
+	/*
+	 * Link the runtime at its load address so ELF VMA == LMA.  The
+	 * bootstrap copies it to high MEM1 (or native Wii U MEM2) and applies
+	 * the load bias to its pointers.  Destination symbols describe the
+	 * linked image; adding the bias gives the actual runtime addresses.
+	 */
+	PROVIDE(__reloc_source_start = .);
+	PROVIDE(__reloc_mem1_bias = ORIGIN(HIVIRT) - __reloc_dest_start);
 	PROVIDE(__reloc_dest_start = .);
 
-	.text : AT(_lma) {
+	.text : {
 		*(.text)
 		*(.text*)
 		KEEP(*(.ctors))
 		. = ALIGN(32);
-	} > HIVIRT :text
-	_lma = _lma + SIZEOF(.text);
+	} > LOWVIRT :text
 
-	.rodata : AT(_lma) {
+	.rodata : {
 		*(.rodata)
 		*(.rodata*)
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.rodata);
+	} > LOWVIRT :data
 
-	.data : AT(_lma) {
+	.data : {
 		*(.data)
 		*(.data*)
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.data);
+	} > LOWVIRT :data
 
-	.sdata : AT(_lma) {
+	.sdata : {
 		PROVIDE(__sda_start = .);
 		*(.sdata)
 		*(.sdata.*)
 		*(.gnu.linkonce.s.*)
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.sdata);
+	} > LOWVIRT :data
 
-	.sdata2 : AT(_lma) {
+	.sdata2 : {
 		PROVIDE(__sda2_start = .);
 		*(.sdata2)
 		*(.sdata2.*)
 		*(.gnu.linkonce.s2.*)
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.sdata2);
+	} > LOWVIRT :data
 
 	/*
 	 * GCC's embedded PowerPC -mrelocatable ABI puts load-bias-sensitive
 	 * pointers in .got2 and the addresses of all other pointer slots in
 	 * .fixup.  The low-MEM1 bootstrap adjusts both after copying the image.
 	 */
-	.got2 : AT(_lma) {
+	.got2 : {
 		PROVIDE(__got2_start = .);
 		*(.got2)
 		PROVIDE(__got2_end = .);
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.got2);
+	} > LOWVIRT :data
 
-	.fixup : AT(_lma) {
+	.fixup : {
 		PROVIDE(__fixup_start = .);
 		KEEP(*(.fixup))
 		PROVIDE(__fixup_end = .);
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.fixup);
+	} > LOWVIRT :data
 
-	.drivers : AT(_lma) {
+	.drivers : {
 		PROVIDE(__drivers_start = .);
 		KEEP(*(.drivers))
 		PROVIDE(__drivers_end = .);
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.drivers);
+	} > LOWVIRT :data
 
 	/* GNU ld complains if we discard it sadly */
-	.note.gnu.build-id : AT(_lma) {
+	.note.gnu.build-id : {
 		*(.note.gnu.build-id);
 		. = ALIGN(32);
-	} > HIVIRT :data
-	_lma = _lma + SIZEOF(.note.gnu.build-id);
+	} > LOWVIRT :data
 
-	PROVIDE(__reloc_source_end = _lma);
+	PROVIDE(__reloc_source_end = .);
 	PROVIDE(__reloc_dest_end = .);
 
-	.bss (NOLOAD) : AT(_lma) {
+	.bss (NOLOAD) : {
 		__bss_start = .;
 		PROVIDE (__bss_start = .);
 		*(.bss)
@@ -147,10 +135,9 @@ SECTIONS
 		. = ALIGN(32);
 		PROVIDE (__bss_end = .);
 		__bss_end = .;
-	} > HIVIRT :bss
-	_lma = _lma + SIZEOF(.bss);
+	} > LOWVIRT :bss
 
-	.sbss (NOLOAD) : AT(_lma) {
+	.sbss (NOLOAD) : {
 		PROVIDE(__sbss_start = .);
 		*(.dynsbss)
 		*(.sbss)
@@ -159,7 +146,7 @@ SECTIONS
 		*(.scommon)
 		. = ALIGN(32);
 		PROVIDE(__sbss_end = .);
-	} > HIVIRT :bss
+	} > LOWVIRT :bss
 
 	/DISCARD/ : {
 		*(.eh_frame)
@@ -185,4 +172,4 @@ ASSERT(__reloc_source_end % 32 == 0, "cache-align __reloc_source_end");
 ASSERT(__reloc_dest_start % 32 == 0, "cache-align __reloc_dest_start");
 ASSERT(__reloc_dest_end % 32 == 0, "cache-align __reloc_dest_end");
 ASSERT(__reloc_dest_end - __reloc_dest_start == __reloc_source_end - __reloc_source_start, "fix relocation size");
-ASSERT(__stack_top <= ORIGIN(HIVIRT) + LENGTH(HIVIRT), "runtime image and stack exceed relocation reservation");
+ASSERT(__stack_top + __reloc_mem1_bias <= ORIGIN(HIVIRT) + LENGTH(HIVIRT), "runtime image and stack exceed relocation reservation");
