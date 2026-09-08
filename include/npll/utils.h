@@ -81,6 +81,7 @@
 #define MEM1_SIZE_WIIU     0x02000000
 
 #define MEM2_SIZE_WII      0x04000000
+#define MEM2_SIZE_VWII     0x10000000
 #define MEM2_SIZE_NDEV     0x08000000
 /* lie, but this is all that we map */
 #define MEM2_SIZE_WIIU     0x20000000
@@ -107,15 +108,15 @@ static inline bool addrIsValidCached(void *_addr) {
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		return (addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + MEM1_SIZE_GCN));
+		return (addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + H_MEM1Size));
 	}
 	case CONSOLE_TYPE_WII: {
-		return ((addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + MEM1_SIZE_WII)) ||
-			(addr >= MEM2_CACHED_BASE && addr < (MEM2_CACHED_BASE + MEM2_SIZE_WII)));
+		return ((addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_CACHED_BASE && addr < (MEM2_CACHED_BASE + H_MEM2Size)));
 	}
 	case CONSOLE_TYPE_WII_U: {
-		return ((addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + MEM1_SIZE_WIIU)) ||
-			(addr >= MEM2_CACHED_BASE && addr < (MEM2_CACHED_BASE + MEM2_SIZE_WIIU)));
+		return ((addr >= MEM1_CACHED_BASE && addr < (MEM1_CACHED_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_CACHED_BASE && addr < (MEM2_CACHED_BASE + H_MEM2Size)));
 	}
 	}
 	__builtin_unreachable();
@@ -126,15 +127,15 @@ static inline bool addrIsValidUncached(void *_addr) {
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		return (addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + MEM1_SIZE_GCN));
+		return (addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + H_MEM1Size));
 	}
 	case CONSOLE_TYPE_WII: {
-		return ((addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + MEM1_SIZE_WII)) ||
-			(addr >= MEM2_UNCACHED_BASE && addr < (MEM2_UNCACHED_BASE + MEM2_SIZE_WII)));
+		return ((addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_UNCACHED_BASE && addr < (MEM2_UNCACHED_BASE + H_MEM2Size)));
 	}
 	case CONSOLE_TYPE_WII_U: {
-		return ((addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + MEM1_SIZE_WIIU)) ||
-			(addr >= MEM2_UNCACHED_BASE && addr < (MEM2_UNCACHED_BASE + MEM2_SIZE_WIIU)));
+		return ((addr >= MEM1_UNCACHED_BASE && addr < (MEM1_UNCACHED_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_UNCACHED_BASE && addr < (MEM2_UNCACHED_BASE + H_MEM2Size)));
 	}
 	}
 	__builtin_unreachable();
@@ -146,15 +147,15 @@ static inline bool addrIsValidPhys(void *_addr) {
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
-		return addr < (MEM1_PHYS_BASE + MEM1_SIZE_GCN);
+		return addr < (MEM1_PHYS_BASE + H_MEM1Size);
 	}
 	case CONSOLE_TYPE_WII: {
-		return ((addr < (MEM1_PHYS_BASE + MEM1_SIZE_WII)) ||
-			(addr >= MEM2_PHYS_BASE && addr < (MEM2_PHYS_BASE + MEM2_SIZE_WII)));
+		return ((addr < (MEM1_PHYS_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_PHYS_BASE && addr < (MEM2_PHYS_BASE + H_MEM2Size)));
 	}
 	case CONSOLE_TYPE_WII_U: {
-		return ((addr < (MEM1_PHYS_BASE + MEM1_SIZE_WIIU)) ||
-			(addr >= MEM2_PHYS_BASE && addr < (MEM2_PHYS_BASE + MEM2_SIZE_WIIU)));
+		return ((addr < (MEM1_PHYS_BASE + H_MEM1Size)) ||
+			(addr >= MEM2_PHYS_BASE && addr < (MEM2_PHYS_BASE + H_MEM2Size)));
 	}
 	}
 	__builtin_unreachable();

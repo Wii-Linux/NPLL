@@ -327,34 +327,126 @@ static int setAddressProp(void *fdt, int node, const char *name, u32 addr) {
 	return -FDT_ERR_BADNCELLS;
 }
 
-/* Truncate MEM2 to avoid trashing MINI, like the bootwrapper does */
-static int fixupWiiMemory(void *fdt) {
-	const fdt32_t *prop;
-	fdt32_t reg[4];
-	u32 mem2Base, mem2Size, boundary;
-	int memory, len;
+/*
+ * Match physical bank addresses, whether /memory combines banks or each
+ * bank has its own memory@... node.
+ */
+static int fixupMemory(void *fdt) {
+	int node = -1, depth = 0, ac, sc, len, cells, i;
+	fdt32_t *reg;
+	const char *type;
+	u64 base, oldSize;
+	u32 size, boundary = 0;
 
-	if (H_ConsoleType != CONSOLE_TYPE_WII || !H_WiiMEM2Top)
-		return 0;
-
-	memory = fdt_path_offset(fdt, "/memory");
-	if (memory < 0)
-		return memory;
-
-	prop = fdt_getprop(fdt, memory, "reg", &len);
-	if (!prop || len != (int)sizeof(reg))
-		return 0; /* A different memory layout is not one the wrapper adjusts. */
-
-	memcpy(reg, prop, sizeof(reg));
-	mem2Base = fdt32_to_cpu(reg[2]);
-	mem2Size = fdt32_to_cpu(reg[3]);
-	boundary = (u32)(uintptr_t)virtToPhys(H_WiiMEM2Top);
-	if (boundary > mem2Base && boundary - mem2Base < mem2Size) {
-		reg[3] = cpu_to_fdt32(boundary - mem2Base);
-		return fdt_setprop(fdt, memory, "reg", reg, sizeof(reg));
+	if (H_ConsoleType == CONSOLE_TYPE_WII && H_WiiMEM2Top) {
+		boundary = (u32)(uintptr_t)virtToPhys(H_WiiMEM2Top);
+		if (boundary < MEM2_PHYS_BASE || boundary >= MEM2_PHYS_BASE + MEM2_SIZE_WII)
+			return -FDT_ERR_BADVALUE;
 	}
 
+	while ((node = fdt_next_node(fdt, node, &depth)) >= 0 && depth >= 0) {
+		type = fdt_getprop(fdt, node, "device_type", &len);
+		if (!type || len != (int)sizeof("memory") || memcmp(type, "memory", sizeof("memory")))
+			continue;
+
+		ac = fdt_address_cells(fdt, fdt_parent_offset(fdt, node));
+		sc = fdt_size_cells(fdt, fdt_parent_offset(fdt, node));
+		if (ac < 1 || ac > 2 || sc < 1 || sc > 2)
+			return -FDT_ERR_BADNCELLS;
+
+		cells = ac + sc;
+		reg = fdt_getprop_w(fdt, node, "reg", &len);
+		if (!reg)
+			return len;
+		if (len % (cells * (int)sizeof(*reg)))
+			return -FDT_ERR_BADVALUE;
+		for (i = 0; i < len / (int)sizeof(*reg); i += cells) {
+			base = readCells(reg + i, ac);
+
+			if (base == MEM1_PHYS_BASE && H_GCNIsDevkit)
+				size = H_MEM1Size;
+			else if (base == MEM2_PHYS_BASE && H_ConsoleType == CONSOLE_TYPE_WII) {
+				size = H_MEM2Size;
+				if (H_MEM2Size == MEM2_SIZE_WII) {
+					/* retain any smaller limit supplied by a retail DTB */
+					oldSize = readCells(reg + i + ac, sc);
+
+					if (oldSize < size)
+						size = (u32)oldSize;
+					if (boundary && boundary - MEM2_PHYS_BASE < size)
+						size = boundary - MEM2_PHYS_BASE;
+				}
+			}
+			else
+				continue;
+
+			if (sc == 2)
+				reg[i + ac] = 0;
+
+			reg[i + ac + sc - 1] = cpu_to_fdt32(size);
+		}
+	}
+	if (node < 0 && node != -FDT_ERR_NOTFOUND)
+		return node;
+
+	/* keep MINI's hole below 64 MiB while exposing all higher RAM */
+	if (boundary && H_MEM2Size > MEM2_SIZE_WII)
+		return fdt_add_mem_rsv(fdt, boundary, MEM2_PHYS_BASE + MEM2_SIZE_WII - boundary);
+
 	return 0;
+}
+
+static int prependCompatible(void *fdt, int node, const char *compat) {
+	const char *old, *end;
+	char *value;
+	int len, pos, used, ret;
+	int prefix = (int)strlen(compat) + 1;
+
+	old = fdt_getprop(fdt, node, "compatible", &len);
+	if (!old)
+		return len;
+
+	value = malloc((size_t)len + (size_t)prefix);
+	memcpy(value, compat, (size_t)prefix);
+	used = prefix;
+	for (pos = 0; pos < len; pos += ret) {
+		end = memchr(old + pos, 0, (size_t)(len - pos));
+		if (!end) {
+			free(value);
+			return -FDT_ERR_BADVALUE;
+		}
+
+		ret = (int)(end - (old + pos)) + 1;
+		if (strcmp(old + pos, compat)) {
+			memcpy(value + used, old + pos, (size_t)ret);
+			used += ret;
+		}
+	}
+
+	ret = fdt_setprop(fdt, node, "compatible", value, used);
+	free(value);
+	return ret;
+}
+
+static int fixupCompatibility(void *fdt) {
+	static const char vwiiCompat[] = "nintendo,vwii\0nintendo,wii";
+	int node = -1, ret;
+
+	if (H_WiiIsvWii) {
+		ret = fdt_setprop(fdt, 0, "compatible", vwiiCompat, sizeof(vwiiCompat));
+		if (ret)
+			return ret;
+	}
+	if (!H_WiiIsvWii && H_ConsoleType != CONSOLE_TYPE_WII_U)
+		return 0;
+
+	/* match the SI binding */
+	while ((node = fdt_node_offset_by_compatible(fdt, node, "nintendo,hollywood-si")) >= 0) {
+		ret = prependCompatible(fdt, node, "nintendo,latte-si");
+		if (ret)
+			return ret;
+	}
+	return node == -FDT_ERR_NOTFOUND ? 0 : node;
 }
 
 int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
@@ -380,7 +472,11 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 	if (ret)
 		goto fail;
 
-	ret = fixupWiiMemory(fdt);
+	ret = fixupMemory(fdt);
+	if (ret)
+		goto fail;
+
+	ret = fixupCompatibility(fdt);
 	if (ret)
 		goto fail;
 

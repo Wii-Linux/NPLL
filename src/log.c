@@ -136,6 +136,13 @@ void _log_printf(const char *fmt, ...) {
 }
 
 void L_Init(void) {
+	extern char __reloc_dest_start;
+
+	/* Follow the relocated MEM1 image, including 48 MiB devkits. */
+	if ((uintptr_t)&__reloc_dest_start < MEM2_CACHED_BASE) {
+		memlogStart = (char *)((uintptr_t)&__reloc_dest_start + 0x000c0000);
+		memlogNext = memlogStart;
+	}
 	/*memlogWriteStr("In-Memory logger is now active\r\n"); */
 	memset(memlogStart, 0, maxSize);
 }

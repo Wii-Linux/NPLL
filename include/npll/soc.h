@@ -101,6 +101,7 @@
  */
 
 #define _FLIPPER_PI_REG(x) (*(vu32 *)(FLIPPER_PI_BASE + (x)))
+#define _FLIPPER_MI_REG(x) (*(vu16 *)(FLIPPER_MI_BASE + (x)))
 #define _HOLLYWOOD_REG(x) (*(vu32 *)(HOLLYWOOD_REGS_BASE + (x)))
 #define _HOLLYWOOD_MC_REG(x) (*(vu16 *)(HOLLYWOOD_MEMCTRL_BASE + (x)))
 #define _LATTE_REG(x) (*(vu32 *)(LATTE_REGS_BASE + (x)))
@@ -156,6 +157,11 @@
 #  define PI_CHIPID_ID           0x0ffff000
 #  define PI_CHIPID_UNK          0x00000fff
 
+#define MI_MEM_CONFIG            _FLIPPER_MI_REG(0x28)
+#  define MI_MEM_CONFIG_32M          0x0000u /* FIXME: this seems wrong... observed on Latte in native mode, I don't think any GC dev boards had 32M */
+#  define MI_MEM_CONFIG_24M          0x0002u /* observed on retail GC/Wii/vWii */
+#  define MI_MEM_CONFIG_48M          0x0003u /* according to https://github.com/Wack0/entii-for-workcubes/blob/c9b041da0f6114824c3451fb859cff218ecb9159/arcldr/source/main.c#L1091 */
+
 /* Hollywood Registers */
 #define HW_IPC_PPCMSG        _HOLLYWOOD_REG(0x00)
 #define HW_IPC_PPCCTRL       _HOLLYWOOD_REG(0x04)
@@ -206,6 +212,8 @@
 #define HW_MEM_PROT_DDR      _HOLLYWOOD_MC_REG(0xa)
 #define HW_MEM_PROT_DDR_BASE _HOLLYWOOD_MC_REG(0xc)
 #define HW_MEM_PROT_DDR_END  _HOLLYWOOD_MC_REG(0xe)
+#define HW_MEM_RANKSEL       _HOLLYWOOD_MC_REG(0x16)
+#define HW_MEM_ROWMSK        _HOLLYWOOD_MC_REG(0x1a)
 
 
 /* Latte Registers */

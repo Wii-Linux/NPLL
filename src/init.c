@@ -24,6 +24,8 @@
 
 enum consoleType H_ConsoleType = CONSOLE_TYPE_GAMECUBE;
 struct platOps *H_PlatOps = NULL;
+u32 H_MEM1Size = MEM1_SIZE_GCN;
+u32 H_MEM2Size = 0;
 
 extern void mainLoop(void);
 
@@ -67,7 +69,10 @@ void __attribute__((noreturn)) init(void) {
 
 	/* it's a GameCube, there is nothing else to determine */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		_log_puts("Detected hardware: Nintendo GameCube");
+		H_GCNIsDevkit = MI_MEM_CONFIG == MI_MEM_CONFIG_48M;
+		H_MEM1Size = H_GCNIsDevkit ? MEM1_SIZE_TDEV : MEM1_SIZE_GCN;
+		_log_puts(H_GCNIsDevkit ? "Detected hardware: Nintendo GameCube (devkit)" :
+			"Detected hardware: Nintendo GameCube");
 		T_Init();
 		CPU_Init();
 		H_InitGameCube();
@@ -86,6 +91,7 @@ void __attribute__((noreturn)) init(void) {
 	if ((lt_chiprevid & 0xFFFF0000) != 0xCAFE0000) {
 		_log_puts("Detected hardware: Nintendo Wii");
 detectedWii:
+		H_MEM2Size = MEM2_SIZE_WII;
 		T_Init();
 		CPU_Init();
 		H_InitWii();
@@ -96,6 +102,8 @@ detectedWii:
 	/* check if LT_PIMCOMPAT is non-zero, if it is, we must be in native mode, else it's vWii */
 	if (LT_PIMCOMPAT) {
 		H_ConsoleType = CONSOLE_TYPE_WII_U;
+		H_MEM1Size = MEM1_SIZE_WIIU;
+		H_MEM2Size = MEM2_SIZE_WIIU;
 		H_WiiURev = lt_chiprevid;
 		L_MoveToWiiUMEM2();
 		_log_puts("Detected hardware: Nintendo Wii U (native)");

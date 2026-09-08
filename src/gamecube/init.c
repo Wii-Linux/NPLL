@@ -1,7 +1,7 @@
 /*
  * NPLL - GameCube Init
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 #include <npll/types.h>
@@ -14,6 +14,7 @@
 #include <npll/drivers.h>
 
 enum gcnRev H_GCNRev = 0;
+bool H_GCNIsDevkit = false;
 
 static __attribute__((noreturn)) void gamecubeReboot(void) {
 	/* try a PI reset */

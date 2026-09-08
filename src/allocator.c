@@ -460,6 +460,8 @@ void *__attribute__((malloc, returns_nonnull, assume_aligned(32))) calloc(size_t
 }
 
 void M_Init(void) {
+	u32 boundary;
+
 	TRACE();
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -480,14 +482,23 @@ void M_Init(void) {
 		memcpy(pools[0].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
 
 		/* MEM2 */
-		if (H_WiiMEM2Top)
+		if (H_WiiMEM2Top && H_MEM2Size == MEM2_SIZE_WII)
 			pools[1].top = physToCached(H_WiiMEM2Top);
 		else
-			pools[1].top = (void *)(MEM2_CACHED_BASE + MEM2_SIZE_WII);
+			pools[1].top = (void *)(MEM2_CACHED_BASE + H_MEM2Size);
 		pools[1].bottom = (void *)MEM2_CACHED_BASE;
 		pools[1].cur_bottom = pools[1].top;
 		pools[1].name = "MEM2";
 		memcpy(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE);
+
+		/* MINI remains below 64 MiB even when extra RAM is available */
+		if (H_WiiMEM2Top && H_MEM2Size > MEM2_SIZE_WII) {
+			boundary = (u32)(uintptr_t)virtToPhys(H_WiiMEM2Top);
+			if (boundary < MEM2_PHYS_BASE || boundary >= MEM2_PHYS_BASE + MEM2_SIZE_WII)
+				panic("Invalid MINI MEM2 boundary");
+
+			M_Reserve(boundary, MEM2_PHYS_BASE + MEM2_SIZE_WII - boundary);
+		}
 		break;
 	}
 	case CONSOLE_TYPE_WII_U: {

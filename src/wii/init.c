@@ -35,6 +35,7 @@
 
 enum wiiRev H_WiiRev = 0;
 int H_WiiIsvWii = 0;
+bool H_WiiIsDevkit = false;
 int H_WiiBootIOS = -1;
 u64 H_WiiBootTitleID = 0;
 void *H_WiiMEM2Top = NULL;
@@ -715,6 +716,19 @@ out:
 		panic("AHBPROT not enabled at end of H_InitWii");
 	if (!testMEM2())
 		panic("MEM2 not fully accessible at end of H_InitWii");
+
+	/* memory controller registers are accessible now */
+	if (H_WiiIsvWii) {
+		/* enable 256MiB MEM2 */
+		HW_MEM_ROWMSK = 0x3fff;
+		sync();
+		H_MEM2Size = MEM2_SIZE_VWII;
+	}
+	else if (HW_MEM_RANKSEL == 1) {
+		H_WiiIsDevkit = true;
+		H_MEM2Size = MEM2_SIZE_NDEV;
+		log_puts("Detected Nintendo Wii NDEV/RVT-H (128 MiB MEM2)");
+	}
 
 	MINI_BOOT_MAGIC_PTR = 0;
 

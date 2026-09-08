@@ -174,7 +174,16 @@ relocate:
 	cmpwi %r9, 0x11
 	beq 1f
 	cmpwi %r9, 0x21
+	beq 1f
+
+	# GameCube devkits have 48 MiB Splash. Keep the final MiB for
+	# the runtime and log, as on retail, but move it to 0x82f00000.
+	lis %r8, 0xcc00
+	lhz %r9, 0x4028(%r8)       # MI_MEM_CONFIG
+	cmpwi %r9, 3               # MI_MEM_CONFIG_48M
 	bne 2f
+	addis %r31, %r31, 0x0180   # extra 24 MiB
+	b 2f
 1:
 	lwz %r9, 0x05a0(%r8)       # LT_CHIPREVID
 	srwi %r9, %r9, 16

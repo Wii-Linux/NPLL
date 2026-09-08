@@ -24,13 +24,9 @@ void CPU_DCacheFlushAll(void) {
 	 * Walking every cacheable RAM address therefore cleans both caches before
 	 * either cache is disabled or globally invalidated.
 	 */
-	flushRange(MEM1_CACHED_BASE,
-		H_ConsoleType == CONSOLE_TYPE_WII_U ? MEM1_SIZE_WIIU : MEM1_SIZE_GCN);
-
-	if (H_ConsoleType == CONSOLE_TYPE_WII)
-		flushRange(MEM2_CACHED_BASE, MEM2_SIZE_WII);
-	else if (H_ConsoleType == CONSOLE_TYPE_WII_U)
-		flushRange(MEM2_CACHED_BASE, MEM2_SIZE_WIIU);
+	flushRange(MEM1_CACHED_BASE, H_MEM1Size);
+	if (H_MEM2Size)
+		flushRange(MEM2_CACHED_BASE, H_MEM2Size);
 
 	asm volatile("sync; isync" ::: "memory");
 }

@@ -31,18 +31,18 @@ static bool dolAddrRangeOk(u32 addr, u32 size) {
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE:
 		return ((addr & 0xf0000000u) == 0x80000000u) &&
-			(end - 0x80000000u) <= MEM1_SIZE_GCN;
+			(end - 0x80000000u) <= H_MEM1Size;
 	case CONSOLE_TYPE_WII:
 		if ((addr & 0xf0000000u) == 0x80000000u)
-			return (end - 0x80000000u) <= MEM1_SIZE_WII;
+			return (end - 0x80000000u) <= H_MEM1Size;
 		if ((addr & 0xf0000000u) == 0x90000000u)
-			return (end - 0x90000000u) <= MEM2_SIZE_WII;
+			return (end - 0x90000000u) <= H_MEM2Size;
 		return false;
 	case CONSOLE_TYPE_WII_U:
 		if ((addr & 0xf0000000u) == 0x80000000u)
-			return (end - 0x80000000u) <= MEM1_SIZE_WIIU;
+			return (end - 0x80000000u) <= H_MEM1Size;
 		if ((addr & 0xf0000000u) == 0x90000000u)
-			return (end - 0x90000000u) <= MEM2_SIZE_WIIU;
+			return (end - 0x90000000u) <= H_MEM2Size;
 		return false;
 	}
 	return false;

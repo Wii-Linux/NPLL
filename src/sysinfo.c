@@ -14,6 +14,7 @@
 #include <npll/cpu.h>
 #include <npll/fs.h>
 #include <npll/menu.h>
+#include <npll/soc.h>
 
 static void sysinfoMenuInit(struct menu *m);
 static void sysinfoMenuCleanup(struct menu *m);
@@ -70,10 +71,13 @@ static void sysinfoMenuInit(struct menu *m) {
 
 	/* step 2: report console type */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-		strcat(m->content, "Console Type: Nintendo GameCube");
+		strcat(m->content, H_GCNIsDevkit ? "Console Type: Nintendo GameCube (devkit)" :
+			"Console Type: Nintendo GameCube");
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		if (H_WiiIsvWii)
 			strcat(m->content, "Console Type: Nintendo Wii U (vWii)");
+		else if (H_WiiIsDevkit)
+			strcat(m->content, "Console Type: Nintendo Wii (NDEV/RVT-H)");
 		else
 			strcat(m->content, "Console Type: Nintendo Wii");
 	}
