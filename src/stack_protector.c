@@ -1,7 +1,7 @@
 /*
  * NPLL - Stack protector
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  */
 
 
@@ -12,5 +12,9 @@
 uintptr_t __stack_chk_guard = 0x4e504c4cu;
 
 void __attribute__((noreturn)) __stack_chk_fail(void) {
+	panic("Stack smashing detected!!");
+}
+
+void __attribute__((noreturn)) __stack_chk_fail_local(void) {
 	panic("Stack smashing detected!!");
 }
