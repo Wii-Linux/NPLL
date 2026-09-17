@@ -242,8 +242,9 @@ $(OUT_ELF_VIRT): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED) sr
 ifneq ($(LLVM),1)
 	$(HIDE)sh util/verify-relocatable.sh $@ $(READELF) $(NM)
 endif
-	$(HIDE)start=$$($(NM) $@ | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
-	  end=$$($(NM) $@ | awk '$$3=="__sbss_end"{print $$1; exit}'); \
+	$(HIDE)nmout=$$($(NM) $@); \
+	  start=$$(printf '%s\n' "$$nmout" | awk '$$3=="__reloc_dest_start"{print $$1; exit}'); \
+	  end=$$(printf '%s\n' "$$nmout" | awk '$$3=="__sbss_end"{print $$1; exit}'); \
 	  if [ -n "$$start" ] && [ -n "$$end" ]; then \
 	    used=$$((0x$$end - 0x$$start)); \
 	    total=$$((768 * 1024)); \
