@@ -128,13 +128,14 @@ CFLAGS  := -mregnames -msoft-float -mcpu=750 -Iinclude -isystem external/dtc/lib
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-CFLAGS  += -Os -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
+CFLAGS  += -Os -ffunction-sections -fdata-sections -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
 LDFLAGS := $(COMPILER_SPECIFIC_LDFLAGS) -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -ffreestanding
 ifeq ($(LLVM),1)
 LDFLAGS_TMP_OBJ := $(LDFLAGS)
 else
 LDFLAGS_TMP_OBJ := $(COMPILER_SPECIFIC_LDFLAGS)
 endif
+LDFLAGS_FINAL := $(LDFLAGS) -Wl,--gc-sections
 
 # The fixed-address bootstrap deliberately uses absolute linker symbols while
 # it copies and fixes the relocatable runtime image.
@@ -222,7 +223,7 @@ $(OUT_ELF_PHYS): $(OUT_ELF_VIRT) Makefile
 $(OUT_ELF_VIRT): $(OBJ) $(FAT_COMBINED) $(LIBFDT_COMBINED) $(LWEXT4_COMBINED) src/linkerscript.ld util/verify-relocatable.sh Makefile
 	$(info $s  LD $@)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(LDFLAGS) -T src/linkerscript.ld -o $@ $(filter %.o,$^) $(LIBS)
+	$(HIDE)$(CC) $(LDFLAGS_FINAL) -T src/linkerscript.ld -o $@ $(filter %.o,$^) $(LIBS)
 
 # it doesn't understand Clang-generated dynamic sections
 ifneq ($(LLVM),1)
