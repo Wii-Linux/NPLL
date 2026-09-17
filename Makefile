@@ -305,7 +305,7 @@ build/%.o: src/%.S
 
 # to make it bail if the user doesn't have MINI pulled
 external/mini/armboot.bin: external/mini/Makefile
-	$(HIDE)$(MAKE) -C external/mini FOR_NPLL=1
+	$(HIDE)$(MAKE) -C external/mini FOR_NPLL=1 MAKEOVERRIDES="$(filter-out OBJCOPY=%,$(MAKEOVERRIDES))"
 
 external/dol-tools/bin/dol-info: external/dol-tools/Makefile
 	$(HIDE)$(MAKE) -C external/dol-tools dol-info CC="$(HOSTCC)"
