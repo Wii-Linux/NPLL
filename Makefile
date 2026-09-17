@@ -49,6 +49,10 @@ READELF := $(LLVM_PREFIX)readelf
 LIBS :=
 endif
 
+ifeq ($(LLVM),1)
+OBJCOPY_IS_LLVM := $(shell $(OBJCOPY) --version 2>/dev/null | grep -qi '^llvm-objcopy' && echo 1)
+endif
+
 VERSION := $(word 1, \
 	$(if $(shell command -v git && [ -d .git ]),$(shell git describe --tags --always --dirty)) \
 	)
@@ -172,9 +176,15 @@ OUT_ELF_VIRT := bin/npll_virt.elf
 OUT_ELF_VIRT_PHYSENTRY := bin/npll_virt_physentry.elf
 OUT_ELF_PHYS := bin/npll_phys.elf
 OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY := bin/npll_virtvma_physlma_physentry.elf
-OUT_ELFS := $(OUT_ELF_VIRT) $(OUT_ELF_VIRT_PHYSENTRY) $(OUT_ELF_PHYS) $(OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY)
+OUT_ELFS := $(OUT_ELF_VIRT) $(OUT_ELF_VIRT_PHYSENTRY) $(OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY)
 OUT_DOL := bin/npll.dol
 OUT_DOL_VIRT := bin/npll_virt.dol
+
+ifeq ($(OBJCOPY_IS_LLVM),1)
+$(warning WARNING: OBJCOPY ($(OBJCOPY)) is llvm-objcopy, which can't produce $(OUT_ELF_PHYS) (needs to shift a linked ELF's VMA). Skipping it. Set OBJCOPY to a GNU objcopy, e.g. powerpc-linux-gnu-objcopy, to build it.)
+else
+OUT_ELFS += $(OUT_ELF_PHYS)
+endif
 
 # need to put this before the libfdt include
 ifeq ($(BUILD_DOL),0)
@@ -204,9 +214,12 @@ FAT_COMBINED := build/fs/fat/fat.o
 $(OUT_DOL_VIRT): $(OUT_DOL) external/dol-tools/bin/dol-info external/dol-tools/bin/dol-patch
 	util/fixup_virt_dol.sh $< $@
 
-$(OUT_DOL): $(OUT_ELF_PHYS)
+$(OUT_DOL): $(OUT_ELF_VIRTVMA_PHYSLMA_PHYSENTRY) external/dol-tools/bin/dol-info external/dol-tools/bin/dol-patch util/fixup_phys_dol.sh
 	$(info $s  ELF2DOL $@)
-	$(HIDE)$(ELF2DOL) $< $@
+	$(HIDE)$(ELF2DOL) $< $@.tmp
+	$(info $s  FIXUP $@ (phys))
+	$(HIDE)util/fixup_phys_dol.sh $@.tmp $@
+	$(HIDE)rm -f $@.tmp
 
 $(OUT_ELF_VIRT_PHYSENTRY): $(OUT_ELF_VIRT) Makefile
 	$(info $s  OBJCOPY $@)

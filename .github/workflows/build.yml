@@ -64,6 +64,9 @@ jobs:
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh "$LLVM_VERSION"
           echo "LLVM_VERSION=$LLVM_VERSION" >> "$GITHUB_ENV"
+          # llvm-objcopy can't build everything
+          sudo apt-get update
+          sudo apt-get install -y binutils-powerpc-linux-gnu
 
       - name: Fetch PowerPC toolchain
         if: matrix.toolchain == 'wii-linux-toolchain'
@@ -104,7 +107,7 @@ jobs:
                 CLANG="clang-$LLVM_VERSION" \
                 LLD="$(command -v ld.lld-$LLVM_VERSION)" \
                 AR="$(command -v llvm-ar-$LLVM_VERSION)" \
-                OBJCOPY="$(command -v llvm-objcopy-$LLVM_VERSION)" \
+                OBJCOPY="$(command -v powerpc-linux-gnu-objcopy)" \
                 NM="$(command -v llvm-nm-$LLVM_VERSION)" \
                 READELF="$(command -v llvm-readelf-$LLVM_VERSION)"
               ;;
