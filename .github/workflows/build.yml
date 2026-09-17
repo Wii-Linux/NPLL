@@ -1,0 +1,128 @@
+#
+# NPLL - CI/CD - build matrix
+#
+
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WII_LINUX_TOOLCHAIN_IMAGE: techflashyt/wii-linux-toolchain:v2.2
+  WII_LINUX_TOOLCHAIN_PPC_PATH: /usr/local/crosstool/powerpc-unknown-linux-gnu
+  WII_LINUX_TOOLCHAIN_ARM_PATH: /usr/local/crosstool/armeb-eabi
+
+  DEVKITPPC_IMAGE: devkitpro/devkitppc:latest
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [wii-linux-toolchain, debian-ppc, debian-clang, devkitppc]
+    steps:
+      - name: Check out NPLL
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Fetch ARM toolchain
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/armtoolchain"
+          docker pull "$WII_LINUX_TOOLCHAIN_IMAGE"
+          docker run --rm \
+            -v "$RUNNER_TEMP/armtoolchain:/out" \
+            "$WII_LINUX_TOOLCHAIN_IMAGE" \
+            sh -c "cp -a \"$WII_LINUX_TOOLCHAIN_ARM_PATH/.\" /out/"
+          echo "$RUNNER_TEMP/armtoolchain/bin" >> "$GITHUB_PATH"
+
+      - name: Install PowerPC toolchain (Debian)
+        if: matrix.toolchain == 'debian-ppc'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-powerpc-linux-gnu binutils-powerpc-linux-gnu
+
+      - name: Install clang toolchain (Debian)
+        if: matrix.toolchain == 'debian-clang'
+        run: |
+          set -eu
+          # pull a recent official build that's less ancient and has more-competent codegen than distro packages
+          LLVM_VERSION=23
+          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh "$LLVM_VERSION"
+          echo "LLVM_VERSION=$LLVM_VERSION" >> "$GITHUB_ENV"
+
+      - name: Fetch PowerPC toolchain
+        if: matrix.toolchain == 'wii-linux-toolchain'
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/ppctoolchain"
+          docker run --rm \
+            -v "$RUNNER_TEMP/ppctoolchain:/out" \
+            "$WII_LINUX_TOOLCHAIN_IMAGE" \
+            sh -c "cp -a \"$WII_LINUX_TOOLCHAIN_PPC_PATH/.\" /out/"
+          echo "$RUNNER_TEMP/ppctoolchain/bin" >> "$GITHUB_PATH"
+
+      - name: Install devkitPPC
+        if: matrix.toolchain == 'devkitppc'
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/devkitppc"
+          docker pull "$DEVKITPPC_IMAGE"
+          docker run --rm \
+            -v "$RUNNER_TEMP/devkitppc:/out" \
+            "$DEVKITPPC_IMAGE" \
+            sh -c "cp -a /opt/devkitpro/devkitPPC/. /out/"
+          echo "$RUNNER_TEMP/devkitppc/bin" >> "$GITHUB_PATH"
+          echo "DEVKITPPC=$RUNNER_TEMP/devkitppc" >> "$GITHUB_ENV"
+
+      - name: Build NPLL
+        run: |
+          set -eu
+          case "${{ matrix.toolchain }}" in
+            wii-linux-toolchain)
+              make -j"$(nproc)" CROSS_PREFIX=powerpc-unknown-linux-gnu-
+              ;;
+            debian-ppc)
+              make -j"$(nproc)" CROSS_PREFIX=powerpc-linux-gnu-
+              ;;
+            debian-clang)
+              make -j"$(nproc)" LLVM=1 \
+                CLANG="clang-$LLVM_VERSION" \
+                LLD="$(command -v ld.lld-$LLVM_VERSION)" \
+                AR="$(command -v llvm-ar-$LLVM_VERSION)" \
+                OBJCOPY="$(command -v llvm-objcopy-$LLVM_VERSION)" \
+                NM="$(command -v llvm-nm-$LLVM_VERSION)" \
+                READELF="$(command -v llvm-readelf-$LLVM_VERSION)"
+              ;;
+            devkitppc)
+              make -j"$(nproc)" CROSS_PREFIX=powerpc-eabi-
+              ;;
+          esac
+
+      - name: Show build output
+        if: always()
+        run: ls -la bin/ 2>/dev/null || true
+
+      - name: Upload NPLL binaries
+        if: matrix.toolchain == 'wii-linux-toolchain'
+        uses: actions/upload-artifact@v7
+        with:
+          name: npll-bin
+          path: bin/*
+          if-no-files-found: error
+
+# TODO: runtime testing via Ironic pending various PRs
