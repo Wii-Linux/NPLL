@@ -641,7 +641,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
 			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
-			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf));
+			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf) + armbuf[0]);
 			udelay(500 * 1000); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
 
 			SET_SFLAG(SFLAG_MINI_INIT, false);
