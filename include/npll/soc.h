@@ -238,5 +238,6 @@
 #define LT_EFUSEPROT   _LATTE_REG(0x110)
 #define LT_CHIPREVID   _LATTE_REG(0x1a0)
 #define LT_PIMCOMPAT   _LATTE_REG(0x1b0)
+#define LT_RESETS      _LATTE_REG(0x1e0)
 
 #endif /* _SOC_H */

@@ -16,6 +16,7 @@
 #include <npll/init.h>
 #include <npll/timer.h>
 #include <npll/drivers.h>
+#include <npll/drivers/exi.h>
 #include <npll/cpu.h>
 #include <npll/output.h>
 #include <npll/irq.h>
@@ -208,7 +209,30 @@ static void armbootnow(void) {
 }
 
 static __attribute__((noreturn)) void wiiShutdown(void) {
+	u32 cmd;
 	MINI_BOOT_MAGIC_PTR = 0;
+
+	if (H_WiiIsvWii) {
+		/*
+		 * vWii needs a completely different shutdown sequence where
+		 * we talk to the RTC.  linux-loader does this for us on
+		 * native Wii U, but it's obviously not present here.
+		 */
+		H_EXISelect(0, 1, 2);
+		cmd = 0xa1000100; H_EXIWriteImm(0, 4, &cmd);
+		cmd = 0x00000000; H_EXIWriteImm(0, 4, &cmd);
+		H_EXIDeselect(0);
+		H_EXISelect(0, 1, 2);
+		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
+		cmd = 0x00000101; H_EXIWriteImm(0, 4, &cmd);
+		H_EXIDeselect(0);
+		H_EXISelect(0, 1, 2);
+		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
+		cmd = 0x00010101; H_EXIWriteImm(0, 4, &cmd);
+		H_EXIDeselect(0);
+
+		while (1); /* weird... */
+	}
 	HW_GPIO_OWNER |= GPIO_SHUTDOWN;
 	HW_GPIO_DIR |= GPIO_SHUTDOWN;
 	HW_GPIOB_OUT |= GPIO_SHUTDOWN;
@@ -217,7 +241,26 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 }
 
 static __attribute__((noreturn)) void wiiReboot(void) {
+	u32 cmd;
+
 	MINI_BOOT_MAGIC_PTR = 0;
+
+	if (H_WiiIsvWii) {
+		/* see comment in wiiShutdown */
+		H_EXISelect(0, 1, 2);
+		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
+		cmd = 0x00000501; H_EXIWriteImm(0, 4, &cmd);
+		H_EXIDeselect(0);
+		H_EXISelect(0, 1, 2);
+		cmd = 0xa1000100; H_EXIWriteImm(0, 4, &cmd);
+		cmd = 0x00000000; H_EXIWriteImm(0, 4, &cmd);
+		H_EXIDeselect(0);
+
+		LT_RESETS &= ~BIT(0);
+
+		while (1); /* weird... */
+	}
+
 	/* try a HW_RESETS reset */
 	HW_RESETS |= RESETS_RSTBINB;
 	udelay(1000 * 35);
