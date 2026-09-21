@@ -22,7 +22,7 @@
 
 #define ARGV_MAGIC 0x5f617267u
 #define WIIU_LOADER_MAGIC 0xcafefecau
-#define WIIU_LOADER_EA    0xe9200000u
+#define WIIU_LOADER_EA    0xf9200000u
 
 /*
  * Book3s32 has to allocate its initial hash table from MEM1.  Wii U's
@@ -83,11 +83,11 @@ static void ELF_InstallLinuxData(u32 entry, const void *initrd, u32 initrdSize, 
 		/*
 		 * linux-loader places this structure at physical 0x89200000, well
 		 * above NPLL's regular MEM2 BATs.  Borrow DBAT6 to expose the
-		 * containing 256 MiB as an uncached window at 0xe0000000.
+		 * containing 256 MiB as an uncached window at 0xf0000000.
 		 */
 		oldBatu = mfspr(DBAT6U);
 		oldBatl = mfspr(DBAT6L);
-		setbat(6, SETBAT_TYPE_DATA, 0xe0001fffu, 0x8000002au);
+		setbat(6, SETBAT_TYPE_DATA, 0xf0001fffu, 0x8000002au);
 		loader = (struct wiiuLoaderData *)WIIU_LOADER_EA;
 
 		/*

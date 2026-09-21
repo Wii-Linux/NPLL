@@ -1210,6 +1210,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 	void *temporaryDTB = NULL;
 	size_t reservedCount = 0;
 	u32 dtbExtra, cmdlineFlags = 0;
+	enum pool_idx initrdPool = POOL_ANY;
 
 	memset(&files, 0, sizeof(files));
 	IOStats_MarkStart();
@@ -1246,11 +1247,24 @@ static void npllBootLinux(struct npllEntry *ne) {
 	}
 
 	if (ne->initrdPath) {
+		/*
+		 * The linux-wiiu bootwrapper only maps the first 256 MiB of
+		 * MEM2.  The initrd must be accessible to it.
+		 */
+		if (!files.dtb && H_ConsoleType == CONSOLE_TYPE_WII_U &&
+		    (ne->mods & NPLL_MOD_LINUX_LDR_CMDLINE)) {
+			reserved[reservedCount++] = (struct memRange) {
+				.start = MEM2_PHYS_BASE + 0x10000000u,
+				.size = MEM2_SIZE_WIIU - 0x10000000u,
+			};
+			initrdPool = POOL_MEM2;
+		}
+
 		if (npllEnsureFS(ne, ne->initrdPath, &path))
 			goto fail;
 
 		fd = FS_Open(path);
-		if (fd < 0 || L_LoadAuxFileAvoid(fd, POOL_ANY, &files.initrd, 0, &files.initrdSize, reserved, reservedCount)) {
+		if (fd < 0 || L_LoadAuxFileAvoid(fd, initrdPool, &files.initrd, 0, &files.initrdSize, reserved, reservedCount)) {
 			log_printf("npllBootLinux: failed to load initrd: %d\r\n", fd);
 			goto fail;
 		}
