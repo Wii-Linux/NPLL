@@ -50,11 +50,4 @@
 #define VIDEO_FRAMEBUFFER_2          (2)
 #define VIDEO_FRAMEBUFFER_BOTH       (0)
 
-void VIDEO_Init            (int VideoMode);
-void VIDEO_SetFrameBuffer  (void *FrameBufferAddr);
-void VIDEO_WaitVSync       (void);
-void VIDEO_BlackOut        (void);
-void VIDEO_Shutdown        (void);
-void VISetupEncoder        (void);
-
 #endif /* _FLIPPER_VI_H */

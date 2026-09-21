@@ -1,7 +1,7 @@
 /*
  * NPLL - Flipper/Hollywood Hardware - Video Interface
  *
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
  *
  * Based on code in BootMii ppcskel:
  * Copyright (C) 2008, 2009	Hector Martin "marcan" <marcan@marcansoft.com>
@@ -23,17 +23,17 @@
 #define MODULE "VI"
 
 #include <string.h>
+#include <npll/allocator.h>
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/flipper/vi.h>
 #include <npll/i2c.h>
 #include <npll/irq.h>
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include <npll/video.h>
 #include <npll/log.h>
-#include <npll/flipper/vi.h>
-#include <npll/allocator.h>
 
 static REGISTER_DRIVER(viDrv);
 
@@ -91,12 +91,11 @@ static const u16 VIDEO_Mode640X480NtscpYUV16[64] = {
   0x1313, 0x0F08, 0x0008, 0x0C0F, 0x00FF, 0x0000, 0x0001, 0x0001,
   0x0280, 0x807A, 0x019C, 0x00FF, 0x00FF, 0x00FF, 0x00FF, 0x00FF};
 
-static int video_mode;
+static int videoMode;
 
-void VIDEO_Init(int VideoMode)
-{
-	u32 Counter=0;
-	const u16 *video_initstate=NULL;
+static void viInit(int mode) {
+	uint i;
+	const u16 *videoInitState = NULL;
 
 	VI_debug("Resetting VI...\n");
 	R_VIDEO_STATUS1 = 2;
@@ -104,72 +103,69 @@ void VIDEO_Init(int VideoMode)
 	R_VIDEO_STATUS1 = 0;
 	VI_debug("VI reset...\n");
 
-	switch(VideoMode)
-	{
-	case VIDEO_640X480_NTSCi_YUV16:
-		video_initstate = VIDEO_Mode640X480NtsciYUV16;
+	switch(mode) {
+	case VIDEO_640X480_NTSCi_YUV16: {
+		videoInitState = VIDEO_Mode640X480NtsciYUV16;
 		break;
-
-	case VIDEO_640X480_PAL50_YUV16:
-		video_initstate = VIDEO_Mode640X480Pal50YUV16;
+	}
+	case VIDEO_640X480_PAL50_YUV16: {
+		videoInitState = VIDEO_Mode640X480Pal50YUV16;
 		break;
-
-	case VIDEO_640X480_PAL60_YUV16:
-		video_initstate = VIDEO_Mode640X480Pal60YUV16;
+	}
+	case VIDEO_640X480_PAL60_YUV16: {
+		videoInitState = VIDEO_Mode640X480Pal60YUV16;
 		break;
-
-	case VIDEO_640X480_NTSCp_YUV16:
-		video_initstate = VIDEO_Mode640X480NtscpYUV16;
+	}
+	case VIDEO_640X480_NTSCp_YUV16: {
+		videoInitState = VIDEO_Mode640X480NtscpYUV16;
 		break;
-
+	}
 	/* Use NTSC as default */
-	default:
-		VideoMode = VIDEO_640X480_NTSCi_YUV16;
-		video_initstate = VIDEO_Mode640X480NtsciYUV16;
+	default: {
+		mode = VIDEO_640X480_NTSCi_YUV16;
+		videoInitState = VIDEO_Mode640X480NtsciYUV16;
 		break;
+	}
 	}
 
 	VI_debug("Configuring VI...\n");
-	for(Counter=0; Counter<64; Counter++)
-	{
-		if(Counter==1)
-			*(vu16 *)(FLIPPER_VI_BASE + 2 * Counter) = video_initstate[Counter] & 0xFFFE;
+	for(i = 0; i < 64; i++) {
+		if (i == 1)
+			*(vu16 *)((uintptr_t)FLIPPER_VI_BASE + 2 * i) = videoInitState[i] & 0xFFFE;
 		else
-			*(vu16 *)(FLIPPER_VI_BASE + 2 * Counter) = video_initstate[Counter];
+			*(vu16 *)((uintptr_t)FLIPPER_VI_BASE + 2 * i) = videoInitState[i];
 	}
 
-	video_mode = VideoMode;
+	videoMode = mode;
 
-	R_VIDEO_STATUS1 = video_initstate[1];
+	R_VIDEO_STATUS1 = videoInitState[1];
 #ifdef VI_DEBUG
 	VI_debug("VI dump:\n");
-	for(Counter=0; Counter<32; Counter++)
-		log_printf("%02x: %04x %04x,\n", Counter*4, *(vu16 *)(FLIPPER_VI_BASE + Counter*4), *(vu16 *)(FLIPPER_VI_BASE + Counter*4+2));
+	for (i = 0; i < 32; i++)
+		log_printf("%02x: %04x %04x,\n", i * 4, *(vu16 *)(FLIPPER_VI_BASE + i * 4), *(vu16 *)(FLIPPER_VI_BASE + i * 4 + 2));
 
 	log_printf("---\n");
 #endif
 }
 
-void VIDEO_SetFrameBuffer(void *FrameBufferAddr)
-{
-	u32 fb = (u32)(uintptr_t)virtToPhys(FrameBufferAddr); /* physical addr */
+static void viSetXFB(void *xfbAddr) {
+	u32 fb = (u32)(uintptr_t)virtToPhys(xfbAddr); /* physical addr */
 
 	R_VIDEO_FRAMEBUFFER_1 = (fb >> 5) | 0x10000000;
-	if(video_mode != VIDEO_640X480_NTSCp_YUV16)
+	if (videoMode != VIDEO_640X480_NTSCp_YUV16)
 		fb += 2 * 640; // 640 pixels == 1 line
 	R_VIDEO_FRAMEBUFFER_2 = (fb >> 5) | 0x10000000;
 }
 
-void VIDEO_WaitVSync(void)
-{
+#if 0
+static void viWaitVsync(void) {
 	while(R_VIDEO_HALFLINE_1 >= 200);
 	while(R_VIDEO_HALFLINE_1 <  200);
 }
 
 /* black out video (not reversible!) */
-void VIDEO_BlackOut(void)
-{
-	VIDEO_WaitVSync();
+static void viBlackOut(void) {
+	viWaitVsync();
 
 	uint active = R_VIDEO_VTIMING >> 4;
 
@@ -181,18 +177,15 @@ void VIDEO_BlackOut(void)
 	R_VIDEO_VTIMING &= ~0xfffffff0;
 }
 
-//static vu16* const _viReg = (u16*)FLIPPER_VI_BASE;
-
-void VIDEO_Shutdown(void)
-{
-	VIDEO_BlackOut();
+static void viShutdown(void) {
+	viBlackOut();
 	R_VIDEO_STATUS1 = 0;
 }
+#endif
 
 #define SLAVE_AVE 0x70
 
-static void __VIWriteI2CRegister8(u8 reg, u8 data)
-{
+static void viWriteI2CRegister8(u8 reg, u8 data) {
 	u8 buf[2];
 	buf[0] = reg;
 	buf[1] = data;
@@ -200,8 +193,7 @@ static void __VIWriteI2CRegister8(u8 reg, u8 data)
 	udelay(2);
 }
 
-static void __VIWriteI2CRegister16(u8 reg, u16 data)
-{
+static void viWriteI2CRegister16(u8 reg, u16 data) {
 	u8 buf[3];
 	buf[0] = reg;
 	buf[1] = (u8)(data >> 8);
@@ -210,8 +202,7 @@ static void __VIWriteI2CRegister16(u8 reg, u16 data)
 	udelay(2);
 }
 
-static void __VIWriteI2CRegister32(u8 reg, u32 data)
-{
+static void viWriteI2CRegister32(u8 reg, u32 data) {
 	u8 buf[5];
 	buf[0] = reg;
 	buf[1] = (u8)(data >> 24);
@@ -222,8 +213,7 @@ static void __VIWriteI2CRegister32(u8 reg, u32 data)
 	udelay(2);
 }
 
-static void __VIWriteI2CRegisterBuf(u8 reg, uint size, u8 *data)
-{
+static void viWriteI2CRegisterBuf(u8 reg, uint size, u8 *data) {
 	u8 buf[0x100];
 	buf[0] = reg;
 	memcpy(&buf[1], data, size);
@@ -231,32 +221,30 @@ static void __VIWriteI2CRegisterBuf(u8 reg, uint size, u8 *data)
 	udelay(2);
 }
 
-static void __VISetYUVSEL(u8 dtvstatus)
-{
+static void viSetYUVSEL(u8 dtvStatus) {
 	int vdacFlagRegion;
-	switch(video_mode) {
+	switch (videoMode) {
 	case VIDEO_640X480_NTSCi_YUV16:
 	case VIDEO_640X480_NTSCp_YUV16:
-	default:
+	default: {
 		vdacFlagRegion = 0;
 		break;
+	}
 	case VIDEO_640X480_PAL50_YUV16:
-	case VIDEO_640X480_PAL60_YUV16:
+	case VIDEO_640X480_PAL60_YUV16: {
 		vdacFlagRegion = 2;
 		break;
 	}
-	__VIWriteI2CRegister8(0x01, (u8)((uint)dtvstatus << 5) | (u8)((uint)vdacFlagRegion & 0x1f));
+	}
+	viWriteI2CRegister8(0x01, (u8)((uint)dtvStatus << 5) | (u8)((uint)vdacFlagRegion & 0x1f));
 }
 
-static void __VISetFilterEURGB60(u8 enable)
-{
-	__VIWriteI2CRegister8(0x6e, enable);
+static void viSetFilterEURGB60(u8 enable) {
+	viWriteI2CRegister8(0x6e, enable);
 }
 
-void VISetupEncoder(void)
-{
+static void viSetupEncoder(void) {
 	u8 macrobuf[0x1a];
-
 	u8 gamma[0x21] = {
 		0x10, 0x00, 0x10, 0x00, 0x10, 0x00, 0x10, 0x00,
 		0x10, 0x00, 0x10, 0x00, 0x10, 0x20, 0x40, 0x60,
@@ -264,7 +252,6 @@ void VISetupEncoder(void)
 		0x00, 0x60, 0x00, 0x80, 0x00, 0xa0, 0x00, 0xeb,
 		0x00
 	};
-
 	u8 dtv;
 
 	//tv = VIDEO_GetCurrentTvMode();
@@ -277,46 +264,46 @@ void VISetupEncoder(void)
 
 	memset(macrobuf, 0, 0x1a);
 
-	__VIWriteI2CRegister8(0x6a, 1);
-	__VIWriteI2CRegister8(0x65, 1);
-	__VISetYUVSEL(dtv);
-	__VIWriteI2CRegister8(0x00, 0);
-	__VIWriteI2CRegister16(0x71, 0x8e8e);
-	__VIWriteI2CRegister8(0x02, 7);
-	__VIWriteI2CRegister16(0x05, 0x0000);
-	__VIWriteI2CRegister16(0x08, 0x0000);
-	__VIWriteI2CRegister32(0x7A, 0x00000000);
+	viWriteI2CRegister8(0x6a, 1);
+	viWriteI2CRegister8(0x65, 1);
+	viSetYUVSEL(dtv);
+	viWriteI2CRegister8(0x00, 0);
+	viWriteI2CRegister16(0x71, 0x8e8e);
+	viWriteI2CRegister8(0x02, 7);
+	viWriteI2CRegister16(0x05, 0x0000);
+	viWriteI2CRegister16(0x08, 0x0000);
+	viWriteI2CRegister32(0x7A, 0x00000000);
 
 	// Macrovision crap
-	__VIWriteI2CRegisterBuf(0x40, sizeof(macrobuf), macrobuf);
+	viWriteI2CRegisterBuf(0x40, sizeof(macrobuf), macrobuf);
 
 	// Sometimes 1 in RGB mode? (reg 1 == 3)
-	__VIWriteI2CRegister8(0x0A, 0);
+	viWriteI2CRegister8(0x0A, 0);
 
-	__VIWriteI2CRegister8(0x03, 1);
+	viWriteI2CRegister8(0x03, 1);
 
-	__VIWriteI2CRegisterBuf(0x10, sizeof(gamma), gamma);
+	viWriteI2CRegisterBuf(0x10, sizeof(gamma), gamma);
 
-	__VIWriteI2CRegister8(0x04, 1);
-	__VIWriteI2CRegister32(0x7A, 0x00000000);
-	__VIWriteI2CRegister16(0x08, 0x0000);
-	__VIWriteI2CRegister8(0x03, 1);
+	viWriteI2CRegister8(0x04, 1);
+	viWriteI2CRegister32(0x7A, 0x00000000);
+	viWriteI2CRegister16(0x08, 0x0000);
+	viWriteI2CRegister8(0x03, 1);
 
-	//if(tv==VI_EURGB60) __VISetFilterEURGB60(1);
+	//if(tv==VI_EURGB60) viSetFilterEURGB60(1);
 	//else
-	__VISetFilterEURGB60(0);
+	viSetFilterEURGB60(0);
 
 	//oldTvStatus = tv;
 }
 
 typedef union {
-		struct __attribute__((__packed__)) {
-			u8 x, r, g, b;
-		} as_xrgb;
-		u32 as_u32;
+	struct PACKED {
+		u8 x, r, g, b;
+	} as_xrgb;
+	u32 as_u32;
 } rgb;
 
-static u32 make_yuv(rgb c1, rgb c2) {
+static u32 makeYUV(rgb c1, rgb c2) {
 	int y1, y2, cb, cr, r1, g1, b1, r2, g2, b2, r, g, b;
 
 	/* unpack them */
@@ -344,30 +331,29 @@ static u32 make_yuv(rgb c1, rgb c2) {
 	return ((u32)y1 << 24) | ((u32)cb << 16) | ((u32)y2 << 8) | (u32)cr;
 }
 
-static void clear_fb(rgb fill_rgb) {
+static void clearFb(rgb fillRGB) {
 	u32 *fb = (u32 *)xfb;
-	u32 fill_yuv = make_yuv(fill_rgb, fill_rgb);
+	u32 fillYUV = makeYUV(fillRGB, fillRGB);
 	uint i;
 
 	for (i = 0; i < (XFB_WIDTH * XFB_HEIGHT) / 2; i++)
-		fb[i] = fill_yuv;
+		fb[i] = fillYUV;
 
 	dcache_flush(xfb, XFB_HEIGHT * XFB_WIDTH * sizeof(u16));
 }
 
-static void clear_fb_rgb(rgb fill_rgb) {
+static void clearFbRGB(rgb fillRGB) {
 	u32 *fb = rgbFb;
 	uint i;
 
 	for (i = 0; i < XFB_WIDTH * XFB_HEIGHT; i++)
-		fb[i] = fill_rgb.as_u32;
+		fb[i] = fillRGB.as_u32;
 }
 
 static struct videoInfo viVidInfo;
 
 static void viScroll(uint rows) {
-	u8 *dest = (u8 *)xfb +
-	    XFB_OS_COMP_PIX * XFB_WIDTH * (uint)sizeof(u16);
+	u8 *dest = (u8 *)xfb + XFB_OS_COMP_PIX * XFB_WIDTH * (uint)sizeof(u16);
 	uint rowSize = XFB_WIDTH * (uint)sizeof(u16);
 	uint size = (viVidInfo.height - rows) * rowSize;
 
@@ -392,7 +378,7 @@ static void viFlush(uint x, uint y, uint width, uint height) {
 		for (col = 0; col < width; col += 2) {
 			rgb1 = (rgb)src[col];
 			rgb2 = (rgb)src[col + 1];
-			dest[col / 2] = make_yuv(rgb1, rgb2);
+			dest[col / 2] = makeYUV(rgb1, rgb2);
 		}
 	}
 
@@ -417,17 +403,17 @@ static void viDrvInit(void) {
 
 	/* XFB must be in MEM1, 32B aligned */
 	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * XFB_WIDTH * XFB_HEIGHT, 32);
-	clear_fb(black);
-	VIDEO_Init(0);
-	VIDEO_SetFrameBuffer(xfb);
+	clearFb(black);
+	viInit(0);
+	viSetXFB(xfb);
 	if (H_ConsoleType == CONSOLE_TYPE_WII)
-		VISetupEncoder();
+		viSetupEncoder();
 
 	/* rgbFB can go wherever */
 	rgbFb = malloc(sizeof(u32) * XFB_WIDTH * XFB_HEIGHT);
 	viVidInfo.fb = (u32 *)((uintptr_t)rgbFb + (XFB_WIDTH * XFB_OS_COMP_PIX * 4));
 
-	clear_fb_rgb(black);
+	clearFbRGB(black);
 	V_Register(&viVidInfo);
 
 	viDrv.state = DRIVER_STATE_READY;
