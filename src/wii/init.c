@@ -460,6 +460,9 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
 
+	/* we want I/O to be on the AHB, where we expect it */
+	HW_AIPPROT |= AIPPROT_ENAHBIOPI;
+
 	/* debug console */
 	H_TinyUGInit();
 

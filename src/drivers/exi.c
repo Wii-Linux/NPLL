@@ -728,7 +728,6 @@ static void exiInit(void) {
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
 		regs = (struct exi_regs *)HOLLYWOOD_EXI_BASE;
-		HW_AIPROT |= BIT(0);
 		break;
 	}
 	default:

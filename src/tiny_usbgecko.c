@@ -99,7 +99,6 @@ void H_TinyUGInit(void) {
 	case CONSOLE_TYPE_WII:
 	case CONSOLE_TYPE_WII_U: {
 		exi_regs = (vu32 *)HOLLYWOOD_EXI_BASE;
-		HW_AIPROT |= BIT(0);
 		break;
 	}
 	default:

@@ -194,7 +194,19 @@
 #  define SRNPROT_AHPEN          BIT(3)
 #define HW_AHBPROT           _HOLLYWOOD_REG(0x64)
 #  define AHBPROT_PPCKERN        BIT(31)
-#define HW_AIPROT            _HOLLYWOOD_REG(0x70)
+#define HW_AIPPROT           _HOLLYWOOD_REG(0x70)
+/*
+ * ENAHBIOPI=1 -> Legacy blocks (EXI, SI, DI) on AHB, Starlet can access them.
+ * ENAHBIOPI=0 -> Legacy blocks (EXI, SI, DI) in legacy Flipper address space,
+ * Starlet cannot access them, Broadway can.
+ *
+ * Must be 0 for Broadway to read EXI boot registers.
+ * MINI starts us with it cleared so that it can use the EXI boot registers,
+ * so we must set it in order to use such hardware immedaitely.  MINI will
+ * eventually set it back on its own, but it's best to be explicit and
+ * remove the timing dependency.
+ */
+#  define  AIPPROT_ENAHBIOPI     BIT(0)
 #define HW_COMPAT            _HOLLYWOOD_REG(0x180)
 #  define HW_COMPAT_DVDVIDEO     BIT(21)
 #define HW_RESETS            _HOLLYWOOD_REG(0x194)
