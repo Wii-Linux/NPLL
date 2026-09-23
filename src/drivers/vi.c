@@ -44,6 +44,62 @@ static REGISTER_DRIVER(viDrv);
 static u32 *rgbFb;
 static u16 *xfb;
 
+struct viRegs {
+	u16 vtr;
+	u16 dcr;
+	u32 htr0;
+	u32 htr1;
+	u32 vto;
+	u32 vte;
+	u32 bboi;
+	u32 bbei;
+	u32 tfbl;
+	u32 tfbr;
+	u32 bfbl;
+	u32 bfbr;
+	u16 dpv;
+	u16 dph;
+	u32 di[4];
+	u32 dl0;
+	u32 dl1;
+	u16 hsw;
+	u16 hsr;
+	u32 fct[7];
+	u32 unk_68;
+	u16 viclk;
+	u16 visel;
+	u16 unk_70;
+	u16 hbe;
+	u16 hbs;
+	u16 unk_76;
+	u32 unk_78;
+	u32 unk_7c;
+};
+static volatile struct viRegs *regs = (volatile struct viRegs *)FLIPPER_VI_BASE;
+
+#define VI_VTR_EQU_SHIFT		0
+#define VI_VTR_EQU			(15u << VI_VTR_EQU_SHIFT)
+#define VI_VTR_ACV_SHIFT		4
+#define VI_VTR_ACV			(0x3ffu << VI_VTR_ACV_SHIFT)
+
+#define VI_DCR_FMT_SHIFT		8
+#define VI_DCR_FMT_NTSC			(0u << VI_DCR_FMT_SHIFT)
+#define VI_DCR_FMT_PAL			(1u << VI_DCR_FMT_SHIFT)
+#define VI_DCR_FMT_MPAL			(2u << VI_DCR_FMT_SHIFT)
+#define VI_DCR_FMT_DEBUG		(3u << VI_DCR_FMT_SHIFT)
+#define VI_DCR_NIN			BIT(2)
+#define VI_DCR_RST			BIT(1)
+#define VI_DCR_ENB			BIT(0)
+
+#define VI_FB_POB			BIT(28)
+
+#define AVE_VID_OUT_CFG			0x01
+#define AVE_VID_OUT_CFG_YUV_EN  	BIT(5)
+#define AVE_VID_OUT_CFG_FMT_NTSC	0u
+#define AVE_VID_OUT_CFG_FMT_MPAL	1u
+#define AVE_VID_OUT_CFG_FMT_PAL		2u
+#define AVE_VID_OUT_CFG_FMT_DEBUG	3u
+
 #ifdef VI_DEBUG
 #define  VI_debug(f, arg...) log_printf(f, ##arg);
 #else
@@ -91,38 +147,38 @@ static const u16 VIDEO_Mode640X480NtscpYUV16[64] = {
   0x1313, 0x0F08, 0x0008, 0x0C0F, 0x00FF, 0x0000, 0x0001, 0x0001,
   0x0280, 0x807A, 0x019C, 0x00FF, 0x00FF, 0x00FF, 0x00FF, 0x00FF};
 
-static int videoMode;
+static enum viMode videoMode;
 
-static void viInit(int mode) {
+static void viInit(enum viMode mode) {
 	uint i;
 	const u16 *videoInitState = NULL;
 
 	VI_debug("Resetting VI...\n");
-	R_VIDEO_STATUS1 = 2;
+	regs->dcr = VI_DCR_RST;
 	udelay(2);
-	R_VIDEO_STATUS1 = 0;
+	regs->dcr = 0;
 	VI_debug("VI reset...\n");
 
 	switch(mode) {
-	case VIDEO_640X480_NTSCi_YUV16: {
+	case VI_MODE_640X480_NTSC_INT: {
 		videoInitState = VIDEO_Mode640X480NtsciYUV16;
 		break;
 	}
-	case VIDEO_640X480_PAL50_YUV16: {
+	case VI_MODE_640X480_PAL50: {
 		videoInitState = VIDEO_Mode640X480Pal50YUV16;
 		break;
 	}
-	case VIDEO_640X480_PAL60_YUV16: {
+	case VI_MODE_640X480_PAL60: {
 		videoInitState = VIDEO_Mode640X480Pal60YUV16;
 		break;
 	}
-	case VIDEO_640X480_NTSCp_YUV16: {
+	case VI_MODE_640X480_NTSC_PROG: {
 		videoInitState = VIDEO_Mode640X480NtscpYUV16;
 		break;
 	}
 	/* Use NTSC as default */
 	default: {
-		mode = VIDEO_640X480_NTSCi_YUV16;
+		mode = VI_MODE_640X480_NTSC_INT;
 		videoInitState = VIDEO_Mode640X480NtsciYUV16;
 		break;
 	}
@@ -138,7 +194,7 @@ static void viInit(int mode) {
 
 	videoMode = mode;
 
-	R_VIDEO_STATUS1 = videoInitState[1];
+	regs->dcr = videoInitState[1];
 #ifdef VI_DEBUG
 	VI_debug("VI dump:\n");
 	for (i = 0; i < 32; i++)
@@ -151,30 +207,30 @@ static void viInit(int mode) {
 static void viSetXFB(void *xfbAddr) {
 	u32 fb = (u32)(uintptr_t)virtToPhys(xfbAddr); /* physical addr */
 
-	R_VIDEO_FRAMEBUFFER_1 = (fb >> 5) | 0x10000000;
-	if (videoMode != VIDEO_640X480_NTSCp_YUV16)
+	regs->tfbl = (fb >> 5) | VI_FB_POB;
+	if (videoMode != VI_MODE_640X480_NTSC_PROG)
 		fb += 2 * 640; // 640 pixels == 1 line
-	R_VIDEO_FRAMEBUFFER_2 = (fb >> 5) | 0x10000000;
+	regs->bfbl = (fb >> 5) | VI_FB_POB;
 }
 
 #if 0
 static void viWaitVsync(void) {
-	while(R_VIDEO_HALFLINE_1 >= 200);
-	while(R_VIDEO_HALFLINE_1 <  200);
+	while(regs->dpv >= 200);
+	while(regs->dpb <  200);
 }
 
 /* black out video (not reversible!) */
 static void viBlackOut(void) {
 	viWaitVsync();
 
-	uint active = R_VIDEO_VTIMING >> 4;
+	uint active = (regs->vtr & VI_VTR_ACV) >> VI_VTR_ACV_SHIFT;
 
-	R_VIDEO_PRB_ODD = R_VIDEO_PRB_ODD + ((active << 1) - 2);
-	R_VIDEO_PRB_EVEN = R_VIDEO_PRB_EVEN + ((active << 1) - 2);
-	R_VIDEO_PSB_ODD = R_VIDEO_PSB_ODD + 2;
-	R_VIDEO_PSB_EVEN = R_VIDEO_PSB_EVEN + 2;
+	regs->vtr += ((active << 1) - 2);
+	regs->vtr += ((active << 1) - 2);
+	regs->vtr += 2;
+	regs->vtr += 2;
 
-	R_VIDEO_VTIMING &= ~0xfffffff0;
+	regs->vtr &= VI_VTR_EQU;
 }
 
 static void viShutdown(void) {
@@ -222,21 +278,21 @@ static void viWriteI2CRegisterBuf(u8 reg, uint size, u8 *data) {
 }
 
 static void viSetYUVSEL(u8 dtvStatus) {
-	int vdacFlagRegion;
+	u8 vdacFlagRegion;
 	switch (videoMode) {
-	case VIDEO_640X480_NTSCi_YUV16:
-	case VIDEO_640X480_NTSCp_YUV16:
+	case VI_MODE_640X480_NTSC_INT:
+	case VI_MODE_640X480_NTSC_PROG:
 	default: {
-		vdacFlagRegion = 0;
+		vdacFlagRegion = AVE_VID_OUT_CFG_FMT_NTSC;
 		break;
 	}
-	case VIDEO_640X480_PAL50_YUV16:
-	case VIDEO_640X480_PAL60_YUV16: {
-		vdacFlagRegion = 2;
+	case VI_MODE_640X480_PAL50:
+	case VI_MODE_640X480_PAL60: {
+		vdacFlagRegion = AVE_VID_OUT_CFG_FMT_PAL;
 		break;
 	}
 	}
-	viWriteI2CRegister8(0x01, (u8)((uint)dtvStatus << 5) | (u8)((uint)vdacFlagRegion & 0x1f));
+	viWriteI2CRegister8(AVE_VID_OUT_CFG, (dtvStatus ? AVE_VID_OUT_CFG_YUV_EN : 0) | vdacFlagRegion);
 }
 
 static void viSetFilterEURGB60(u8 enable) {
@@ -254,11 +310,7 @@ static void viSetupEncoder(void) {
 	};
 	u8 dtv;
 
-	//tv = VIDEO_GetCurrentTvMode();
-	dtv = R_VIDEO_VISEL & 1;
-	//oldDtvStatus = dtv;
-
-	// SetRevolutionModeSimple
+	dtv = regs->visel & 1;
 
 	VI_debug("DTV status: %d\n", dtv);
 
@@ -285,15 +337,16 @@ static void viSetupEncoder(void) {
 	viWriteI2CRegisterBuf(0x10, sizeof(gamma), gamma);
 
 	viWriteI2CRegister8(0x04, 1);
-	viWriteI2CRegister32(0x7A, 0x00000000);
 	viWriteI2CRegister16(0x08, 0x0000);
 	viWriteI2CRegister8(0x03, 1);
+
+	/* clear bit 1 otherwise red and blue get swapped */
+	if (dtv)
+		viWriteI2CRegister8(0x62, 0);
 
 	//if(tv==VI_EURGB60) viSetFilterEURGB60(1);
 	//else
 	viSetFilterEURGB60(0);
-
-	//oldTvStatus = tv;
 }
 
 typedef union {
