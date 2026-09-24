@@ -22,6 +22,7 @@
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
+#include <npll/drivers/exi.h>
 #include <npll/flipper/vi.h>
 #include <npll/i2c.h>
 #include <npll/irq.h>
@@ -1067,10 +1068,17 @@ static enum viMode viGuessEarlyMode(void) {
 
 	/*
 	 * VI is either not enabled, or using a config we can't match... but, if
-	 * we're on a GameCube, we can check the IPL.
+	 * we're on a GameCube, we can check the IPL, which we already read during
+	 * EXI init.
 	 */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		/* TODO: check IPL */
+		if (!memcmp(H_GCNIPLRev, "NTSC", 4))
+			return VI_MODE_640X480_NTSC_INT;
+		else if (!memcmp(H_GCNIPLRev, "PAL", 4))
+			return VI_MODE_640X576_PAL50_INT;
+		else if (!memcmp(H_GCNIPLRev, "TDEV", 4))
+			return VI_MODE_640X480_NTSC_INT;
+		/* TODO: handle MPAL */
 	}
 
 fallback:
