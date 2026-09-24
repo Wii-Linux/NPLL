@@ -808,7 +808,7 @@ void H_EXIUnregisterDriver(struct exi_device_driver *drv) {
 }
 
 static void exiInit(void) {
-	uint i;
+	uint i, len;
 	int ret;
 	u8 ALIGN(32) ipl[256];
 
@@ -845,8 +845,10 @@ static void exiInit(void) {
 		goto skipROM;
 
 	/* revision / region */
-	H_GCNIPLRev = malloc(strlen((char *)(ipl + 0x55)));
-	strcpy(H_GCNIPLRev, (char *)(ipl + 0x55));
+	len = (uint)strnlen((char *)(ipl + 0x55), sizeof(ipl) - 0x55);
+	H_GCNIPLRev = malloc(len + 1);
+	memcpy(H_GCNIPLRev, ipl + 0x55, len);
+	H_GCNIPLRev[len] = '\0';
 
 skipROM:
 	T_QueueRepeatingEvent(500 * 1000, exiHotplug, NULL);
