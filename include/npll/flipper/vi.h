@@ -18,4 +18,6 @@ enum viMode {
 	VI_MODE_MAX
 };
 
+extern const char *H_VIMode;
+
 #endif /* _FLIPPER_VI_H */

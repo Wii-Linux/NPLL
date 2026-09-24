@@ -12,6 +12,7 @@
 #include <npll/block.h>
 #include <npll/console.h>
 #include <npll/cpu.h>
+#include <npll/flipper/vi.h>
 #include <npll/fs.h>
 #include <npll/menu.h>
 #include <npll/soc.h>
@@ -213,11 +214,18 @@ static void sysinfoMenuInit(struct menu *m) {
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) /* TODO: Determine */
 		strcat(m->content, "Boot method: linux-loader\r\n");
 
-	/* step 5: report CPU PVR */
+	/* step 5: report video mode if GC/Wii */
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII) {
+		strcat(m->content, "Video mode: ");
+		strcat(m->content, H_VIMode ? H_VIMode : "(not yet set)");
+		strcat(m->content, "\r\n");
+	}
+
+	/* step 6: report CPU PVR */
 	sprintf(tmp, "CPU PVR: 0x%08x (%s)\r\n", mfspr(PVR), pvrToName(mfspr(PVR)));
 	strcat(m->content, tmp);
 
-	/* step 6: memory */
+	/* step 7: memory */
 	M_PoolStats(POOL_MEM1, &total, &used, &freeBytes, &largestAlloc, &largestFree);
 	sprintf(tmp, "MEM1: %uK total/%uK used/%uK free/%uK max alloc/%uK max free range\r\n", total / 1024, used / 1024, freeBytes / 1024, largestAlloc / 1024, largestFree / 1024);
 	strcat(m->content, tmp);
@@ -228,7 +236,7 @@ static void sysinfoMenuInit(struct menu *m) {
 	}
 
 
-	/* step 7: report attached storage */
+	/* step 8: report attached storage */
 	strcat(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
 	for (i = 0; i < B_NumDevices; i++) {
 		sprintf(tmp, "- %s: %llu bytes, %u partitions%s\r\n",

@@ -135,6 +135,7 @@ static volatile struct viRegs *regs = (volatile struct viRegs *)FLIPPER_VI_BASE;
 
 static enum viMode videoMode;
 static uint videoWidth, videoHeight;
+const char *H_VIMode;
 
 /*
  * Video mode timings.
@@ -1124,6 +1125,7 @@ static void viDrvInit(void) {
 	clearFbRGB(black);
 	viVidInfo.width = videoWidth,
 	viVidInfo.height = videoHeight - (XFB_OS_COMP_PIX * 2),
+	H_VIMode = viModeToStr(desired);
 	V_Register(&viVidInfo);
 
 	viDrv.state = DRIVER_STATE_READY;
