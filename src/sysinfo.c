@@ -87,7 +87,7 @@ static void sysinfoMenuInit(struct menu *m) {
 	strcat(m->content, "\r\n");
 
 
-	/* step 3: report SoC revision */
+	/* step 3: report hardware revisions */
 
 	/* step 3a: report Flipper revision if GameCube */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
@@ -187,6 +187,13 @@ static void sysinfoMenuInit(struct menu *m) {
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		sprintf(tmp, "SMC Chip Revision: 0x%02x\r\nSMC Firmware Revision: 0x%02x", H_WiiUSMCChipRev, H_WiiUSMCFWRev);
 		strcat(m->content, tmp);
+		strcat(m->content, "\r\n");
+	}
+
+	/* step 3e: report IPL revision if GameCube */
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+		strcat(m->content, "IPL revision: ");
+		strcat(m->content, H_GCNIPLRev ? H_GCNIPLRev : "(read failed)");
 		strcat(m->content, "\r\n");
 	}
 
