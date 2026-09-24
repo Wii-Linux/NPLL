@@ -84,6 +84,7 @@ static volatile struct viRegs *regs = (volatile struct viRegs *)FLIPPER_VI_BASE;
 #define VI_DCR_FMT_PAL			(1u << VI_DCR_FMT_SHIFT)
 #define VI_DCR_FMT_MPAL			(2u << VI_DCR_FMT_SHIFT)
 #define VI_DCR_FMT_DEBUG		(3u << VI_DCR_FMT_SHIFT)
+#define VI_DCR_FMT			(3u << VI_DCR_FMT_SHIFT)
 #define VI_DCR_NIN			BIT(2)
 #define VI_DCR_RST			BIT(1)
 #define VI_DCR_ENB			BIT(0)
@@ -294,6 +295,57 @@ struct viModeTimings {
 };
 
 static struct viModeTimings timings;
+
+struct viModeChoice {
+	/* has this mode choice been filled yet? */
+	bool valid;
+	/* was the mode successfully applied? */
+	bool succeeded;
+	/* desired mode */
+	enum viMode mode;
+};
+
+enum viModeChoiceIdx {
+	/*
+	 * Best guess from existing hardware state and data available at viDrvInit
+	 * time
+	 */
+	VI_MODE_CHOICE_EARLY,
+	/*
+	 * Desired mode derived from Wii SFFS
+	 */
+	VI_MODE_CHOICE_SYS,
+	/*
+	 * Desired mode from config
+	 */
+	VI_MODE_CHOICE_CONF,
+
+	VI_MODE_CHOICE_MAX
+};
+static struct viModeChoice modes[VI_MODE_CHOICE_MAX] = { 0 };
+
+static struct viModeChoice *viGetBestMode(void) {
+	int i;
+
+	for (i = VI_MODE_CHOICE_MAX - 1; i >= 0; i--) {
+		if (modes[i].valid)
+			return &modes[i];
+	}
+
+	return NULL;
+}
+
+static const char *viModeToStr(enum viMode mode) {
+	static const char *strs[VI_MODE_MAX] = {
+		"NTSC 480i",
+		"NTSC 480p",
+		"PAL50 576i",
+		"PAL60 480i",
+		"PAL60 480p"
+	};
+
+	return strs[mode];
+}
 
 static bool viModeIsProgressive(void) {
 	switch (videoMode) {
@@ -610,9 +662,20 @@ static int viNTSC525ProgCalcTimings(uint width, uint height) {
 	return 0;
 }
 
-static void viInit(enum viMode mode) {
+enum viInitResult {
+	/* The desired mode was applied */
+	VI_INIT_RESULT_SUCCESS,
+	/*
+	 * A fallback mode was applied as the desired mode could not be applied due
+	 * to some hardware conditions (e.g. _PROG mode on composite cables).
+	 */
+	VI_INIT_RESULT_FALLBACK
+};
+
+static enum viInitResult viInit(enum viMode mode) {
 	uint xres = 640, yres = 480, std, ppl, i;
 	bool hasComponentCable;
+	enum viInitResult ret = VI_INIT_RESULT_SUCCESS;
 	static const u16 dcrVals[VI_MODE_MAX] = {
 		/* NTSC 480i  */ VI_DCR_FMT_NTSC,
 		/* NTSC 480p  */ VI_DCR_FMT_NTSC | VI_DCR_NIN,
@@ -636,10 +699,12 @@ static void viInit(enum viMode mode) {
 		switch (mode) {
 		case VI_MODE_640X480_NTSC_PROG: {
 			mode = VI_MODE_640X480_NTSC_INT;
+			ret = VI_INIT_RESULT_FALLBACK;
 			break;
 		}
 		case VI_MODE_640X480_PAL60_PROG: {
 			mode = VI_MODE_640X480_PAL60_INT;
+			ret = VI_INIT_RESULT_FALLBACK;
 			break;
 		}
 		default:
@@ -716,6 +781,8 @@ static void viInit(enum viMode mode) {
 
 	videoWidth = xres;
 	videoHeight = yres;
+
+	return ret;
 }
 
 #define SLAVE_AVE 0x70
@@ -783,14 +850,13 @@ static int viAVEIn8(u8 reg, u8 *data) {
 /*
  * Try to detect current video format.
  */
-static void viAVEGetVideoFormat(void) {
-	int error;
-	u8 val = 0xff;
+static int viAVEGetVideoFormat(u8 *out) {
+	int error = viAVEIn8(AVE_VID_OUT_CFG, out);
+	if (error)
+		return error;
 
-	error = viAVEIn8(AVE_VID_OUT_CFG, &val);
-	val &= AVE_VID_OUT_CFG_FMT;
-	/* FIXME: best way to return this */
-	(void)error;
+	*out &= AVE_VID_OUT_CFG_FMT;
+	return error;
 }
 
 static int viAVESetup(bool usingComponent) {
@@ -960,20 +1026,87 @@ static struct videoInfo viVidInfo = {
 	.driver = &viDrv
 };
 
+static enum viMode viGuessEarlyMode(void) {
+	u8 aveFmt;
+	u32 dcrMode, viClk;
+	int error;
+
+	if (regs->dcr & VI_DCR_ENB) {
+		/* extract existing config */
+		dcrMode = regs->dcr & (VI_DCR_FMT | VI_DCR_NIN);
+		viClk = regs->viclk;
+		if (H_ConsoleType == CONSOLE_TYPE_WII) {
+			error = viAVEGetVideoFormat(&aveFmt);
+			if (error) {
+				log_printf("Can't get format from AVE for initial guess (%d)\r\n", error);
+				goto fallback;
+			}
+
+			if (dcrMode == VI_DCR_FMT_NTSC && aveFmt == AVE_VID_OUT_CFG_FMT_NTSC && viClk == VI_VICLK_27MHZ)
+				return VI_MODE_640X480_NTSC_INT;
+			else if (dcrMode == (VI_DCR_FMT_NTSC | VI_DCR_NIN) && aveFmt == AVE_VID_OUT_CFG_FMT_NTSC && viClk == VI_VICLK_54MHZ)
+				return VI_MODE_640X480_NTSC_PROG;
+			else if (dcrMode == VI_DCR_FMT_PAL && aveFmt == AVE_VID_OUT_CFG_FMT_PAL && viClk == VI_VICLK_27MHZ)
+				return VI_MODE_640X576_PAL50_INT;
+			else if (dcrMode == VI_DCR_FMT_NTSC && aveFmt == AVE_VID_OUT_CFG_FMT_PAL && viClk == VI_VICLK_27MHZ)
+				return VI_MODE_640X480_PAL60_INT;
+			else if (dcrMode == (VI_DCR_FMT_NTSC | VI_DCR_NIN) && aveFmt == AVE_VID_OUT_CFG_FMT_PAL && viClk == VI_VICLK_54MHZ)
+				return VI_MODE_640X480_PAL60_PROG;
+		}
+		else if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+			if (dcrMode == VI_DCR_FMT_NTSC && viClk == VI_VICLK_27MHZ)
+				return VI_MODE_640X480_NTSC_INT;
+			else if (dcrMode == (VI_DCR_FMT_NTSC | VI_DCR_NIN) && viClk == VI_VICLK_54MHZ)
+				return VI_MODE_640X480_NTSC_PROG;
+			else if (dcrMode == VI_DCR_FMT_PAL && viClk == VI_VICLK_27MHZ)
+				return VI_MODE_640X576_PAL50_INT;
+		}
+		else
+			assert_unreachable();
+	}
+
+	/*
+	 * VI is either not enabled, or using a config we can't match... but, if
+	 * we're on a GameCube, we can check the IPL.
+	 */
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+		/* TODO: check IPL */
+	}
+
+fallback:
+	/* We can't guess a valid mode, return fallback */
+	log_puts("Can't derive valid early mode from current state!");
+	log_puts("Assuming NTSC 480i is fine for now.");
+	return VI_MODE_640X480_NTSC_INT;
+}
+
 static void viDrvInit(void) {
+	int error;
+	enum viMode desired;
 	rgb black = {.as_u32 = 0xff000000};
-	//rgb gray = {.as_u32 = 0xffaaaaaa};
-	//rgb yellow = {.as_u32 = 0xffffff00};
+
+	desired = viGuessEarlyMode();
 
 	/* Establish the dimensions before sizing either framebuffer. */
-	viInit(VI_MODE_640X480_NTSC_INT);
+	if (viInit(desired) == VI_INIT_RESULT_SUCCESS)
+		modes[VI_MODE_CHOICE_EARLY].succeeded = true;
+	modes[VI_MODE_CHOICE_EARLY].mode = desired;
 
 	/* XFB must be in MEM1, 32B aligned */
 	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * videoWidth * videoHeight, 32);
 	clearFb(black);
 	viSetXFB(xfb);
-	if (H_ConsoleType == CONSOLE_TYPE_WII)
-		viAVESetup(!!(regs->visel & 1));
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		error = viAVESetup(!!(regs->visel & 1));
+		if (error) {
+			log_printf("AVE-RVL init failed: %d\r\n", error);
+			viDrv.state = DRIVER_STATE_FAULTED;
+			free(xfb);
+			return;
+		}
+	}
+	log_printf("Chose early mode: %s\r\n", viModeToStr(desired));
+	modes[VI_MODE_CHOICE_EARLY].valid = true;
 	regs->dcr |= VI_DCR_ENB;
 
 	/* rgbFB can go wherever */
