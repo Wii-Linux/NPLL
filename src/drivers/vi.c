@@ -442,7 +442,7 @@ static int viCalcVertTimings(u16 height, u16 maxActiveHeight, u16 P, u16 Q, u8 e
 	u8 interlace_bias;
 	u8 shift;
 
-	assert(height < maxActiveHeight);
+	assert(height <= maxActiveHeight);
 
 	extraBlanking = maxActiveHeight - height;	/* in frame lines */
 	margin = extraBlanking / 2;			/* centered margins */
