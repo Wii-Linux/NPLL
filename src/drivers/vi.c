@@ -1072,7 +1072,7 @@ static enum viMode viGuessEarlyMode(void) {
 	 * we're on a GameCube, we can check the IPL, which we already read during
 	 * EXI init.
 	 */
-	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
+	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE && H_GCNIPLRev) {
 		if (!memcmp(H_GCNIPLRev, "NTSC", 4))
 			return VI_MODE_640X480_NTSC_INT;
 		else if (!memcmp(H_GCNIPLRev, "PAL ", 4))
