@@ -61,17 +61,27 @@ extern void H_EXIClearExt(unsigned int channel);
 /*
  * Read a device's standard EXI ID.
  */
-extern unsigned int H_EXIReadID(unsigned int channel, unsigned int cs);
+extern unsigned int H_EXIReadID(uint channel, uint cs);
 
 /*
  * Immediate transaction to channel.
  * Both the read and write will be of the same size if using both.
  * Assumes desired device is already selected.
  */
-extern int H_EXIXferImm(unsigned int channel,
-			unsigned int len,
-			unsigned int mode,
-			const void *in, void *out);
+extern int H_EXIXferImm(uint channel, uint len,	uint mode, const void *in, void *out);
+
+/*
+ * DMA transaction to channel.
+ * Address and length must be 32B aligned.
+ * Assumes desired device is already selected.
+ */
+extern int H_EXIXferDMA(uint channel, void *dmaAddr, size_t len, uint mode);
+
+/*
+ * Read the IPL ROM.
+ * Address and length must be 32B aligned.
+ */
+extern int H_EXIReadROM(void *buf, uint len, uint offset);
 
 /*
  * Transfer modes

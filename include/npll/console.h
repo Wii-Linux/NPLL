@@ -62,6 +62,7 @@ struct platOps {
 
 extern enum consoleType H_ConsoleType;
 extern enum gcnRev H_GCNRev;
+extern char *H_GCNIPLRev;
 extern bool H_GCNIsDevkit;
 extern bool H_WiiIsDevkit; /* NDEV/RVT-H */
 extern u32 H_MEM1Size, H_MEM2Size; /* accessible RAM in bytes, before reservations */

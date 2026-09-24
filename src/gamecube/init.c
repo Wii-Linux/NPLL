@@ -15,6 +15,7 @@
 
 enum gcnRev H_GCNRev = 0;
 bool H_GCNIsDevkit = false;
+char *H_GCNIPLRev = NULL;
 
 static __attribute__((noreturn)) void gamecubeReboot(void) {
 	/* try a PI reset */

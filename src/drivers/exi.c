@@ -4,20 +4,30 @@
  * Copyright (C) 2025-2026 Techflash
  *
  * Derived in part from the Linux spi-exi driver:
- * Copyright (C) 2025 Techflash
+ * Copyright (C) 2025-2026 Techflash
+ *
+ * ROM reading derived from libogc2:
+ * Copyright (C) 2004 - 2026
+ * Michael Wiedenbauer (shagkur)
+ * Dave Murphy (WinterMute)
+ * Extrems' Corner.org
  */
 
 #define MODULE "EXI"
 
-#include <npll/types.h>
-#include <npll/log.h>
-#include <npll/soc.h>
+#include <assert.h>
+#include <errno.h>
+#include <string.h>
+#include <npll/allocator.h>
+#include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/drivers/exi.h>
 #include <npll/irq.h>
+#include <npll/log.h>
+#include <npll/soc.h>
 #include <npll/timer.h>
-#include <string.h>
+#include <npll/types.h>
 
 /* WARNING: if the USB Gecko driver is enabled this will cause recursion:
  * - usbgecko driver triggers EXI transactions
@@ -391,6 +401,86 @@ int H_EXIXferImm(uint channel, uint len, uint mode, const void *in, void *out) {
 	return 0;
 }
 
+int H_EXIXferDMA(uint channel, void *dmaAddr, size_t len, uint mode) {
+	u64 tb;
+	u32 cr;
+	int ret = 0;
+
+	assert(!((uintptr_t)dmaAddr & 31) && !(len & 31));
+	assert(mode != (EXI_MODE_WRITE | EXI_MODE_READ));
+
+	regs->channels[channel].data = 0xffffffff;
+	regs->channels[channel].mar = (u32)(uintptr_t)dmaAddr;
+	regs->channels[channel].length = (u32)len;
+	regs->channels[channel].csr |= EXI_CSR_TCINTMASK;
+
+	cr = EXI_CR_TSTART | EXI_CR_DMA;
+	if (mode == EXI_MODE_READ) {
+		cr |= EXI_CR_RW_RD;
+		dcache_invalidate(dmaAddr, len);
+	}
+	else {
+		cr |= EXI_CR_RW_WR;
+		dcache_flush(dmaAddr, len);
+	}
+
+	regs->channels[channel].cr = cr;
+	regs->channels[channel].csr &= ~EXI_CSR_TCINTMASK;
+
+	tb = mftb();
+	while (regs->channels[channel].cr & EXI_CR_TSTART) {
+		if (T_HasElapsed(tb, 1000 * 1000)) {
+			log_printf("Channel %d DMA transfer timed out\r\n", channel);
+			ret = -ETIMEDOUT;
+			break;
+		}
+	}
+
+	regs->channels[channel].csr |= EXI_CSR_TCINT;
+
+	return ret;
+}
+
+static int romXfer(void *buf, u32 len, u32 offset) {
+	int ret;
+	uint off;
+	bool irqs;
+
+	irqs = IRQ_DisableSave();
+	H_EXISelect(0, 1, 32);
+	off = offset << 6;
+	ret = H_EXIWriteImm(0, 4, &off);
+	if (ret)
+		goto out;
+
+	ret = H_EXIXferDMA(0, buf, len, EXI_MODE_READ);
+	if (ret)
+		goto out;
+
+out:
+	H_EXIDeselect(0);
+	IRQ_Restore(irqs);
+	return ret;
+}
+
+int H_EXIReadROM(void *buf, uint len, uint offset) {
+	int ret = 0;
+	u32 count;
+
+	while (len > 0) {
+		count = 1024 - (offset % 1024);
+		count = (len > count) ? count : len;
+		ret = romXfer(buf, count, offset);
+		if (ret)
+			return ret;
+		offset += count;
+		buf += count;
+		len -= count;
+	}
+
+	return ret;
+}
+
 uint H_EXIReadID(uint channel, uint cs) {
 	u16 cmd = 0x0000;
 	u32 id = 0;
@@ -719,6 +809,8 @@ void H_EXIUnregisterDriver(struct exi_device_driver *drv) {
 
 static void exiInit(void) {
 	uint i;
+	int ret;
+	u8 ALIGN(32) ipl[256];
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -747,6 +839,16 @@ static void exiInit(void) {
 	(void)exiProbe(0, 1);
 	for (i = 0; i < 3; i++)
 		exiRescanChannel(i);
+
+	ret = H_EXIReadROM(ipl, 256, 0);
+	if (ret)
+		goto skipROM;
+
+	/* revision / region */
+	H_GCNIPLRev = malloc(strlen((char *)(ipl + 0x55)));
+	strcpy(H_GCNIPLRev, (char *)(ipl + 0x55));
+
+skipROM:
 	T_QueueRepeatingEvent(500 * 1000, exiHotplug, NULL);
 }
 
