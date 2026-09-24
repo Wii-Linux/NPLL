@@ -569,7 +569,7 @@ static int viPAL625CalcTimings(uint width, uint height) {
 	timings.bs2 = (2 * (318-313 + 1)) - 1;
 
 	/* from mid of line 313, field 2 to end of line 621, field 2 */
-	timings.be2 = (u16)((2 * (612-617 + 1)) - 1);
+	timings.be2 = (u16)((2 * (621-313 + 1)) - 1);
 
 	/* from start of line 1, field 3 to end of line 5, field 3 */
 	timings.bs3 = 2 * (5-1 + 1);
@@ -717,7 +717,7 @@ static enum viInitResult viInit(enum viMode mode) {
 		viNTSC525ProgCalcTimings(xres, yres);
 	else {
 		if (mode == VI_MODE_640X576_PAL50_INT) {
-			yres = 576;
+			yres = 574;
 			viPAL625CalcTimings(xres, yres);
 		}
 		else
