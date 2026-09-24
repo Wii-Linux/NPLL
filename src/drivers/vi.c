@@ -1075,7 +1075,7 @@ static enum viMode viGuessEarlyMode(void) {
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		if (!memcmp(H_GCNIPLRev, "NTSC", 4))
 			return VI_MODE_640X480_NTSC_INT;
-		else if (!memcmp(H_GCNIPLRev, "PAL", 4))
+		else if (!memcmp(H_GCNIPLRev, "PAL ", 4))
 			return VI_MODE_640X576_PAL50_INT;
 		else if (!memcmp(H_GCNIPLRev, "TDEV", 4))
 			return VI_MODE_640X480_NTSC_INT;
