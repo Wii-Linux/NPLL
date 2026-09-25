@@ -29,6 +29,7 @@
 #include <npll/video.h>
 #include <string.h>
 #include <npll/utils.h>
+#include <npll/flipper/vi.h>
 #include "../armboot_bin.h"
 #include "ios_ipc.h"
 #include "ios_es.h"
@@ -334,7 +335,6 @@ void H_WiiReloadIOS(u32 iosVer) {
 		if (i >= 1000)
 			panic("IOS reload succeeded but stuck waiting for IPC");
 	}
-	udelay(5000 * 1000);
 
 	tb = mftb();
 	while (true) {
@@ -346,7 +346,6 @@ void H_WiiReloadIOS(u32 iosVer) {
 		if (T_HasElapsed(tb, 1000 * 1000))
 			panic("IOS reload succeeded and IPC is ready but IPC init failed");
 	}
-	udelay(500 * 1000);
 }
 
 static void __attribute__((noreturn)) wiiExit(void) {
@@ -365,6 +364,7 @@ static void __attribute__((noreturn)) wiiExit(void) {
 
 	/* IOS is reloaded and ready, hand off to the stub! */
 	log_puts("Handing off to stub...");
+	H_VIDisable();
 	stub = (void (*)(void))(MEM1_CACHED_BASE + 0x1800);
 	stub();
 	__builtin_unreachable();
