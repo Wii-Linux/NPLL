@@ -38,7 +38,7 @@
 #include <npll/types.h>
 #include <npll/soc.h>
 #include <npll/utils.h>
-#include <npll/wiimote.h>
+#include <npll/wii_configs.h>
 #include "../fs/sffs.h"
 
 static REGISTER_DRIVER(nandDrv);
@@ -397,12 +397,12 @@ static void nandInit(void) {
 
 		/*
 		 * B_Register has just probed and mounted the Wii SFFS partition.
-		 * Capture BT.DINF now, before a later block device replaces the
-		 * process-global filesystem mount.
+		 * Capture pairings and system video preferences before another device
+		 * replaces the process-global filesystem mount.
 		 * Also capture the networking config.dat at the same time.
 		 */
 		if (FS_Mounted == &FS_SFFS) {
-			WM_LoadPairingsFromSFFS();
+			WC_LoadFromSFFS();
 			L_LoadNetConfigDatFromSFFS();
 		}
 	}

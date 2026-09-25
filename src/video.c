@@ -24,6 +24,7 @@
 #include <npll/endian.h>
 #include <npll/fs.h>
 #include <npll/log.h>
+#include <npll/menu.h>
 #include <npll/output.h>
 #include <npll/panic.h>
 #include <npll/timer.h>
@@ -565,6 +566,40 @@ void V_Register(struct videoInfo *info) {
 		T_QueueRepeatingEvent(FRAME_MS_TARGET * 1000, flushWrapper, NULL);
 	}
 	O_AddDevice(&console->outDev);
+}
+
+void V_Update(struct videoInfo *info) {
+	uint i;
+	struct videoConsole *console, *saved = activeConsole;
+
+	for (i = 0; i < numConsoles; i++) {
+		console = &consoles[i];
+		if (console->info != info)
+			continue;
+
+		console->outDev.columns = info->width / FONT_WIDTH;
+		console->outDev.rows = info->height / FONT_HEIGHT;
+		activeConsole = console;
+		if (posX >= console->outDev.columns)
+			posX = console->outDev.columns - 1;
+		if (posY >= console->outDev.rows)
+			posY = console->outDev.rows - 1;
+		activeConsole = saved;
+		console->dirtyMinX = console->dirtyMinY = 0;
+		console->dirtyMaxX = info->width;
+		console->dirtyMaxY = info->height;
+		console->dirty = true;
+		snprintf(console->name, MAX_NAME, "%s %dx%d - Framebuffer console", info->driver->name, info->width, info->height);
+	}
+
+	if (V_ActiveDriver == info) {
+		V_FbPtr = info->fb;
+		V_FbWidth = info->width;
+		V_FbHeight = info->height;
+		V_FbStride = info->width * sizeof(u32);
+	}
+
+	UI_Invalidate();
 }
 
 bool V_LockFB(void) {

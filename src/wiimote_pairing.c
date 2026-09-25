@@ -12,22 +12,15 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <npll/fs.h>
+#include <npll/wii_configs.h>
 #include <npll/log.h>
 #include <npll/wiimote.h>
 
-#define SYSCONF_PATH "/shared2/sys/SYSCONF"
-#define SYSCONF_MAX_SIZE 0x4000u
-#define SYSCONF_BIG_ARRAY 1u
 #define BT_DINF_DEVICE_SIZE (6u + WIIMOTE_NAME_LENGTH)
 #define BT_DINF_MIN_SIZE (1u + (16u * BT_DINF_DEVICE_SIZE))
 
 static struct wiimotePairing pairings[WIIMOTE_MAX_PAIRINGS];
 static uint pairingCount;
-
-static u16 readBE16(const u8 *p) {
-	return (u16)(((u16)p[0] << 8) | p[1]);
-}
 
 static bool allZero(const u8 *p, size_t length) {
 	size_t i;
@@ -51,58 +44,20 @@ const struct wiimotePairing *WM_GetPairings(uint *count) {
 }
 
 int WM_ParsePairings(const void *data, size_t length) {
-	const u8 *sysconf = data, *entry, *payload, *device;
+	const u8 *payload, *device;
+	struct wcValue value;
+	size_t payloadLength;
 	u8 c;
-	size_t entryOffset, headerLength, nameLength, payloadLength;
-	u16 entryCount, offset;
 	uint wanted, i, j;
+	int ret;
 
 	WM_ClearPairings();
-	if (!sysconf || length < 6u || memcmp(sysconf, "SCv0", 4))
+	ret = WC_Find(data, length, "BT.DINF", &value);
+	if (ret) return ret;
+	if (value.type != WC_BIG_ARRAY || value.length < BT_DINF_MIN_SIZE)
 		return -EINVAL;
-
-	entryCount = readBE16(sysconf + 4);
-	if ((size_t)entryCount > (length - 6u) / 2u)
-		return -EINVAL;
-
-	entry = NULL;
-	for (i = 0; i < entryCount; i++) {
-		offset = readBE16(sysconf + 6u + (i * 2u));
-		entryOffset = offset;
-
-		if (entryOffset >= length)
-			return -EINVAL;
-
-		nameLength = (size_t)(sysconf[entryOffset] & 0x0fu) + 1u;
-		headerLength = 1u + nameLength;
-		if (headerLength > length - entryOffset)
-			return -EINVAL;
-
-		if (nameLength == sizeof("BT.DINF") - 1u && !memcmp(sysconf + entryOffset + 1u, "BT.DINF", nameLength)) {
-			entry = sysconf + entryOffset;
-			break;
-		}
-	}
-
-	if (!entry)
-		return -ENOENT;
-
-	if ((entry[0] >> 5) != SYSCONF_BIG_ARRAY)
-		return -EINVAL;
-
-	nameLength = (size_t)(entry[0] & 0x0fu) + 1u;
-	entryOffset = (size_t)(entry - sysconf);
-	headerLength = 1u + nameLength + 2u;
-
-	if (headerLength > length - entryOffset)
-		return -EINVAL;
-
-	/* SYSCONF array lengths store size minus one. */
-	payloadLength = (size_t)readBE16(entry + 1u + nameLength) + 1u;
-	if (payloadLength > length - entryOffset - headerLength || payloadLength < BT_DINF_MIN_SIZE)
-		return -EINVAL;
-
-	payload = entry + headerLength;
+	payload = value.data;
+	payloadLength = value.length;
 	wanted = payload[0];
 	if (wanted > WIIMOTE_MAX_PAIRINGS)
 		return -EINVAL;
@@ -131,35 +86,16 @@ int WM_ParsePairings(const void *data, size_t length) {
 
 int WM_LoadPairingsFromSFFS(void) {
 	void *buffer;
-	ssize_t size, got;
-	int fd, ret;
+	size_t size;
+	int ret;
 
 	WM_ClearPairings();
-	fd = FS_Open(SYSCONF_PATH);
-	if (fd < 0)
-		return fd;
+	ret = WC_ReadFile(WC_SYSCONF_PATH, WC_SYSCONF_MAX_SIZE, &buffer, &size);
+	if (!ret)
+		ret = WM_ParsePairings(buffer, size);
 
-	size = FS_GetSize(fd);
-	if (size <= 0 || size > (ssize_t)SYSCONF_MAX_SIZE) {
-		FS_Close(fd);
-		return -EINVAL;
-	}
-
-	buffer = malloc((size_t)size);
-	if (!buffer) {
-		FS_Close(fd);
-		return -ENOMEM;
-	}
-
-	got = FS_Read(fd, buffer, (size_t)size);
-	FS_Close(fd);
-
-	if (got != size)
-		ret = got < 0 ? (int)got : -EIO;
-	else
-		ret = WM_ParsePairings(buffer, (size_t)size);
-
-	free(buffer);
+	if (buffer)
+		free(buffer);
 
 	if (ret >= 0)
 		log_printf("cached %d Wii Remote pairing(s) from SFFS\r\n", ret);

@@ -18,6 +18,25 @@ enum viMode {
 	VI_MODE_MAX
 };
 
+enum viModeChoiceIdx {
+	/*
+	 * Best guess from existing hardware state and data available at viDrvInit
+	 * time
+	 */
+	VI_MODE_CHOICE_EARLY,
+	/*
+	 * Desired mode derived from Wii SFFS
+	 */
+	VI_MODE_CHOICE_SYS,
+	/*
+	 * Desired mode from config
+	 */
+	VI_MODE_CHOICE_CONF,
+
+	VI_MODE_CHOICE_MAX
+};
+int H_VISetModeTier(enum viModeChoiceIdx tier, enum viMode mode);
+
 extern const char *H_VIMode;
 
 void H_VIDisable(void);

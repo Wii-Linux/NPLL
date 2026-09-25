@@ -17,6 +17,7 @@
 #define MODULE "VI"
 
 #include <assert.h>
+#include <errno.h>
 #include <string.h>
 #include <npll/allocator.h>
 #include <npll/cache.h>
@@ -301,30 +302,14 @@ static struct viModeTimings timings;
 struct viModeChoice {
 	/* has this mode choice been filled yet? */
 	bool valid;
-	/* was the mode successfully applied? */
-	bool succeeded;
 	/* desired mode */
 	enum viMode mode;
 };
 
-enum viModeChoiceIdx {
-	/*
-	 * Best guess from existing hardware state and data available at viDrvInit
-	 * time
-	 */
-	VI_MODE_CHOICE_EARLY,
-	/*
-	 * Desired mode derived from Wii SFFS
-	 */
-	VI_MODE_CHOICE_SYS,
-	/*
-	 * Desired mode from config
-	 */
-	VI_MODE_CHOICE_CONF,
-
-	VI_MODE_CHOICE_MAX
-};
 static struct viModeChoice modes[VI_MODE_CHOICE_MAX] = { 0 };
+/* Failed requests are not retried */
+static bool failedModes[VI_MODE_MAX];
+static bool viInitialized;
 
 static struct viModeChoice *viGetBestMode(void) {
 	int i;
@@ -791,7 +776,7 @@ static enum viInitResult viInit(enum viMode mode) {
 
 static int viAVEOuts(u8 reg, void *data, size_t len) {
 	u8 buf[34];
-	int error, result;
+	int error = -EINVAL, result;
 
 	if (len > sizeof(buf)-1)
 		goto err_out;
@@ -1089,45 +1074,141 @@ fallback:
 	return VI_MODE_640X480_NTSC_INT;
 }
 
-static void viDrvInit(void) {
+/* After registration, caller holds the FB lock */
+static int viApplyMode(enum viMode desired) {
+	enum viMode oldMode = videoMode;
+	enum viInitResult result;
+	uint rows, height = desired == VI_MODE_640X576_PAL50_INT ? 574 : 480;
+	u16 *newXFB, *oldXFB = xfb;
+	u32 *newRGB, *oldRGB = rgbFb;
+	bool irqs, component, resize = !viInitialized || height != videoHeight;
 	int error;
-	enum viMode desired;
 	rgb black = {.as_u32 = 0xff000000};
 
-	desired = viGuessEarlyMode();
+	component = !!(regs->visel & 1);
 
-	/* Establish the dimensions before sizing either framebuffer. */
-	if (viInit(desired) == VI_INIT_RESULT_SUCCESS)
-		modes[VI_MODE_CHOICE_EARLY].succeeded = true;
-	modes[VI_MODE_CHOICE_EARLY].mode = desired;
+	newXFB = xfb;
+	newRGB = rgbFb;
+	if (resize) {
+		newXFB = M_PoolAllocAvoid(POOL_MEM1, sizeof(u16) * 640 * height, 32, NULL, 0);
+		if (!newXFB)
+			return -ENOMEM;
 
-	/* XFB must be in MEM1, 32B aligned */
-	xfb = M_PoolAlloc(POOL_MEM1, sizeof(u16) * videoWidth * videoHeight, 32);
-	clearFb(black);
-	viSetXFB(xfb);
-	if (H_ConsoleType == CONSOLE_TYPE_WII) {
-		error = viAVESetup(!!(regs->visel & 1));
-		if (error) {
-			log_printf("AVE-RVL init failed: %d\r\n", error);
-			viDrv.state = DRIVER_STATE_FAULTED;
-			free(xfb);
-			return;
+		newRGB = M_PoolAllocAvoid(POOL_ANY, sizeof(u32) * 640 * height, 32, NULL, 0);
+		if (!newRGB) {
+			free(newXFB);
+			return -ENOMEM;
 		}
 	}
-	log_printf("Chose early mode: %s\r\n", viModeToStr(desired));
-	modes[VI_MODE_CHOICE_EARLY].valid = true;
+
+	irqs = IRQ_DisableSave();
+	result = viInit(desired);
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		error = viAVESetup(component);
+		if (error) {
+			if (viInitialized) {
+				viInit(oldMode);
+				if (viAVESetup(component))
+					log_puts("AVE-RVL: failed to restore previous encoder mode");
+
+				viSetXFB(oldXFB);
+				regs->dcr |= VI_DCR_ENB;
+			}
+
+			IRQ_Restore(irqs);
+
+			if (resize) {
+				free(newXFB);
+				free(newRGB);
+			}
+
+			return error;
+		}
+	}
+
+	xfb = newXFB;
+	rgbFb = newRGB;
+	if (resize) {
+		clearFb(black);
+		clearFbRGB(black);
+
+		if (viInitialized) {
+			rows = viVidInfo.height;
+			if (rows > height - XFB_OS_COMP_PIX * 2)
+				rows = height - XFB_OS_COMP_PIX * 2;
+
+			memcpy(rgbFb + 640 * XFB_OS_COMP_PIX, viVidInfo.fb, rows * 640 * sizeof(u32));
+		}
+	}
+
+	viVidInfo.fb = rgbFb + videoWidth * XFB_OS_COMP_PIX;
+	viVidInfo.width = videoWidth;
+	viVidInfo.height = videoHeight - XFB_OS_COMP_PIX * 2;
+	viFlush(0, 0, viVidInfo.width, viVidInfo.height);
+	viSetXFB(xfb);
+	H_VIMode = viModeToStr(videoMode);
+
+	if (viInitialized)
+		V_Update(&viVidInfo);
+
 	regs->dcr |= VI_DCR_ENB;
 
-	/* rgbFB can go wherever */
-	rgbFb = malloc(sizeof(u32) * videoWidth * videoHeight);
-	viVidInfo.fb = (u32 *)((uintptr_t)rgbFb + (videoWidth * XFB_OS_COMP_PIX * 4));
+	IRQ_Restore(irqs);
+	if (resize) {
+		if (oldXFB)
+			free(oldXFB);
+		if (oldRGB)
+			free(oldRGB);
+	}
+	return result == VI_INIT_RESULT_SUCCESS ? 0 : -EOPNOTSUPP;
+}
 
-	clearFbRGB(black);
-	viVidInfo.width = videoWidth,
-	viVidInfo.height = videoHeight - (XFB_OS_COMP_PIX * 2),
-	H_VIMode = viModeToStr(desired);
+int H_VISetModeTier(enum viModeChoiceIdx tier, enum viMode mode) {
+	struct viModeChoice *best;
+	int ret;
+
+	if (tier >= VI_MODE_CHOICE_MAX || mode >= VI_MODE_MAX)
+		return -EINVAL;
+
+	modes[tier].valid = true;
+	modes[tier].mode = mode;
+	if (!viInitialized)
+		return 0;
+
+	best = viGetBestMode();
+	/* don't reapply the same mode */
+	if (best->mode == videoMode)
+		return 0;
+	/* don't retry already failed mode */
+	if (failedModes[best->mode])
+		return -EALREADY;
+	if (!V_LockFB())
+		return -EBUSY;
+
+	ret = viApplyMode(best->mode);
+	if (ret)
+		failedModes[best->mode] = true;
+
+	log_printf("Chose video mode for tier %d: %s (requested %s)\r\n", tier, H_VIMode, viModeToStr(mode));
+	V_UnlockFB();
+	return ret;
+}
+
+static void viDrvInit(void) {
+	enum viMode desired;
+	int ret;
+
+	H_VISetModeTier(VI_MODE_CHOICE_EARLY, viGuessEarlyMode());
+	desired = viGetBestMode()->mode;
+	ret = viApplyMode(desired);
+	if (ret) failedModes[desired] = true;
+	if (ret && ret != -EOPNOTSUPP) {
+		viDrv.state = DRIVER_STATE_FAULTED;
+		return;
+	}
+	viInitialized = true;
 	V_Register(&viVidInfo);
-
+	log_printf("Chose video mode: %s (requested %s)\r\n", H_VIMode, viModeToStr(desired));
 	viDrv.state = DRIVER_STATE_READY;
 }
 
@@ -1137,6 +1218,7 @@ void H_VIDisable(void) {
 }
 
 static void viDrvCleanup(void) {
+	viInitialized = false;
 	viFlush(0, 0, viVidInfo.width, viVidInfo.height);
 	free(rgbFb);
 	free(xfb);

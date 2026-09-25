@@ -22,6 +22,8 @@ struct videoInfo {
 
 extern void V_Flush(void);
 extern void V_Register(struct videoInfo *info);
+/* Refresh a registered framebuffer after resizing; caller holds FB lock */
+extern void V_Update(struct videoInfo *info);
 extern bool V_LockFB(void);
 extern void V_UnlockFB(void);
 extern int V_SaveScreenshot(void);
