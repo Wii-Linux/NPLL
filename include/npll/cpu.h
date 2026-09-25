@@ -13,6 +13,10 @@
 
 /* SPR Numbers */
 #define PVR    287
+#define SPRG0  272
+#define SPRG1  273
+#define SPRG2  274
+#define SPRG3  275
 
 #define IBAT0U 528
 #define IBAT0L 529
