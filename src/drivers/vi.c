@@ -1131,6 +1131,11 @@ static void viDrvInit(void) {
 	viDrv.state = DRIVER_STATE_READY;
 }
 
+void H_VIDisable(void) {
+	regs->dcr &= (u16)~VI_DCR_ENB;
+	sync();
+}
+
 static void viDrvCleanup(void) {
 	viFlush(0, 0, viVidInfo.width, viVidInfo.height);
 	free(rgbFb);

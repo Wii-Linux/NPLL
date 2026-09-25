@@ -20,4 +20,6 @@ enum viMode {
 
 extern const char *H_VIMode;
 
+void H_VIDisable(void);
+
 #endif /* _FLIPPER_VI_H */
