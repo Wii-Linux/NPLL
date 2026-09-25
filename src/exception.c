@@ -14,14 +14,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <npll/cache.h>
+#include <npll/cpu.h>
 #include <npll/irq.h>
 #include <npll/panic.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 
-extern char exception_2200_start, exception_2200_end;
-extern char exception_2200_handler_hi, exception_2200_handler_lo;
+extern char exception_entry_start, exception_entry_end;
+extern u32 exception_handler_hi, exception_handler_lo;
 
 static void dump_stack_trace(u32 *sp) {
 	u32 prev_sp, lr;
@@ -56,6 +57,7 @@ struct exceptionFrame {
 
 #define MAX_EXCEPTION_RECURSION 32
 
+static struct exceptionFrame exceptionFrame __attribute__((aligned(32)));
 static struct exceptionFrame exceptionFrames[MAX_EXCEPTION_RECURSION];
 static uint exceptionRecursionCount = 0;
 
@@ -64,7 +66,7 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 	struct exceptionFrame *frame;
 	int i;
 
-	frame = (struct exceptionFrame *)physToCached(0x2000);
+	frame = &exceptionFrame;
 
 	if (exception == 0x0500) {
 		IRQ_Handle();
@@ -100,25 +102,32 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 }
 
 void E_Init(void) {
-	u32 handler, len_2200, *insn, *stub;
+	u32 handler, *insn;
 	uintptr_t vector;
 	TRACE();
 
-	for (vector = 0x100; vector < 0x1800; vector += 0x10) {
+	/*
+	 * SPRG0/1 save the original r3/r4, SPRG2/3 hold the physical frame and
+	 * entry addresses, keep both free from lowmem loader addresses.
+	 */
+	handler = (u32)(uintptr_t)E_Handler;
+	exception_handler_hi = 0x3c000000 | (handler >> 16);
+	exception_handler_lo = 0x60000000 | (handler & 0xffff);
+	dcache_flush_icache_invalidate(&exception_entry_start, (uintptr_t)&exception_entry_end - (uintptr_t)&exception_entry_start);
+	mtspr(SPRG2, (u32)(uintptr_t)virtToPhys(&exceptionFrame));
+	mtspr(SPRG3, (u32)(uintptr_t)virtToPhys(&exception_entry_start));
+
+	for (vector = 0x100; vector < 0x1800; vector += 0x20) {
 		insn = physToCached(vector);
 
-		insn[0] = 0xbc002000;			// stmw 0,0x2000(0)
-		insn[1] = 0x38600000 | (u32)vector;	// li 3,vector
-		insn[2] = 0x48002202;			// ba 0x2200
-		insn[3] = 0;
+		insn[0] = 0x7c7043a6;			// mtspr SPRG0,r3
+		insn[1] = 0x7c9143a6;			// mtspr SPRG1,r4
+		insn[2] = 0x7c8902a6;			// mfctr r4
+		insn[3] = 0x7c7342a6;			// mfspr r3,SPRG3
+		insn[4] = 0x7c6903a6;			// mtctr r3
+		insn[5] = 0x38600000 | (u32)vector;	// li r3,vector
+		insn[6] = 0x4e800420;			// bctr
+		insn[7] = 0;
 	}
-	dcache_flush_icache_invalidate(physToCached(0x100), 0x1f00);
-
-	len_2200 = (u32)((uintptr_t)&exception_2200_end - (uintptr_t)&exception_2200_start);
-	stub = physToCached(0x2200);
-	memcpy(stub, &exception_2200_start, len_2200);
-	handler = (u32)(uintptr_t)E_Handler;
-	stub[((uintptr_t)&exception_2200_handler_hi - (uintptr_t)&exception_2200_start) / 4] |= handler >> 16;
-	stub[((uintptr_t)&exception_2200_handler_lo - (uintptr_t)&exception_2200_start) / 4] |= handler & 0xffff;
-	dcache_flush_icache_invalidate(physToCached(0x2200), len_2200);
+	dcache_flush_icache_invalidate(physToCached(0x100), 0x1700);
 }

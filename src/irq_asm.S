@@ -13,8 +13,8 @@
 
 IRQ_Return:
 	# Load offset of saved state into r1, which will get overwritten at the final step
-	lis	%r1, 0x8000
-	ori	%r1, %r1, 0x2000
+	mfspr	%r1, SPRG2
+	oris	%r1, %r1, 0x8000
 
 	# start loading stuff into r3 as scratch, which will also get overwritten at the final step
 	lwz	%r3, 0x80(%r1)
