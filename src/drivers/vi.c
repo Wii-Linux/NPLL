@@ -314,6 +314,7 @@ static bool viInitialized;
 static struct viModeChoice *viGetBestMode(void) {
 	int i;
 
+	/* Config overrides system settings, which override the early guess. */
 	for (i = VI_MODE_CHOICE_MAX - 1; i >= 0; i--) {
 		if (modes[i].valid)
 			return &modes[i];
@@ -1176,6 +1177,9 @@ int H_VISetModeTier(enum viModeChoiceIdx tier, enum viMode mode) {
 		return 0;
 
 	best = viGetBestMode();
+	/* Record lower-tier choices without disturbing the winning override. */
+	if (best != &modes[tier])
+		return 0;
 	/* don't reapply the same mode */
 	if (best->mode == videoMode)
 		return 0;

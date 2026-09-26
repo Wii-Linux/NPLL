@@ -24,6 +24,10 @@
   - `cfg_version` (REQUIRED): Describes the version of the config file that follows.  Must be the first line of the file.  Current version is 1.
   - `default` (optional): Entry ID to boot as the default entry.  Defaults to the first discovered entry.
   - `timeout` (optional): Timeout to count down for auto-boot.  0: boot instantly; -1: never auto-boot; >0: auto-boot in this many seconds.  Defaults to -1.
+  - `vi_mode` (optional): Force the GameCube/Wii VI mode, taking precedence over both the early hardware guess and Wii system settings, regardless of discovery order.  Ignored on Wii U (native mode).
+    - Values (case-sensitive): `ntsc-480i`, `ntsc-480p`, `pal50-576i`, `pal60-480i`, `pal60-480p`.
+    - If omitted, automatic early/system mode selection remains in effect.  Unknown values warn and are ignored; the last valid value in the file (including includes) wins.
+    - Progressive modes fall back to the corresponding interlaced mode when no component cable is detected.
 
 === Paths ===
 - A path consists of the format "medium[,partNum]:path"

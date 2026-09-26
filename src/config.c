@@ -17,6 +17,7 @@
 #include <npll/elf.h>
 #include <npll/dol.h>
 #include <npll/fs.h>
+#include <npll/flipper/vi.h>
 #include <npll/iostats.h>
 #include <npll/log.h>
 #include <npll/linux.h>
@@ -688,6 +689,8 @@ struct npllCtx {
 	int timeout;
 	bool hasTimeout;
 	char *defaultId;
+	enum viMode viMode;
+	bool hasVIMode;
 
 	struct npllEntry *cur;
 
@@ -801,6 +804,18 @@ static void handleEntryKey(struct npllCtx *ctx, char *key, char *val) {
 }
 
 static void handleGlobalKey(struct npllCtx *ctx, char *key, char *val) {
+	static const struct {
+		const char *name;
+		enum viMode mode;
+	} viModes[] = {
+		{ "ntsc-480i", VI_MODE_640X480_NTSC_INT },
+		{ "ntsc-480p", VI_MODE_640X480_NTSC_PROG },
+		{ "pal50-576i", VI_MODE_640X576_PAL50_INT },
+		{ "pal60-480i", VI_MODE_640X480_PAL60_INT },
+		{ "pal60-480p", VI_MODE_640X480_PAL60_PROG },
+	};
+	uint i;
+
 	/* cfg_version may legally appear in an included file; just ignored here. */
 	if (!strcmp(key, "cfg_version"))
 		return;
@@ -814,6 +829,18 @@ static void handleGlobalKey(struct npllCtx *ctx, char *key, char *val) {
 	if (!strcmp(key, "timeout")) {
 		ctx->timeout = (int)strtol(val, NULL, 10);
 		ctx->hasTimeout = true;
+		return;
+	}
+
+	if (!strcmp(key, "vi_mode")) {
+		for (i = 0; i < sizeof(viModes) / sizeof(viModes[0]); i++) {
+			if (!strcmp(val, viModes[i].name)) {
+				ctx->viMode = viModes[i].mode;
+				ctx->hasVIMode = true;
+				return;
+			}
+		}
+		log_printf("warn: unknown vi_mode '%s'; ignoring\r\n", val);
 		return;
 	}
 
@@ -1384,7 +1411,7 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	struct npllCtx ctx;
 	struct menuEntry *menuEntries = NULL;
 	char *buf;
-	int fd;
+	int fd, ret;
 	ssize_t got, size;
 	uint menuCap = 0, i;
 
@@ -1428,6 +1455,12 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	}
 
 	if (allowGlobals) {
+		if (ctx.hasVIMode && (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII)) {
+			ret = H_VISetModeTier(VI_MODE_CHOICE_CONF, ctx.viMode);
+			if (ret)
+				log_printf("Config video mode selection failed: %d\r\n", ret);
+		}
+
 		if (ctx.hasTimeout)
 			*timeoutOut = ctx.timeout;
 
