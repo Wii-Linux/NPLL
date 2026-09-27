@@ -41,17 +41,28 @@ struct menu UI_SysInfoMenu = {
 static const char *pvrToName(u32 pvr) {
 	switch (pvr) {
 	/*
-	 * Gekko DDx.x labels calculated from Swiss.
-	 * 83214 PVR assumed to exist in retail since gc-linux lists it.
-	 * Swiss's mapping suggests other revisions may exist but I've not
-	 * seen evidence of any others actually making their way into retail
-	 * boards (until checking gc-linux DD4.0 was the only one I'd ever
-	 *         seen, I assume DD2.4e was pretty-quickly replaced by 4.0).
+	 * DDx.x labels originally calculated from Swiss, later
+	 * from https://github.com/RedBeesRGD/spout/blob/main/include/console_info.h
+	 *
+	 * Only Gekko DD2.4e and 4.0 ever seen in retail consoles.
 	 */
+	case 0x00083203: return "Gekko DD2.3a/2.3ei";
+	case 0x00083213: return "Gekko DD2.3/2.3b/2.3e";
+	case 0x00083204: return "Gekko DD2.4";
 	case 0x00083214: return "Gekko DD2.4e";
 	case 0x00083410: return "Gekko DD4.0";
-	case 0x00087200: return "Broadway";
-	case 0x70010201: return "Espresso";
+	/* Only DD2.0 seen in retail */
+	case 0x00087100: return "Broadway DD1.0";
+	case 0x00087110: return "Broadway DD1.01";
+	case 0x00087102: return "Broadway DD1.2";
+	case 0x00087112: return "Broadway DD1.2i";
+	case 0x00087103: return "Broadway DD1.3";
+	case 0x00087113: return "Broadway DD1.3i";
+	case 0x00087200: return "Broadway DD2.0";
+	/* Only DD2.1 seen in retail */
+	case 0x70010100: return "Espresso DD1.0";
+	case 0x70010200: return "Espresso DD2.0";
+	case 0x70010201: return "Espresso DD2.1";
 	default: return "Unknown";
 	}
 }
