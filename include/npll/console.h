@@ -24,9 +24,15 @@ enum gcnRev {
 
 /*
  * https://wiki.wii-linux.org/wiki/Wii_Hardware/Hollywood/Revisions
+ * https://github.com/RedBeesRGD/spout/blob/main/include/console_info.h
  */
 enum wiiRev {
+	HW_VERSION_ES1_0 = 0x00,
+	HW_VERSION_ES1_1 = 0x01,
+	HW_VERSION_ES1_2 = 0x02,
+	HW_VERSION_ES_HOLLYWOOD = 0x10,
 	HW_VERSION_PROD_HOLLYWOOD = 0x11,
+	HW_VERSION_ES_BOLLYWOOD = 0x20,
 	HW_VERSION_PROD_BOLLYWOOD = 0x21
 };
 

@@ -49,7 +49,7 @@ void __attribute__((noreturn)) init(void) {
 	 */
 	hw_version = HW_VERSION;
 	switch (hw_version) {
-	/* see console.h for reason behind not more types */
+	/* TODO: more valid types known to exist, including one that's 0; should gather more info */
 	case HW_VERSION_PROD_HOLLYWOOD:
 	case HW_VERSION_PROD_BOLLYWOOD: {
 		H_GCNRev = 0;
