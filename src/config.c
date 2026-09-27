@@ -7,6 +7,7 @@
 #define MODULE "cfg"
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -307,7 +308,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 			if (*cur == '\r' || *cur == '\n')
 				continue;
 			else if (*cur != '/') {
-				log_printf("Garbage 'root' directive @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
+				log_printf("Garbage 'root' directive @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
 				if (entries)
@@ -321,7 +322,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 		else if (isInEntry && !memcmp(curLine, "\tkernel ", 8)) {
 			cur += 8;
 			if (*cur != '/') {
-				log_printf("Garbage 'kernel' directive @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
+				log_printf("Garbage 'kernel' directive @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
 				if (entries)
@@ -353,7 +354,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 			continue;
 		}
 		else {
-			log_printf("Garbage in config file @ line %d:%d (offset %d)\r\n", lineNum, (uintptr_t)cur - (uintptr_t)curLine, (uintptr_t)cur - (uintptr_t)file);
+			log_printf("Garbage in config file @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 			while (numEntries)
 				free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
 			if (entries)
@@ -1408,33 +1409,48 @@ static void npllSelectedCB(struct menuEntry *entry) {
  * returns -1. Absent file returns 0 without complaint.
  */
 static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, bool allowGlobals) {
+	static const char *paths[3] = { "npll.cfg", "boot/npll.cfg", NULL };
 	struct npllCtx ctx;
 	struct menuEntry *menuEntries = NULL;
-	char *buf;
+	char *buf = NULL;
+	const char *path;
 	int fd, ret;
-	ssize_t got, size;
+	ssize_t got, size = 0;
 	uint menuCap = 0, i;
+	bool success = false;
 
-	fd = FS_Open("npll.cfg");
-	if (fd < 0)
-		return 0;
+	i = 0;
+	while ((path = paths[i++])) {
+		fd = FS_Open(path);
+		if (fd == -ENOENT)
+			continue;
+		else if (fd < 0) {
+			log_printf("FS_Open on %s failed: %d\r\n", path, fd);
+			continue;
+		}
 
-	size = FS_GetSize(fd);
-	if (size <= 0) {
-		log_printf("FS_GetSize on npll.cfg failed: %d\r\n", size);
+		size = FS_GetSize(fd);
+		if (size <= 0) {
+			log_printf("FS_GetSize on %s failed: %d\r\n", path, size);
+			FS_Close(fd);
+			continue;
+		}
+
+		buf = malloc((size_t)size + 1);
+		got = FS_Read(fd, buf, (size_t)size);
 		FS_Close(fd);
-		return -1;
-	}
 
-	buf = malloc((size_t)size + 1);
-	got = FS_Read(fd, buf, (size_t)size);
-	FS_Close(fd);
+		if (got != size) {
+			log_printf("FS_Read on %s failed: %d\r\n", path, (int)got);
+			free(buf);
+			continue;
+		}
 
-	if (got != size) {
-		log_printf("FS_Read on npll.cfg failed: %d\r\n", (int)got);
-		free(buf);
-		return -1;
+		success = true;
+		break;
 	}
+	if (!success)
+		return 0;
 	buf[size] = '\0';
 
 	memset(&ctx, 0, sizeof(ctx));
@@ -1442,7 +1458,7 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	ctx.srcPart = FS_MountedPartition;
 	ctx.srcFs = FS_Mounted;
 
-	parseFile(&ctx, buf, ctx.srcPart, ctx.srcFs, "npll.cfg");
+	parseFile(&ctx, buf, ctx.srcPart, ctx.srcFs, path);
 	finalizeCurEntry(&ctx);
 	free(buf);
 
