@@ -19,6 +19,6 @@ extern void L_MoveToWiiUMEM2(void);
 extern void L_GetMemlogBounds(const char **start, const char **end);
 
 extern void _log_puts(const char *str);
-extern void _log_printf(const char *fmt, ...);
+extern void _log_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 #endif /* _LOG_INTERNAL_H */
