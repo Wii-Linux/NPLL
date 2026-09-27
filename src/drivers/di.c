@@ -345,7 +345,7 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 		if (T_HasElapsed(tb, timeoutUs)) {
 			log_puts("timed out waiting on cmd");
 			log_printf("cmd: %08x %08x %08x\r\n", cmdbuf0, cmdbuf1, cmdbuf2);
-			log_printf("DMA of %uB @ %08x\r\n", dataLen, data);
+			log_printf("DMA of %uB @ %08x\r\n", dataLen, (u32)(uintptr_t)data);
 			log_printf("CR=%08x\r\n", regs->cr);
 			return -ETIMEDOUT;
 		}

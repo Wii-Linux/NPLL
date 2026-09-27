@@ -146,7 +146,7 @@ static void armbootnow(void) {
 			if (sram[i] == trampoline_addr) {
 				trampoline_pointer = 0xFFFF0000u + (uint)(i * 4);
 				trampoline_off = i;
-				log_printf("found LaunchIOS trampoline pointer at 0x%08x/0x%08x\r\n", trampoline_pointer, &sram[i]);
+				log_printf("found LaunchIOS trampoline pointer at 0x%08x/0x%08x\r\n", trampoline_pointer, (u32)(uintptr_t)&sram[i]);
 				break;
 			}
 		}

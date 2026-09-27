@@ -531,7 +531,7 @@ void V_Register(struct videoInfo *info) {
 	assert_msg(info->fb, "Tried to register videoInfo with no framebuffer");
 	assert_msg(numConsoles < MAX_FRAMEBUFFERS, "Too many framebuffer drivers");
 
-	log_printf("Registering driver %s: %dx%d @ 0x%08x\r\n", info->driver->name, info->width, info->height, info->fb);
+	log_printf("Registering driver %s: %dx%d @ 0x%08x\r\n", info->driver->name, info->width, info->height, (u32)(uintptr_t)info->fb);
 	console = &consoles[numConsoles++];
 	memset(console, 0, sizeof(*console));
 	console->info = info;

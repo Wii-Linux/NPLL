@@ -193,7 +193,7 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, bool linuxDirect, void **dest, 
 
 	/* Check the complete in-memory segment, including its zero-filled tail. */
 	if (end < start || !phdr->p_memsz || !addrIsValidCached(addr) || !addrIsValidCached((void *)(end - 1))) {
-		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", addr, phdr->p_memsz);
+		log_printf("address 0x%08x w/ size %u is not valid on this platform\r\n", (u32)(uintptr_t)addr, phdr->p_memsz);
 		*bail = ELF_ERR_INVALID_EXEC;
 		return false;
 	}
@@ -228,7 +228,7 @@ int ELF_LoadMem(const void *data) {
 
 		/* copy it into memory */
 		memcpy(addr, (void *)((uintptr_t)data + off), size);
-		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, addr, size);
+		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr->p_offset, (u32)(uintptr_t)addr, size);
 
 		/* Executable data must be visible to an already-enabled I-cache. */
 		if (phdr->p_flags & PF_X)
@@ -382,7 +382,7 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 			ret = ELF_ERR_FS_ERROR;
 			goto fail;
 		}
-		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr.p_offset, addr, size);
+		log_printf("Loading segment %d from offset %u to addr %08x, size %u\r\n", i, phdr.p_offset, (u32)(uintptr_t)addr, size);
 		loadStarted = true;
 		res = FS_Read(fd, addr, size);
 		if (res != (ssize_t)size) {

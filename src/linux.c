@@ -525,7 +525,7 @@ int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline) {
 		if (reserved == -FDT_ERR_NOTFOUND)
 			goto out; /* meh, not fatal */
 
-		sprintf(netcfgName, "netcfg@%x", virtToPhys(netcfg));
+		sprintf(netcfgName, "netcfg@%x", (u32)(uintptr_t)virtToPhys(netcfg));
 		netcfgNode = fdt_add_subnode(fdt, reserved, netcfgName);
 		if (netcfgNode < 0) {
 			log_printf("fdt_add_subnode: %d\r\n", netcfgNode);

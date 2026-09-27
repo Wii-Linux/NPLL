@@ -528,9 +528,9 @@ void M_Init(void) {
 		break;
 	}
 	}
-	log_printf("Memory pool 0: \"%s\", 0x%08x down to 0x%08x\r\n", pools[0].name, pools[0].top, pools[0].bottom);
+	log_printf("Memory pool 0: \"%s\", 0x%08x down to 0x%08x\r\n", pools[0].name, (u32)(uintptr_t)pools[0].top, (u32)(uintptr_t)pools[0].bottom);
 	if (!memcmp(pools[1].magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE))
-		log_printf("Memory pool 1: \"%s\", 0x%08x down to 0x%08x\r\n", pools[1].name, pools[1].top, pools[1].bottom);
+		log_printf("Memory pool 1: \"%s\", 0x%08x down to 0x%08x\r\n", pools[1].name, (u32)(uintptr_t)pools[1].top, (u32)(uintptr_t)pools[1].bottom);
 
 	return;
 }

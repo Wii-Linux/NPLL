@@ -75,12 +75,12 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 		return -EINVAL;
 	}
 	if ((uintptr_t)in & 63 || !in) {
-		log_printf("H_SHA1Process: invalid source: %08x\r\n", in);
+		log_printf("H_SHA1Process: invalid source: %08x\r\n", (u32)(uintptr_t)in);
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}
 	if ((uintptr_t)out & 3 || !out) {
-		log_printf("H_SHA1Process: invalid dest: %08x\r\n", out);
+		log_printf("H_SHA1Process: invalid dest: %08x\r\n", (u32)(uintptr_t)out);
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}
@@ -100,7 +100,7 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 
 	dcache_flush(in, (u32)size);
 
-	regs->src = (uintptr_t)virtToPhys(in); barrier();
+	regs->src = (u32)(uintptr_t)virtToPhys(in); barrier();
 	regs->ctrl = ctrl;
 	tb = mftb();
 	while (regs->ctrl & SHA_CTRL_EXEC) {
