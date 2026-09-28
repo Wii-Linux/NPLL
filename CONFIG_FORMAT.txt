@@ -16,6 +16,7 @@
   - Spaces are only permitted as part of a value, in which case they are treated literally
   - 1 level of tab serves to inidicate that a key is treated as part of an entry
 - `@include` may appear at the beginning of any line, and works sort of like C, in the sense that the contents of the referenced path are "pasted in" at the current location, and the parser will parse all of them, starting from the state it was in immediately prior to the `@include`, and then continue with the rest of the original file, from the state it was in immediately prior to completing the included file
+  - Includes may target another filesystem, partition, or device. The parent filesystem is restored after each include.
   - Max depth of 8 files
   - No recursion permitted
 
@@ -42,8 +43,8 @@
     - `emmc` -> `sdhci2` (only on Wii U)
     - `sd` -> `sdhci0` (only on Wii/Wii U)
     - `nand` -> `nand0` (Wii) AND `nand` -> `nand1` (Wii U); `nand` always refers to the NAND bank that holds SFFS
-  - Special alias: `self` - partition number is not permitted - refers to the same device from which this config (which is currently being parsed and contains this alias) was loaded
-  - The only validation performed is that it maps to a currently-registered block device at entry load-time, the parser doesn't actually care at parse-time
+  - Special alias: `self` - partition number is not permitted - refers to the filesystem and partition of the file currently being parsed, including an included file
+  - Entry paths are resolved at entry load-time, include paths are resolved and mounted immediately during parsing
 - Example valid paths:
   - `sd,p1:bootmii/ppcboot.elf` - Refers to the path `bootmii/ppcboot.elf` on a filesystem on partition 1 of device `sd` (aka `sdhci0`)
   - `self:wiilinux/v4_19325.krn` - Refers to the path `wiilinux/v4_19325.krn` on the filesystem from which this config was loaded
@@ -96,6 +97,7 @@ Error handling:
   - Any required path is of an invalid format: warn and do not add entry
   - Include hits max depth: skip over include directive and continue; once walked back up the stack, try to parse (with the knowledge that it will likely fail)
   - Include recursion within depth: skip over the recursive include directive and continue; once walked back up the stack, try to parse (with the knowledge that it will likely fail)
+  - Include cannot be resolved, mounted, opened, or read: warn and skip; failure to restore the parent filesystem aborts loading the config
   - Path cannot be resolved upon attempted load (device not registered, filesystem can't be mounted, file does not exist, etc): warn including reason and allow user to select another (or this one again) entry
 
 Overall it was designed to be maximally expressive, easy to grasp (INI-inspired), and braindead-trivial to parse (though validation that an entry actually describes something *sane* might be tricky).

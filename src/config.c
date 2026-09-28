@@ -61,6 +61,11 @@ enum npllType {
 #define NPLL_INCLUDE_MAX_DEPTH 8
 #define NPLL_CFG_VERSION       "1"
 
+struct npllOrigin {
+	struct partition *part;
+	struct filesystem *fs;
+};
+
 struct npllEntry {
 	char *id;
 	char *name;
@@ -81,8 +86,9 @@ struct npllEntry {
 	bool platformMatch;
 
 	/* origin: needed for `self:` path resolution at load time */
-	struct partition *srcPart;
-	struct filesystem *srcFs;
+	struct npllOrigin execOrigin;
+	struct npllOrigin initrdOrigin;
+	struct npllOrigin dtbOrigin;
 };
 
 /*
@@ -700,7 +706,11 @@ struct npllCtx {
 	struct filesystem *srcFs;
 
 	int depth;
-	const char *includeStack[NPLL_INCLUDE_MAX_DEPTH];
+	struct {
+		struct partition *part;
+		struct filesystem *fs;
+		const char *path;
+	} includeStack[NPLL_INCLUDE_MAX_DEPTH + 1];
 };
 
 static void ensureNPLLCapacity(struct npllCtx *ctx, uint needed) {
@@ -786,15 +796,30 @@ static void handleEntryKey(struct npllCtx *ctx, char *key, char *val) {
 	if (r == 0) return;
 
 	r = matchPlatKey(key, "exec", true);
-	if (r == 1) { assignStr(&e->execPath, val); return; }
+	if (r == 1) {
+		assignStr(&e->execPath, val);
+		e->execOrigin.part = ctx->srcPart;
+		e->execOrigin.fs = ctx->srcFs;
+		return;
+	}
 	if (r == 0) return;
 
 	r = matchPlatKey(key, "initrd", true);
-	if (r == 1) { assignStr(&e->initrdPath, val); return; }
+	if (r == 1) {
+		assignStr(&e->initrdPath, val);
+		e->initrdOrigin.part = ctx->srcPart;
+		e->initrdOrigin.fs = ctx->srcFs;
+		return;
+	}
 	if (r == 0) return;
 
 	r = matchPlatKey(key, "dtb", true);
-	if (r == 1) { assignStr(&e->dtbPath, val); return; }
+	if (r == 1) {
+		assignStr(&e->dtbPath, val);
+		e->dtbOrigin.part = ctx->srcPart;
+		e->dtbOrigin.fs = ctx->srcFs;
+		return;
+	}
 	if (r == 0) return;
 
 	r = matchPlatKey(key, "cmdline", true);
@@ -995,41 +1020,17 @@ static int resolvePath(const char *spec, struct partition *originPart, struct fi
 	return 0;
 }
 
-/*
- * Resolve an `@include` target.  Only includes whose path lands on the
- * currently mounted fs/partition are supported; cross-mount includes return
- * NULL and the caller should warn+skip.
- */
-static const char *resolveSameDevIncludePath(const char *spec, struct partition *part, struct filesystem *fs) {
-	struct partition *rp;
-	struct filesystem *rfs;
-	const char *sub;
-
-	if (resolvePath(spec, part, fs, &rp, &rfs, &sub) != 0)
-		return NULL;
-
-	if (rp != FS_MountedPartition || rfs != FS_Mounted)
-		return NULL;
-
-	return sub;
-}
-
 static void doInclude(struct npllCtx *ctx, const char *spec) {
 	const char *path;
 	char *buf;
-	int fd, i;
+	int fd, i, ret;
 	ssize_t got, size;
+	struct partition *part, *savedPart = FS_MountedPartition;
+	struct filesystem *fs, *savedFs = FS_Mounted;
 
 	if (ctx->depth >= NPLL_INCLUDE_MAX_DEPTH) {
 		log_printf("warn: @include depth limit reached at '%s'; skipping\r\n", spec);
 		return;
-	}
-
-	for (i = 0; i < ctx->depth; i++) {
-		if (ctx->includeStack[i] && !strcmp(ctx->includeStack[i], spec)) {
-			log_printf("warn: recursive @include of '%s'; skipping\r\n", spec);
-			return;
-		}
 	}
 
 	if (!pathSyntaxOk(spec)) {
@@ -1037,23 +1038,38 @@ static void doInclude(struct npllCtx *ctx, const char *spec) {
 		return;
 	}
 
-	path = resolveSameDevIncludePath(spec, ctx->srcPart, ctx->srcFs);
-	if (!path) {
-		log_printf("warn: @include '%s' targets a different device; only same-device includes are currently supported, skipping\r\n", spec);
+	if (resolvePath(spec, ctx->srcPart, ctx->srcFs, &part, &fs, &path) != 0) {
+		log_printf("warn: @include '%s' could not be resolved; skipping\r\n", spec);
 		return;
+	}
+
+	for (i = 0; i <= ctx->depth; i++) {
+		if (ctx->includeStack[i].part == part && ctx->includeStack[i].fs == fs &&
+		    !strcmp(ctx->includeStack[i].path, path)) {
+			log_printf("warn: recursive @include of '%s'; skipping\r\n", spec);
+			return;
+		}
+	}
+
+	if (FS_MountedPartition != part || FS_Mounted != fs) {
+		ret = FS_Mount(fs, part);
+		if (ret != 0) {
+			log_printf("warn: @include '%s' could not be mounted (%d); skipping\r\n", spec, ret);
+			goto restore;
+		}
 	}
 
 	fd = FS_Open(path);
 	if (fd < 0) {
 		log_printf("warn: @include '%s' could not be opened (%d); skipping\r\n", spec, fd);
-		return;
+		goto restore;
 	}
 
 	size = FS_GetSize(fd);
 	if (size <= 0) {
 		log_printf("warn: @include '%s' has bad size %d; skipping\r\n", spec, size);
 		FS_Close(fd);
-		return;
+		goto restore;
 	}
 
 	buf = malloc((size_t)size + 1);
@@ -1063,16 +1079,28 @@ static void doInclude(struct npllCtx *ctx, const char *spec) {
 	if (got != size) {
 		log_printf("warn: @include '%s' short read (%d); skipping\r\n", spec, (int)got);
 		free(buf);
-		return;
+		goto restore;
 	}
 	buf[size] = '\0';
 
-	ctx->includeStack[ctx->depth++] = spec;
-	parseFile(ctx, buf, ctx->srcPart, ctx->srcFs, spec);
+	ctx->depth++;
+	parseFile(ctx, buf, part, fs, path);
 	ctx->depth--;
-	ctx->includeStack[ctx->depth] = NULL;
 
 	free(buf);
+
+restore:
+	if (FS_MountedPartition != savedPart || FS_Mounted != savedFs) {
+		if (savedFs) {
+			ret = FS_Mount(savedFs, savedPart);
+			if (ret != 0) {
+				log_printf("warn: restoring filesystem after @include '%s' failed (%d); aborting\r\n", spec, ret);
+				ctx->aborted = true;
+			}
+		}
+		else
+			FS_Unmount();
+	}
 }
 
 static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, struct filesystem *fs, const char *displayPath) {
@@ -1080,9 +1108,14 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 	uint lineNum = 0;
 	bool indented, firstMeaningful = (ctx->depth == 0) && !ctx->sawCfgVersion;
 	size_t llen;
+	struct partition *savedPart = ctx->srcPart;
+	struct filesystem *savedFs = ctx->srcFs;
 
-	(void)part;
-	(void)fs;
+	ctx->srcPart = part;
+	ctx->srcFs = fs;
+	ctx->includeStack[ctx->depth].part = part;
+	ctx->includeStack[ctx->depth].fs = fs;
+	ctx->includeStack[ctx->depth].path = displayPath;
 
 	while (*p && !ctx->aborted) {
 		line = p;
@@ -1116,12 +1149,12 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 			if (memcmp(line, "cfg_version=", 12) != 0) {
 				log_printf("%s: missing cfg_version on first line; aborting\r\n", displayPath);
 				ctx->aborted = true;
-				return;
+				break;
 			}
 			if (strcmp(line + 12, NPLL_CFG_VERSION) != 0) {
 				log_printf("%s: cfg_version '%s' unsupported (want %s); aborting\r\n", displayPath, line + 12, NPLL_CFG_VERSION);
 				ctx->aborted = true;
-				return;
+				break;
 			}
 			ctx->sawCfgVersion = true;
 			continue;
@@ -1147,8 +1180,6 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 
 			*rb = '\0';
 			ctx->cur->id = strdup(line + 1);
-			ctx->cur->srcPart = ctx->srcPart;
-			ctx->cur->srcFs = ctx->srcFs;
 			continue;
 		}
 
@@ -1170,14 +1201,16 @@ static void parseFile(struct npllCtx *ctx, char *buf, struct partition *part, st
 		else
 			handleGlobalKey(ctx, line, eq + 1);
 	}
+	ctx->srcPart = savedPart;
+	ctx->srcFs = savedFs;
 }
 
-static int npllEnsureFS(struct npllEntry *ne, char *pathspec, const char **pathOut) {
+static int npllEnsureFS(const struct npllOrigin *origin, char *pathspec, const char **pathOut) {
 	struct partition *part;
 	struct filesystem *fs;
 	int ret;
 
-	ret = resolvePath(pathspec, ne->srcPart, ne->srcFs, &part, &fs, pathOut);
+	ret = resolvePath(pathspec, origin->part, origin->fs, &part, &fs, pathOut);
 	if (ret != 0) {
 		log_printf("npllEsnureFS: resolvePath returned %d\r\n", ret);
 		return ret;
@@ -1244,7 +1277,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 	IOStats_MarkStart();
 
 	if (ne->dtbPath) {
-		if (npllEnsureFS(ne, ne->dtbPath, &path))
+		if (npllEnsureFS(&ne->dtbOrigin, ne->dtbPath, &path))
 			goto fail;
 
 		fd = FS_Open(path);
@@ -1288,7 +1321,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 			initrdPool = POOL_MEM2;
 		}
 
-		if (npllEnsureFS(ne, ne->initrdPath, &path))
+		if (npllEnsureFS(&ne->initrdOrigin, ne->initrdPath, &path))
 			goto fail;
 
 		fd = FS_Open(path);
@@ -1303,7 +1336,7 @@ static void npllBootLinux(struct npllEntry *ne) {
 			goto fail;
 	}
 
-	if (npllEnsureFS(ne, ne->execPath, &path))
+	if (npllEnsureFS(&ne->execOrigin, ne->execPath, &path))
 		goto fail;
 
 	fd = FS_Open(path);
@@ -1331,7 +1364,7 @@ static void npllBootELF(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
 
-	if (npllEnsureFS(ne, ne->execPath, &path))
+	if (npllEnsureFS(&ne->execOrigin, ne->execPath, &path))
 		return;
 
 	fd = FS_Open(path);
@@ -1349,7 +1382,7 @@ static void npllBootDOL(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
 
-	if (npllEnsureFS(ne, ne->execPath, &path))
+	if (npllEnsureFS(&ne->execOrigin, ne->execPath, &path))
 		return;
 
 	fd = FS_Open(path);
