@@ -32,7 +32,9 @@ static ext4_file openFiles[MAX_FILES];
 static u8 ALIGN(32) physicalBlockBuffer[MAX_PHYSICAL_BLOCK_SIZE];
 static struct ext4_blockdev_iface blockIface;
 static struct ext4_blockdev blockDev;
+#if 0
 static bool journalStarted;
+#endif
 
 #define VALIDATE_FD(ret) \
 	if (fd < 0 || fd >= MAX_FILES || !openFiles[fd].mp) { return ret; }
@@ -143,22 +145,26 @@ static int ext4Mount(struct filesystem *fs, struct partition *part) {
 	if (ret != EOK)
 		goto fail;
 
-	ret = ext4_mount(EXT4_DEVICE_NAME, !!(part->bdev->flags & BLOCK_FLAG_READ_ONLY));
+	ret = ext4_mount(EXT4_DEVICE_NAME, /* !!(part->bdev->flags & BLOCK_FLAG_READ_ONLY) */ true);
 	if (ret != EOK)
 		goto unregister;
 
+	#if 0
 	if (!(part->bdev->flags & BLOCK_FLAG_READ_ONLY)) {
 		ret = ext4_journal_start();
 		if (ret != EOK)
 			goto unmount;
 		journalStarted = true;
 	}
+	#endif
 
 	fs->drvData = &blockDev;
 	return 0;
 
+#if 0
 unmount:
 	ext4_umount();
+#endif
 unregister:
 	ext4_device_unregister(EXT4_DEVICE_NAME);
 fail:
@@ -171,12 +177,14 @@ fail:
 static void ext4Unmount(struct filesystem *fs) {
 	int ret;
 
+	#if 0
 	if (journalStarted) {
 		ret = ext4_journal_stop();
 		if (ret != EOK)
 			log_printf("ext4_journal_stop failed: %d\r\n", ret);
 		journalStarted = false;
 	}
+	#endif
 
 	ret = ext4_umount();
 	if (ret != EOK)
@@ -210,6 +218,7 @@ static int ext4Open(struct filesystem *fs, const char *path) {
 }
 
 static int ext4Create(struct filesystem *fs, const char *path) {
+	#if 0
 	int fd, ret;
 
 	(void)fs;
@@ -224,6 +233,15 @@ static int ext4Create(struct filesystem *fs, const char *path) {
 	}
 
 	return fd;
+	#endif
+
+	/*
+	 * FIXME: need to temporarily remount fs any time we need to write, as
+	 * keeping it mounted r/w permanently marks it as dirty
+	 */
+	(void)fs;
+	(void)path;
+	return -EROFS;
 }
 
 static void ext4Close(struct filesystem *fs, int fd) {
@@ -248,6 +266,7 @@ static ssize_t ext4Read(struct filesystem *fs, int fd, void *dest, size_t len) {
 }
 
 static ssize_t ext4Write(struct filesystem *fs, int fd, const void *src, size_t len) {
+	#if 0
 	size_t written;
 	int ret;
 
@@ -255,6 +274,16 @@ static ssize_t ext4Write(struct filesystem *fs, int fd, const void *src, size_t 
 	VALIDATE_FD(-EBADF);
 	ret = ext4_fwrite(&openFiles[fd], src, len, &written);
 	return ret == EOK ? (ssize_t)written : -ret;
+	#endif
+	/*
+	 * FIXME: need to temporarily remount fs any time we need to write, as
+	 * keeping it mounted r/w permanently marks it as dirty
+	 */
+	(void)fs;
+	(void)fd;
+	(void)src;
+	(void)len;
+	return -EROFS;
 }
 
 static ssize_t ext4Seek(struct filesystem *fs, int fd, ssize_t off) {
