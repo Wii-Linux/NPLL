@@ -131,6 +131,7 @@
 
 
 #define DVD_BLOCK_SIZE 2048
+#define DI_TIMEOUT_PRESENCE_US  (100 * 1000)
 #define DI_TIMEOUT_SHORT_US     (2 * 1000 * 1000)
 #define DI_TIMEOUT_STATUS_US    (5 * 1000 * 1000)
 #define DI_TIMEOUT_MEDIA_US     (30 * 1000 * 1000)
@@ -229,34 +230,22 @@ static const char *dateToRevWii(u32 date) {
 	}
 }
 
+static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataLen, uint timeoutUs);
 static int diReset(void) {
-	u64 tb;
+	uint attempts = 0;
+	int ret;
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
 		PI_RESET = (PI_RESET & ~PI_RESET_DI) | 1;
-		udelay(200 * 1000); /* seems to need much longer than the Wii's */
+		udelay(12);
 		PI_RESET = PI_RESET | PI_RESET_DI | 1;
-		udelay(100 * 1000);
 	}
 	else {
 		HW_GPIOB_DIR |= GPIO_DI_SPIN;
 		HW_GPIOB_OUT &= ~GPIO_DI_SPIN;
 		HW_RESETS &= ~RESETS_RSTB_DIRSTB;
-		udelay(1000);
+		udelay(12);
 		HW_RESETS |= RESETS_RSTB_DIRSTB;
-	}
-
-	/* wait until DI registers seem to actually work */
-	tb = mftb();
-	while (!(regs->sr & DI_SR_TCINTMASK)) {
-		barrier();
-		regs->sr = (regs->sr & ~(DI_SR_BRKINT | DI_SR_DEINT | DI_SR_TCINT)) | DI_SR_TCINTMASK;
-		barrier();
-
-		if (T_HasElapsed(tb, 1000 * 1000)) {
-			log_printf("DI seems hosed, still couldn't set TCINTMASK after 1s; SR=%08x\r\n", regs->sr);
-			return -ETIMEDOUT;
-		}
 	}
 
 	/* mask all ints */
@@ -271,10 +260,22 @@ static int diReset(void) {
 	regs->sr = (regs->sr & ~(DI_SR_BRKINT | DI_SR_DEINT | DI_SR_TCINT)) | DI_SR_BRKINTMASK | DI_SR_DEINTMASK | DI_SR_TCINTMASK;
 	regs->cvr = (regs->cvr & ~DI_CVR_CVRINT) | DI_CVR_CVRINTMASK;
 
-	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-		udelay(100 * 1000);
+	while (attempts < 5) {
+		attempts++;
+		regs->immbuf = 0;
+		barrier();
 
-	return 0;
+		ret = diDoCMDTimeout(DI_CMD_GET_STATUS, 0, 0, NULL, 0, DI_TIMEOUT_STATUS_US);
+		if (ret == 0) {
+			log_printf("reset status took %d attempts\r\n", attempts);
+			return 0;
+		}
+		else if (ret != -ETIMEDOUT)
+			return ret;
+	}
+
+	log_puts("Drive did not respond");
+	return -ENODEV;
 }
 
 static void diAckSR(u32 ints) {
@@ -1031,6 +1032,35 @@ static void diInit(void) {
 
 	diDrv.state = DRIVER_STATE_INITIALIZING;
 	diStopping = false;
+
+	/* GC drive dosen't respond to inquiry befor reset */
+	if (H_ConsoleType == CONSOLE_TYPE_WII) {
+		irqs = IRQ_DisableSave();
+		regs->sr = DI_SR_INTS;
+		regs->cvr = DI_CVR_CVRINT;
+		ret = diDoCMDTimeout(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp), DI_TIMEOUT_PRESENCE_US);
+		if (ret) {
+			/* drive is dead, keep it in reset */
+			if (H_ConsoleType == CONSOLE_TYPE_WII)
+				HW_RESETS &= ~RESETS_RSTB_DIRSTB;
+			else if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
+				PI_RESET = (PI_RESET & ~PI_RESET_DI) | 1;
+
+			diStopping = true;
+			diDrv.state = DRIVER_STATE_NO_HARDWARE;
+		}
+		else
+			diDrv.state = DRIVER_STATE_INITIALIZING_CLEANABLE;
+
+		IRQ_Restore(irqs);
+		if (ret) {
+			log_printf("Pre-reset inquiry failed (%d); treating drive as absent\r\n", ret);
+			return;
+		}
+	}
+	if (diStopping)
+		return;
+
 	/* From this point on, pre-exec cleanup must include us. */
 	diDrv.state = DRIVER_STATE_INITIALIZING_CLEANABLE;
 
@@ -1040,8 +1070,22 @@ static void diInit(void) {
 		return;
 
 	/* reset the drive */
-	if (diReset() || diStopping)
+	if (diReset()) {
+		diDrv.state = DRIVER_STATE_NO_HARDWARE;
 		return;
+	}
+	if (diStopping)
+		return;
+
+	/* get an inquiry */
+	diDoCMDTimeout(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp), DI_TIMEOUT_PRESENCE_US);
+	if (diStopping)
+		return;
+
+	log_printf("Drive date: (MM/DD/YYYY) %02x/%02x/%04x\r\n", (resp.date & 0x0000ff00) >> 8, resp.date & 0x000000ff, (resp.date & 0xffff0000) >> 16);
+	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
+		log_printf("Drive type: %s\r\n", dateToRevWii(resp.date));
+	driveDate = resp.date;
 
 	if (diWaitForStatus("init reset", &rawStatus)) {
 		if (diStopping)
@@ -1054,15 +1098,7 @@ static void diInit(void) {
 	diStatusToStr(rawStatus, status, 128);
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
-	/* get an inquiry */
-	diDoCMDTimeout(DI_CMD_INQUIRY, 0, sizeof(resp), &resp, sizeof(resp), DI_TIMEOUT_STATUS_US);
-	if (diStopping)
-		return;
 
-	log_printf("Drive date: (MM/DD/YYYY) %02x/%02x/%04x\r\n", (resp.date & 0x0000ff00) >> 8, resp.date & 0x000000ff, (resp.date & 0xffff0000) >> 16);
-	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE)
-		log_printf("Drive type: %s\r\n", dateToRevWii(resp.date));
-	driveDate = resp.date;
 	mediaValidated = false;
 	usingWiiDVDRRead = false;
 	patchedGCNMedia = false;
