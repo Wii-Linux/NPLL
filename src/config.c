@@ -1228,13 +1228,13 @@ static int npllEnsureFS(const struct npllOrigin *origin, char *pathspec, const c
 }
 
 /*
- * Modifier-driven pre-entry actions.  Only meaningful on Wii; the hook itself
- * is only registered when at least one Wii-only modifier is set.
+ * Pre-entry actions for Wii modifiers and generic executable VI handoff.
  */
 static u32 preEntryIOSVer;
 static bool preEntryMINISD;
+static bool preEntryDisableVI;
 
-static void preEntryWiiHook(void) {
+static void preEntryHook(void) {
 	enum MINI_Err err;
 
 	if (preEntryIOSVer)
@@ -1244,12 +1244,17 @@ static void preEntryWiiHook(void) {
 		if (err != MINI_OK)
 			log_printf("MINI SDHC Discover failed: %d\r\n", err); /* can't really recover */
 	}
+	/* Force libogc to initialize VI and restore its display interrupts. */
+	if (preEntryDisableVI)
+		H_VIDisable();
 }
 
 static void installPreEntryHook(struct npllEntry *ne) {
 	preEntryIOSVer = 0;
 	preEntryMINISD = false;
-	H_PreEntryHook = NULL;
+	preEntryDisableVI = (ne->type == NPLL_TYPE_GENERIC || ne->type == NPLL_TYPE_GENERIC_DOL) &&
+	                    (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII);
+	H_PreEntryHook = preEntryDisableVI ? preEntryHook : NULL;
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII)
 		return;
@@ -1260,7 +1265,7 @@ static void installPreEntryHook(struct npllEntry *ne) {
 		preEntryMINISD = true;
 
 	if (preEntryIOSVer || preEntryMINISD)
-		H_PreEntryHook = preEntryWiiHook;
+		H_PreEntryHook = preEntryHook;
 }
 
 static void npllBootLinux(struct npllEntry *ne) {
@@ -1405,6 +1410,7 @@ static void npllBootChannel(struct npllEntry *ne) {
 	log_printf("Booting channel %08x-%08x\r\n", ne->titleidHi, ne->titleidLo);
 
 	H_PrepareForExecEntry();
+	H_VIDisable();
 	H_WiiBootChannel(ne->titleidHi, ne->titleidLo);
 	/* does not return */
 }
