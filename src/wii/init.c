@@ -455,7 +455,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 	enum MINI_Err miniErr;
 	const char *stateStr, *prevStateStr;
 	u16 stateFlags;
-	uint waitMiniRetries = 5;
+	uint waitMiniRetries = 10;
 
 	/* set plat ops */
 	H_PlatOps = &wiiPlatOps;
@@ -548,7 +548,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 				/* loading MINI can be slow in some cases (e.g. Ironic emulator), give it a few retries */
 				waitMiniRetries--;
-				udelay(10 * 1000);
+				udelay(50 * 1000);
 				GOTO_STATE(STATE_ANALYZE);
 				break;
 			}
