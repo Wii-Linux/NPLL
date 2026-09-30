@@ -33,9 +33,19 @@
 #define EHCI_CMD_RESET       BIT(1)
 #define EHCI_CMD_PERIODIC    BIT(4)
 #define EHCI_CMD_ASYNC       BIT(5)
+#define EHCI_CMD_ITC_MASK    (0xffu << 16)
+#define EHCI_CMD_ITC_1       (1u << 16)
 #define EHCI_STS_HALTED      BIT(12)
 #define EHCI_STS_PERIODIC    BIT(14)
 #define EHCI_STS_ASYNC       BIT(15)
+#define EHCI_INTR_USBINTEN   BIT(0)
+#define EHCI_INTR_USBERINTEN BIT(1)
+#define EHCI_INTR_PCHNGINTEN BIT(2)
+#define HLWD_EHCI_CTL_OFF     0xccu
+#define HLWD_EHCI_CTL_INTE    BIT(15)
+#define HLWD_EHCI_CTL_OH0INTE BIT(11)
+#define HLWD_EHCI_CTL_OH1INTE BIT(12)
+#define HLWD_EHCI_CTL_UNKNOWN 0x000e0000u
 #define EHCI_PORT_CONNECT    BIT(0)
 #define EHCI_PORT_CSC        BIT(1)
 #define EHCI_PORT_ENABLE     BIT(2)
@@ -78,9 +88,12 @@
 
 #define OHCI_CONTROL         0x04u
 #define OHCI_COMMAND_STATUS  0x08u
+#define OHCI_INTR_STATUS     0x0cu
+#define OHCI_INTR_ENABLE     0x10u
 #define OHCI_INTR_DISABLE    0x14u
 #define OHCI_HCCA            0x18u
 #define OHCI_CONTROL_HEAD    0x20u
+#define OHCI_CONTROL_CURRENT 0x24u
 #define OHCI_BULK_HEAD       0x28u
 #define OHCI_FM_INTERVAL     0x34u
 #define OHCI_PERIODIC_START  0x40u
@@ -94,6 +107,11 @@
 #define OHCI_CMD_RESET       BIT(0)
 #define OHCI_CMD_CONTROL_FILLED BIT(1)
 #define OHCI_CMD_BULK_FILLED BIT(2)
+#define OHCI_INTR_STATUS_WDH BIT(1)
+#define OHCI_INTR_STATUS_UE  BIT(4)
+#define OHCI_INTR_ENABLE_WDH BIT(1)
+#define OHCI_INTR_ENABLE_UE  BIT(4)
+#define OHCI_INTR_ENABLE_MIE BIT(31)
 #define OHCI_PORT_CONNECT    BIT(0)
 #define OHCI_PORT_ENABLE     BIT(1)
 #define OHCI_PORT_RESET      BIT(4)
@@ -101,6 +119,7 @@
 #define OHCI_PORT_CHANGE     (BIT(16) | BIT(17) | BIT(18) | BIT(19) | BIT(20))
 
 #define OHCI_ED_DIR_TD       (0u << 11)
+#define OHCI_ED_OUT          BIT(11)
 #define OHCI_ED_LOW_SPEED    BIT(13)
 #define OHCI_ED_SKIP         BIT(14)
 #define OHCI_ED_HEAD_HALTED  BIT(0)
