@@ -38,6 +38,7 @@
 enum wiiRev H_WiiRev = 0;
 bool H_WiiIsvWii = false;
 bool H_WiiIsDevkit = false;
+bool H_WiiIsIronic = false;
 int H_WiiBootIOS = -1;
 u64 H_WiiBootTitleID = 0;
 void *H_WiiMEM2Top = NULL;
@@ -603,12 +604,6 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			/* set up SRAM access */
 			HW_SRNPROT |= SRNPROT_AHPEN;
 
-			/* we can only access this after we've gained some perms in AHBPROT */
-			if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000) {
-				H_WiiIsvWii = true;
-				log_puts("Detected Wii U vWii");
-			}
-
 			/* set up basic GPIOs for panic indicator */
 			HW_GPIO_OWNER |= GPIO_SLOT_LED;
 			HW_GPIO_ENABLE |= GPIO_SLOT_LED;
@@ -763,6 +758,27 @@ out:
 	if (!testMEM2())
 		panic("MEM2 not fully accessible at end of H_InitWii");
 
+
+	/* now check for Wii variants */
+	if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000) {
+		H_WiiIsvWii = true;
+		log_puts("Detected Wii U vWii");
+	}
+	if (LT_CHIPREVID == 0x8badf00d) {
+		H_WiiIsIronic = true;
+		log_puts("Detected Ironic emulator");
+	}
+	/*
+	 * The stock boot chain under Ironic seems to leave MEM_RANKSET=1, which
+	 * normally indicates 128MiB MEM2 on real hardware, but here it does not
+	 * in fact mean this, and trying to use upper addresses will fail.
+	 */
+	else if (HW_MEM_RANKSEL == 1) {
+		H_WiiIsDevkit = true;
+		log_puts("Detected Nintendo Wii NDEV/RVT-H (128 MiB MEM2)");
+	}
+
+
 	/* memory controller registers are accessible now */
 	if (H_WiiIsvWii) {
 		/* enable 256MiB MEM2 */
@@ -770,11 +786,8 @@ out:
 		sync();
 		H_MEM2Size = MEM2_SIZE_VWII;
 	}
-	else if (HW_MEM_RANKSEL == 1) {
-		H_WiiIsDevkit = true;
+	else if (H_WiiIsDevkit && !H_WiiIsIronic)
 		H_MEM2Size = MEM2_SIZE_NDEV;
-		log_puts("Detected Nintendo Wii NDEV/RVT-H (128 MiB MEM2)");
-	}
 
 	MINI_BOOT_MAGIC_PTR = 0;
 

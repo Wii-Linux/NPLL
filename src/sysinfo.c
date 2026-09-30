@@ -90,6 +90,8 @@ static void sysinfoMenuInit(struct menu *m) {
 			strcat(m->content, "Console Type: Nintendo Wii U (vWii)");
 		else if (H_WiiIsDevkit)
 			strcat(m->content, "Console Type: Nintendo Wii (NDEV/RVT-H)");
+		else if (H_WiiIsIronic)
+			strcat(m->content, "Console Type: Ironic emulator (Wii)");
 		else
 			strcat(m->content, "Console Type: Nintendo Wii");
 	}
