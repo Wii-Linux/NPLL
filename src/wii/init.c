@@ -36,7 +36,7 @@
 #include "mini_ipc.h"
 
 enum wiiRev H_WiiRev = 0;
-int H_WiiIsvWii = 0;
+bool H_WiiIsvWii = false;
 bool H_WiiIsDevkit = false;
 int H_WiiBootIOS = -1;
 u64 H_WiiBootTitleID = 0;
@@ -605,7 +605,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			/* we can only access this after we've gained some perms in AHBPROT */
 			if ((LT_CHIPREVID & 0xffff0000) == 0xcafe0000) {
-				H_WiiIsvWii = 1;
+				H_WiiIsvWii = true;
 				log_puts("Detected Wii U vWii");
 			}
 
