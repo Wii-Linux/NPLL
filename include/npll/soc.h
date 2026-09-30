@@ -246,6 +246,10 @@
 
 #  define LT_IRQDEV_SDHCI2       BIT(0)
 #  define LT_IRQDEV_SDHCI3       BIT(1)
+#  define LT_IRQDEV_EHCI1        BIT(2)
+#  define LT_IRQDEV_OHCI2        BIT(3)
+#  define LT_IRQDEV_EHCI2        BIT(4)
+#  define LT_IRQDEV_OHCI3        BIT(5)
 
 #define LT_EFUSEPROT   _LATTE_REG(0x110)
 #define LT_CHIPREVID   _LATTE_REG(0x1a0)
