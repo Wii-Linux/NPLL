@@ -148,6 +148,8 @@ extern void USB_Init(void);
 extern void USB_Start(void);
 extern void USB_Shutdown(void);
 extern void USB_Poll(void);
+extern void USB_LockTopology(void);
+extern void USB_UnlockTopology(void);
 extern int USB_RegisterHostController(struct usbHostController *hc);
 extern void USB_UnregisterHostController(struct usbHostController *hc);
 extern int USB_RegisterDriver(struct usbDriver *driver);

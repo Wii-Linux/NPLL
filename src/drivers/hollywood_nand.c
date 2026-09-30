@@ -35,6 +35,7 @@
 #include <npll/log.h>
 #include <npll/scfm.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 #include <npll/soc.h>
 #include <npll/utils.h>
@@ -223,7 +224,21 @@ static void nandCalculateBufs(void **ecc, void **data, size_t len, void *buf) {
 		assert_unreachable();
 }
 
+static volatile bool nandCompleted;
+static u32 nandCompletionStatus;
+static void nandIRQ(enum irqDev dev) {
+	(void)dev;
+	if (regs->ctrl & NAND_CTRL_EXEC)
+		return;
+
+	nandCompletionStatus = regs->ctrl;
+	nandCompleted = true;
+	regs->ctrl = ~NAND_CTRL_EXEC;
+}
+
 static int nandSendCommand(u32 command, u32 addrMask, u32 flags, u32 len) {
+	bool enabled;
+
 	if (regs->ctrl & NAND_CTRL_EXEC) {
 		log_puts("command in progress while attempting to send command");
 		log_printf("NAND_CTRL=0x%08x\r\n", regs->ctrl);
@@ -235,7 +250,11 @@ static int nandSendCommand(u32 command, u32 addrMask, u32 flags, u32 len) {
 
 	regs->ctrl = 0;
 
-	regs->ctrl = NAND_CTRL_EXEC | (addrMask << 24) | (command << 16) | flags | len;
+	enabled = IRQ_DisableSave();
+	nandCompleted = false;
+	regs->ctrl = NAND_CTRL_EXEC | NAND_CTRL_IRQ | (addrMask << 24) | (command << 16) | flags | len;
+	IRQ_Restore(enabled);
+
 	return 0;
 }
 
@@ -247,23 +266,36 @@ static void nandSetupDMA(void *data, void *ecc) {
 }
 
 static int nandWait(void) {
-	u32 ctrl;
+	u32 ctrl, elapsed;
 	u64 tb = mftb();
+	bool enabled;
 
 	while (true) {
-		ctrl = regs->ctrl;
+		enabled = IRQ_DisableSave();
+		ctrl = nandCompleted ? nandCompletionStatus : regs->ctrl;
 
 		if (ctrl & NAND_CTRL_ERROR) {
 			log_printf("NAND error, ctrl=0x%08x\r\n", ctrl);
+			IRQ_Restore(enabled);
 			return -EIO;
 		}
-		if (!(ctrl & NAND_CTRL_EXEC))
+		if (!(ctrl & NAND_CTRL_EXEC)) {
+			IRQ_Restore(enabled);
 			return 0;
+		}
 
 		if (T_HasElapsed(tb, 500 * 1000)) {
 			log_printf("NAND timeout, ctrl=0x%08x\r\n", ctrl);
+			IRQ_Restore(enabled);
 			return -EIO;
 		}
+		if (enabled && IRQ_CanWait(IRQDEV_NAND)) {
+			elapsed = T_ElapsedUsecs(tb);
+			if (elapsed < 500 * 1000)
+				IRQ_WaitLocked(IRQDEV_NAND, 500 * 1000 - elapsed);
+		}
+		IRQ_Restore(enabled);
+
 	}
 }
 
@@ -344,6 +376,9 @@ static int nandResetWiiU(void) {
 		if (ret)
 			return ret;
 
+		ret = nandWait();
+		if (ret)
+			return ret;
 		regs->ctrl = 0;
 	}
 
@@ -370,6 +405,8 @@ static int nandResetWii(void) {
 static void nandInit(void) {
 	int ret;
 
+	IRQ_RegisterHandler(IRQDEV_NAND, nandIRQ);
+	IRQ_Unmask(IRQDEV_NAND);
 	log_printf("NAND_CONFIG=%08x\r\n", regs->config);
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
@@ -410,10 +447,12 @@ static void nandInit(void) {
 	nandDrv.state = DRIVER_STATE_READY;
 	return;
 failed:
+	IRQ_Mask(IRQDEV_NAND);
 	nandDrv.state = DRIVER_STATE_FAULTED;
 }
 
 static void nandCleanup(void) {
+	IRQ_Mask(IRQDEV_NAND);
 	if (nandDrv.state != DRIVER_STATE_READY)
 		return;
 

@@ -18,6 +18,7 @@
 #include <npll/soc.h>
 #include <npll/video.h>
 #include <npll/usb.h>
+#include <npll/thread.h>
 
 void (*H_PreEntryHook)(void) = NULL;
 
@@ -34,6 +35,8 @@ void H_PrepareForExecEntry(void) {
 
 	/* Last chance to report: H_PrepareForExecEntry() takes logging down. */
 	IOStats_Dump("linux load");
+
+	TH_Quiesce();
 
 	/* disable IRQs */
 	IRQ_Disable();

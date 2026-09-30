@@ -12,6 +12,7 @@
 #include <npll/endian.h>
 #include <npll/log.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/usb.h>
 
 static struct usbHostController *controllers;
@@ -19,6 +20,16 @@ static struct usbDriver *drivers;
 static struct usbDevice *devices[USB_MAX_DEVICES];
 static u8 configurationData[USB_MAX_DEVICES][USB_MAX_CONFIG_LENGTH] ALIGN(32);
 static bool initialized, started;
+/* Recursive: binding a hub enumerates its children while holding this lock. */
+static struct threadMutex topologyMutex;
+
+void USB_LockTopology(void) {
+	TH_Lock(&topologyMutex);
+}
+
+void USB_UnlockTopology(void) {
+	TH_Unlock(&topologyMutex);
+}
 
 #if 0
 #define dbg_printf log_printf
@@ -134,7 +145,9 @@ static void disconnectDevice(struct usbDevice *dev) {
 }
 
 void USB_DisconnectDevice(struct usbDevice *dev) {
+	USB_LockTopology();
 	disconnectDevice(dev);
+	USB_UnlockTopology();
 }
 
 static int parseConfiguration(struct usbDevice *dev, u16 totalLength) {
@@ -438,9 +451,15 @@ fail:
 
 int USB_EnumerateChild(struct usbDevice *parent, uint port,
 	enum usbSpeed speed, struct usbDevice **child) {
+	int ret;
+
+	USB_LockTopology();
 	if (!parent || !parent->connected || !child || port >= 255u)
-		return -EINVAL;
-	return enumerateDevice(parent->hc, parent, port, speed, child);
+		ret = -EINVAL;
+	else
+		ret = enumerateDevice(parent->hc, parent, port, speed, child);
+	USB_UnlockTopology();
+	return ret;
 }
 
 void USB_Init(void) {
@@ -564,9 +583,12 @@ int USB_RegisterDriver(struct usbDriver *driver) {
 	if (!initialized || !driver || !driver->name || !driver->ids || !driver->probe || !driver->remove)
 		return -EINVAL;
 
+	USB_LockTopology();
 	for (cur = drivers; cur; cur = cur->next)
-		if (cur == driver)
+		if (cur == driver) {
+			USB_UnlockTopology();
 			return -EBUSY;
+		}
 
 	driver->next = drivers;
 	drivers = driver;
@@ -578,12 +600,15 @@ int USB_RegisterDriver(struct usbDriver *driver) {
 		}
 	}
 
+	USB_UnlockTopology();
 	return 0;
 }
 
 void USB_UnregisterDriver(struct usbDriver *driver) {
 	struct usbDriver **cur;
 	uint i, j;
+
+	USB_LockTopology();
 
 	for (i = 0; i < USB_MAX_DEVICES; i++) {
 		if (!devices[i])
@@ -600,9 +625,10 @@ void USB_UnregisterDriver(struct usbDriver *driver) {
 		if (*cur == driver) {
 			*cur = driver->next;
 			driver->next = NULL;
-			return;
+			break;
 		}
 	}
+	USB_UnlockTopology();
 }
 
 int USB_SubmitTransfer(struct usbTransfer *transfer) {
@@ -797,6 +823,12 @@ void USB_Poll(void) {
 	if (!started)
 		return;
 
+	USB_LockTopology();
+	if (!started) {
+		USB_UnlockTopology();
+		return;
+	}
+
 	for (hc = controllers; hc; hc = hc->next) {
 		if (hc->running && hc->ops->poll)
 			hc->ops->poll(hc);
@@ -871,6 +903,7 @@ acknowledge:
 				hc->ops->rootPortClearChange(hc, port);
 		}
 	}
+	USB_UnlockTopology();
 }
 
 void USB_Shutdown(void) {
@@ -881,6 +914,8 @@ void USB_Shutdown(void) {
 
 	started = false;
 	T_CancelRepeatingEvent(pollEvent, NULL);
+
+	USB_LockTopology();
 
 	for (i = 0; i < USB_MAX_DEVICES; i++)
 		if (devices[i] && !devices[i]->parent)
@@ -896,4 +931,5 @@ void USB_Shutdown(void) {
 		hc->ops->stop(hc);
 		hc->running = false;
 	}
+	USB_UnlockTopology();
 }

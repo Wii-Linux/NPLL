@@ -31,6 +31,7 @@
 #include <npll/log.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 #include <npll/hollywood/gpio.h>
@@ -162,6 +163,7 @@ static bool patchedGCNMedia = false;
 static bool mediaValidated = false;
 /* Once set, no path other than shutdown itself may touch the command engine. */
 static volatile bool diStopping = true;
+static u32 completionStatus;
 
 enum diMediaState {
 	DI_MEDIA_EMPTY = 0,
@@ -285,19 +287,30 @@ static void diAckSR(u32 ints) {
 
 static int diWaitIdle(uint timeoutUs) {
 	u64 tb;
+	u32 elapsed;
+	bool enabled;
 
 	tb = mftb();
 	while (regs->cr & DI_CR_TSTART) {
-		if (T_HasElapsed(tb, timeoutUs))
+		enabled = IRQ_DisableSave();
+		if (T_HasElapsed(tb, timeoutUs)) {
+			IRQ_Restore(enabled);
 			return -ETIMEDOUT;
-		udelay(1000);
+		}
+		if ((regs->cr & DI_CR_TSTART) && enabled && IRQ_CanWait(IRQDEV_DI)) {
+			elapsed = T_ElapsedUsecs(tb);
+			if (elapsed < timeoutUs)
+				IRQ_WaitLocked(IRQDEV_DI, timeoutUs - elapsed);
+		}
+		IRQ_Restore(enabled);
+		if (!IRQ_CanWait(IRQDEV_DI))
+			udelay(1000);
 	}
 
 	return 0;
 }
 
 static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uint dataLen, uint timeoutUs) {
-	u64 tb;
 	u32 sr, residual;
 	int ret;
 	bool irqs;
@@ -329,6 +342,8 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 	else
 		diAckSR(DI_SR_INTS);
 
+	completionStatus = 0;
+	regs->sr = (regs->sr & ~DI_SR_INTS) | DI_SR_INTMASKS;
 	regs->cmdbuf[0] = cmdbuf0;
 	regs->cmdbuf[1] = cmdbuf1;
 	regs->cmdbuf[2] = cmdbuf2;
@@ -339,20 +354,18 @@ static int diDoCMDTimeout(u32 cmdbuf0, u32 cmdbuf1, u32 cmdbuf2, void *data, uin
 	regs->cr = DI_CR_TSTART | (data ? DI_CR_DMA : 0);
 	IRQ_Restore(irqs);
 
-	tb = mftb();
-	while (regs->cr & DI_CR_TSTART) {
-		if (diStopping)
-			return -EINTR;
-		if (T_HasElapsed(tb, timeoutUs)) {
-			log_puts("timed out waiting on cmd");
-			log_printf("cmd: %08x %08x %08x\r\n", cmdbuf0, cmdbuf1, cmdbuf2);
-			log_printf("DMA of %uB @ %08x\r\n", dataLen, (u32)(uintptr_t)data);
-			log_printf("CR=%08x\r\n", regs->cr);
-			return -ETIMEDOUT;
-		}
+	ret = diWaitIdle(timeoutUs);
+	if (diStopping)
+		return -EINTR;
+	if (ret) {
+		log_puts("timed out waiting on cmd");
+		log_printf("cmd: %08x %08x %08x\r\n", cmdbuf0, cmdbuf1, cmdbuf2);
+		log_printf("DMA of %uB @ %08x\r\n", dataLen, (u32)(uintptr_t)data);
+		log_printf("CR=%08x\r\n", regs->cr);
+		return -ETIMEDOUT;
 	}
 
-	sr = regs->sr & DI_SR_INTS;
+	sr = (regs->sr | completionStatus) & DI_SR_INTS;
 	diAckSR(sr);
 	if (sr & DI_SR_BRKINT)
 		return -EINTR;
@@ -611,8 +624,10 @@ static void diIRQHandler(enum irqDev dev) {
 		regs->cvr = cvr | DI_CVR_CVRINT;
 
 	srReason = sr & (DI_SR_BRKINT | DI_SR_DEINT | DI_SR_TCINT);
-	if (srReason)
+	if (srReason) {
+		completionStatus |= srReason;
 		regs->sr = sr | srReason;
+	}
 }
 
 static bool diBufInteresting(const u8 *buf, size_t len) {
@@ -1064,6 +1079,9 @@ static void diInit(void) {
 	/* From this point on, pre-exec cleanup must include us. */
 	diDrv.state = DRIVER_STATE_INITIALIZING_CLEANABLE;
 
+	IRQ_RegisterHandler(IRQDEV_DI, diIRQHandler);
+	IRQ_Unmask(IRQDEV_DI);
+
 	/* try to clean up already in-flight commands */
 	diUnwedge();
 	if (diStopping)
@@ -1098,14 +1116,9 @@ static void diInit(void) {
 	diStatusToStr(rawStatus, status, 128);
 	log_printf("Drive status: %08x %s\r\n", rawStatus, status);
 
-
 	mediaValidated = false;
 	usingWiiDVDRRead = false;
 	patchedGCNMedia = false;
-
-	/* register our IRQ handler */
-	IRQ_RegisterHandler(IRQDEV_DI, diIRQHandler);
-	IRQ_Unmask(IRQDEV_DI);
 
 	rawStatus = diGetStatus();
 	if (diStopping)

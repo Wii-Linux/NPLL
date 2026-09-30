@@ -11,8 +11,10 @@
 #include <npll/console.h>
 #include <npll/soc.h>
 #include <npll/irq.h>
+#include <npll/thread.h>
 
 static irqHandler_t IRQ_Handlers[IRQDEV_MAX];
+static char waitChannels[IRQDEV_MAX];
 
 struct irqDevInfo {
 	vu32 *flipperReg;
@@ -79,6 +81,17 @@ static void getIrqDevInfo(enum irqDev dev, vu32 **reg, u32 *mask) {
 	}
 	else
 		__builtin_unreachable();
+}
+
+bool IRQ_CanWait(enum irqDev dev) {
+	vu32 *reg;
+	u32 mask;
+	getIrqDevInfo(dev, &reg, &mask);
+	return TH_CanBlock() && reg && (*reg & mask) && IRQ_Handlers[dev];
+}
+
+void IRQ_WaitLocked(enum irqDev dev, unsigned int timeoutUsecs) {
+	TH_WaitLocked(&waitChannels[dev], timeoutUsecs);
 }
 
 void IRQ_Mask(enum irqDev dev) {
@@ -171,13 +184,20 @@ void IRQ_Init(void) {
 static void IRQ_DoHandle(enum irqDev dev) {
 	if (IRQ_Handlers[dev])
 		IRQ_Handlers[dev](dev);
+
+	TH_Wake(&waitChannels[dev]);
 }
 
-void __attribute__((noreturn)) IRQ_Handle(void) {
+void IRQ_Handle(void) {
 	u32 intsr = 0, ppcirqflag, ppc0intsts;
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII_U)
 		intsr = PI_INTSR;
+
+	if (H_ConsoleType != CONSOLE_TYPE_WII_U && (intsr & PI_IRQDEV_SI)) {
+		IRQ_DoHandle(IRQDEV_SI);
+		PI_INTSR = PI_IRQDEV_SI;
+	}
 
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE && intsr & PI_IRQDEV_DI) {
 		IRQ_DoHandle(IRQDEV_DI);
@@ -190,6 +210,30 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 	if (H_ConsoleType == CONSOLE_TYPE_WII && intsr & PI_IRQDEV_HLWD) {
 		ppcirqflag = HW_PPCIRQFLAG;
 		PI_INTSR = PI_IRQDEV_HLWD;
+		if (ppcirqflag & HW_IRQDEV_NAND_IF) {
+			IRQ_DoHandle(IRQDEV_NAND);
+			HW_PPCIRQFLAG = HW_IRQDEV_NAND_IF;
+		}
+		if (ppcirqflag & HW_IRQDEV_SHA1_ENG) {
+			IRQ_DoHandle(IRQDEV_SHA1);
+			HW_PPCIRQFLAG = HW_IRQDEV_SHA1_ENG;
+		}
+		if (ppcirqflag & HW_IRQDEV_AES_ENG) {
+			IRQ_DoHandle(IRQDEV_AES);
+			HW_PPCIRQFLAG = HW_IRQDEV_AES_ENG;
+		}
+		if (ppcirqflag & HW_IRQDEV_EHCI) {
+			IRQ_DoHandle(IRQDEV_EHCI0);
+			HW_PPCIRQFLAG = HW_IRQDEV_EHCI;
+		}
+		if (ppcirqflag & HW_IRQDEV_OHCI0) {
+			IRQ_DoHandle(IRQDEV_OHCI0);
+			HW_PPCIRQFLAG = HW_IRQDEV_OHCI0;
+		}
+		if (ppcirqflag & HW_IRQDEV_OHCI1) {
+			IRQ_DoHandle(IRQDEV_OHCI1);
+			HW_PPCIRQFLAG = HW_IRQDEV_OHCI1;
+		}
 		if (ppcirqflag & HW_IRQDEV_GPIOB) {
 			HW_PPCIRQFLAG = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
@@ -214,10 +258,38 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		intsr = LATTE_PI_INTSR;
+		if (intsr & PI_IRQDEV_SI) {
+			IRQ_DoHandle(IRQDEV_SI);
+			LATTE_PI_INTSR = PI_IRQDEV_SI;
+		}
 		if (!(intsr & PI_IRQDEV_LATTE))
-			IRQ_Return();
+			return;
 
 		ppc0intsts = LT_PPC0INT1STS;
+		if (ppc0intsts & HW_IRQDEV_NAND_IF) {
+			IRQ_DoHandle(IRQDEV_NAND);
+			LT_PPC0INT1STS = HW_IRQDEV_NAND_IF;
+		}
+		if (ppc0intsts & HW_IRQDEV_SHA1_ENG) {
+			IRQ_DoHandle(IRQDEV_SHA1);
+			LT_PPC0INT1STS = HW_IRQDEV_SHA1_ENG;
+		}
+		if (ppc0intsts & HW_IRQDEV_AES_ENG) {
+			IRQ_DoHandle(IRQDEV_AES);
+			LT_PPC0INT1STS = HW_IRQDEV_AES_ENG;
+		}
+		if (ppc0intsts & HW_IRQDEV_EHCI) {
+			IRQ_DoHandle(IRQDEV_EHCI0);
+			LT_PPC0INT1STS = HW_IRQDEV_EHCI;
+		}
+		if (ppc0intsts & HW_IRQDEV_OHCI0) {
+			IRQ_DoHandle(IRQDEV_OHCI0);
+			LT_PPC0INT1STS = HW_IRQDEV_OHCI0;
+		}
+		if (ppc0intsts & HW_IRQDEV_OHCI1) {
+			IRQ_DoHandle(IRQDEV_OHCI1);
+			LT_PPC0INT1STS = HW_IRQDEV_OHCI1;
+		}
 		if (ppc0intsts & HW_IRQDEV_GPIOB) {
 			LT_PPC0INT1STS = HW_IRQDEV_GPIOB;
 			IRQ_DoHandle(IRQDEV_GPIOB);
@@ -236,6 +308,22 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		}
 
 		ppc0intsts = LT_PPC0INT2STS;
+		if (ppc0intsts & LT_IRQDEV_EHCI1) {
+			IRQ_DoHandle(IRQDEV_EHCI1);
+			LT_PPC0INT2STS = LT_IRQDEV_EHCI1;
+		}
+		if (ppc0intsts & LT_IRQDEV_OHCI2) {
+			IRQ_DoHandle(IRQDEV_OHCI2);
+			LT_PPC0INT2STS = LT_IRQDEV_OHCI2;
+		}
+		if (ppc0intsts & LT_IRQDEV_EHCI2) {
+			IRQ_DoHandle(IRQDEV_EHCI2);
+			LT_PPC0INT2STS = LT_IRQDEV_EHCI2;
+		}
+		if (ppc0intsts & LT_IRQDEV_OHCI3) {
+			IRQ_DoHandle(IRQDEV_OHCI3);
+			LT_PPC0INT2STS = LT_IRQDEV_OHCI3;
+		}
 		if (ppc0intsts & LT_IRQDEV_SDHCI2) {
 			LT_PPC0INT2STS = LT_IRQDEV_SDHCI2;
 			IRQ_DoHandle(IRQDEV_SDHCI2);
@@ -248,7 +336,6 @@ void __attribute__((noreturn)) IRQ_Handle(void) {
 		LATTE_PI_INTSR = PI_IRQDEV_LATTE;
 	}
 
-	IRQ_Return();
 }
 
 void IRQ_RegisterHandler(enum irqDev dev, irqHandler_t func) {

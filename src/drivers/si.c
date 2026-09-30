@@ -15,6 +15,7 @@
 #include <npll/log.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/irq.h>
 
 struct si_channel_regs {
 	vu32 outbuf;
@@ -325,6 +326,34 @@ static void drainAllInBuf(void) {
 		drainInBuf(i);
 }
 
+static volatile bool siComplete;
+static void siIRQ(enum irqDev dev) {
+	u32 status = regs->comcsr;
+	(void)dev;
+
+	if ((status & SI_COMCSR_TCINT) && !(status & SI_COMCSR_TSTART)) {
+		siComplete = true;
+		regs->comcsr = (status & ~SI_COMCSR_TCINTMSK) | SI_COMCSR_TCINT;
+	}
+}
+
+static bool siWait(u64 start) {
+	bool enabled = IRQ_DisableSave();
+	u32 elapsed = T_ElapsedUsecs(start);
+
+	if (siComplete || (regs->comcsr & SI_COMCSR_TCINT)) {
+		IRQ_Restore(enabled);
+		return true;
+	}
+
+	if (elapsed < 100 * 1000 && enabled && IRQ_CanWait(IRQDEV_SI))
+		IRQ_WaitLocked(IRQDEV_SI, 100 * 1000 - elapsed);
+
+	IRQ_Restore(enabled);
+
+	return siComplete || (regs->comcsr & SI_COMCSR_TCINT);
+}
+
 static void checkConnected(void) {
 	u64 startTB;
 	u32 resp, poll;
@@ -365,11 +394,12 @@ static void checkConnected(void) {
 			regs->buf[0] = SI_MKOUTBUF(JOYBUS_CMD_STATUS, 0x00, 0x00);;
 
 			/* actually do the transfer */
-			regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((uint)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+			siComplete = false;
+			regs->comcsr = SI_COMCSR_TCINTMSK | (1u << SI_COMCSR_OUTLEN_SHIFT) | (3u << SI_COMCSR_INLEN_SHIFT) | ((uint)i << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 			/* wait for transfer complete */
 			startTB = mftb();
-			while (!(regs->comcsr & SI_COMCSR_TCINT)) {
+			while (!siWait(startTB)) {
 				if (T_HasElapsed(startTB, 100 * 1000)) {
 					log_puts("SI transfer is taking way too long, giving up");
 					/*
@@ -704,11 +734,12 @@ static void probeN64Pad(uint chan) {
 	regs->buf[0] = (((u32)JOYBUS_CMD_DIRECT_N64) << 24); /* N64 controllers only take 1 byte */
 
 	/* actually do the transfer */
-	regs->comcsr = (1u << SI_COMCSR_OUTLEN_SHIFT) | (4u << SI_COMCSR_INLEN_SHIFT) | ((uint)chan << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
+	siComplete = false;
+	regs->comcsr = SI_COMCSR_TCINTMSK | (1u << SI_COMCSR_OUTLEN_SHIFT) | (4u << SI_COMCSR_INLEN_SHIFT) | ((uint)chan << SI_COMCSR_CHAN_SHIFT) | SI_COMCSR_TSTART;
 
 	/* wait for transfer complete */
 	startTB = mftb();
-	while (!(regs->comcsr & SI_COMCSR_TCINT)) {
+	while (!siWait(startTB)) {
 		if (T_HasElapsed(startTB, 100 * 1000)) {
 			log_puts("SI transfer is taking way too long, giving up");
 			/* probably also breaks input until next check */
@@ -845,6 +876,9 @@ static void siInit(void) {
 	/* cleanup device state */
 	memset(devices, 0, sizeof(devices));
 
+	IRQ_RegisterHandler(IRQDEV_SI, siIRQ);
+	IRQ_Unmask(IRQDEV_SI);
+
 	/* initial check of which controllers are connected */
 	checkConnected();
 	lastConnectedCheck = mftb();
@@ -857,6 +891,7 @@ static void siInit(void) {
 }
 
 static void siCleanup(void) {
+	IRQ_Mask(IRQDEV_SI);
 	siDrv.state = DRIVER_STATE_NOT_READY;
 }
 

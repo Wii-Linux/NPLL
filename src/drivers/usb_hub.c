@@ -23,6 +23,7 @@ struct usbHub {
 	struct usbEndpoint *interrupt;
 	struct usbDevice *children[USB_HUB_MAX_PORTS];
 	u8 numPorts;
+	bool ready;
 	bool errorLogged;
 };
 
@@ -147,9 +148,10 @@ static void hubPoll(void *data) {
 	int ret;
 
 	(void)data;
+	USB_LockTopology();
 	for (h = 0; h < USB_MAX_HUBS; h++) {
 		hub = &hubs[h];
-		if (!hub->interface || !hub->interface->device->connected)
+		if (!hub->ready || !hub->interface || !hub->interface->device->connected)
 			continue;
 
 		memset(bitmap, 0, sizeof(bitmap));
@@ -177,6 +179,7 @@ static void hubPoll(void *data) {
 				hubHandlePort(hub, port);
 		}
 	}
+	USB_UnlockTopology();
 }
 
 static int hubProbe(struct usbInterface *interface, const struct usbDeviceId *id) {
@@ -251,6 +254,7 @@ static int hubProbe(struct usbInterface *interface, const struct usbDeviceId *id
 	for (i = 0; i < hub->numPorts; i++)
 		hubHandlePort(hub, i);
 
+	hub->ready = true;
 	return 0;
 }
 
@@ -261,6 +265,7 @@ static void hubRemove(struct usbInterface *interface) {
 	if (!hub)
 		return;
 
+	hub->ready = false;
 	USB_ResidentInStop(interface->device, hub->interrupt);
 	for (port = 0; port < hub->numPorts; port++)
 		hubDetachPort(hub, port);

@@ -18,6 +18,7 @@
 #include <npll/output.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 #include <npll/usb.h>
@@ -127,6 +128,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	IRQ_Init();
 	IRQ_Enable();
 	M_Init();
+	TH_Init();
 	USB_Init();
 	B_Init();
 	FS_Init();
@@ -137,6 +139,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	T_EnableEvents();
 	D_Init();
 	USB_Start();
+	TH_BootComplete();
 	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();
 	__builtin_unreachable();

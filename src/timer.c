@@ -6,31 +6,45 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include <npll/console.h>
+#include <npll/cpu.h>
 #include <npll/irq.h>
+#include <npll/thread.h>
 #include <npll/timer.h>
 #include <npll/types.h>
 
-struct timedEvent {
-	u64  fireTB;
-	void (*callback)(void *);
-	void *cbData;
-};
-
-struct repeatingEvent {
-	u32 periodUsecs;
-	void (*callback)(void *);
-	void *cbData;
-};
-
 #define MAX_EVENTS 32
 #define DEC_IDLE 0x7fffffff
+#define THREAD_STACK_SIZE (64 * 1024)
 
-static struct timedEvent events[MAX_EVENTS];
-static struct repeatingEvent repeatingEvents[MAX_EVENTS];
-uint numRepeatingEvents = 0;
-static bool eventsEnabled = false;
+enum threadState {
+	FREE,
+	READY,
+	RUNNING,
+	WAITING
+};
+
+struct thread {
+	u32 *sp;
+	void *stack;
+	enum threadState state;
+	const void *channel;
+	u64 deadline;
+	void (*callback)(void *);
+	void *data;
+	u32 period, generation;
+	bool active, cancelled;
+};
+
+static struct thread threads[MAX_EVENTS + 1];
+static struct thread *current;
+static uint cursor, interruptDepth;
+static bool eventsEnabled, stopping;
+extern void TH_Switch(u32 **oldSP, u32 **newSP);
+static void programNextDEC(u64 now);
+static void schedule(void);
 
 /* bus clock / 4 */
 static u32 possibleTicksPerUsec[] = {
@@ -72,178 +86,316 @@ u32 T_ElapsedUsecs(u64 startTB) {
 }
 
 /* delay for [n] microseconds */
+/*
+ * FIXME: udelay should really only be a spin loop, but there's too many
+ * callers to fix right now.  Eventually make an msleep/sleep() and migrate
+ * udelay callers with large delays off.
+ */
 void udelay(u32 usec) {
-	spinOnTB((u64)ticksPerUsec * usec);
+	u32 msr;
+
+	asm volatile("mfmsr %0" : "=r"(msr));
+	/* keep spins for short delays */
+	if (TH_CanBlock() && (msr & MSR_EE) && usec > 1000)
+		TH_Sleep(usec);
+	else
+		spinOnTB((u64)ticksPerUsec * usec);
 }
 
 void T_Init(void) {
 	ticksPerUsec = possibleTicksPerUsec[H_ConsoleType];
-	memset(events, 0, sizeof(events));
 	eventsEnabled = false;
 	mtdec(DEC_IDLE);
 }
 
-static int latestQueuedEvent(void) {
-	int i;
-
-	for (i = 0; i < MAX_EVENTS; i++) {
-		if (!events[i].callback)
-			break;
-	}
-	return i - 1;
+void TH_Init(void) {
+	memset(threads, 0, sizeof(threads));
+	current = &threads[0];
+	current->state = RUNNING;
+	current->active = true;
+	stopping = false;
+	cursor = interruptDepth = 0;
 }
 
-static int eventIdxForTB(u64 tb) {
-	int i;
+void TH_BootComplete(void) {
+	bool enabled = IRQ_DisableSave();
+	threads[0].active = false;
+	TH_Wake(&threads[0]);
+	IRQ_Restore(enabled);
+}
 
-	for (i = 0; i < MAX_EVENTS; i++) {
-		if (!events[i].callback || events[i].fireTB > tb)
-			break;
-	}
+void TH_InterruptEnter(void) {
+	interruptDepth++;
+}
 
-	return i;
+void TH_InterruptLeave(void) {
+	assert(interruptDepth);
+	interruptDepth--;
+}
+
+bool TH_CanBlock(void) {
+	return current && eventsEnabled && !interruptDepth;
 }
 
 static void programNextDEC(u64 now) {
-	u64 delta;
+	u64 next = now + DEC_IDLE, delta;
+	uint i;
 
-	if (!events[0].callback) {
-		mtdec(DEC_IDLE);
-		return;
+	if (eventsEnabled) {
+		for (i = 0; i <= MAX_EVENTS; i++) {
+			if (threads[i].state == WAITING && threads[i].deadline < next)
+				next = threads[i].deadline;
+		}
 	}
 
-	if (events[0].fireTB <= now) {
-		mtdec(1);
-		return;
-	}
-
-	delta = events[0].fireTB - now;
-	if (delta > DEC_IDLE)
-		delta = DEC_IDLE;
+	delta = next > now ? next - now : 1;
 	mtdec((u32)delta);
 }
 
-void T_QueueEvent(u32 fireInUsecs, void (*callback)(void *), void *cbData) {
-	int idx, max;
+static void threadEntry(void) {
+	while (true) {
+		IRQ_Enable();
+		current->active = true;
+		current->callback(current->data);
+		IRQ_Disable();
+		current->active = false;
+		TH_Wake(current);
+
+		if (current->period && !current->cancelled) {
+			current->deadline = mftb() + (u64)current->period * ticksPerUsec;
+			current->state = WAITING;
+		}
+		else
+			current->state = FREE;
+
+		schedule();
+	}
+}
+
+static void prepareThread(struct thread *t) {
+	u32 r13;
+
+	/* FIXME specify per thread */
+	if (!t->stack)
+		t->stack = malloc(THREAD_STACK_SIZE);
+
+	t->sp = (u32 *)((char *)t->stack + THREAD_STACK_SIZE - 112);
+	memset(t->sp, 0, 112);
+	*(u32 *)t->stack = 0xdeaddead;
+	t->sp[1] = (u32)(uintptr_t)threadEntry;
+	asm volatile("mr %0,13" : "=r"(r13));
+	t->sp[5] = r13;
+}
+
+static void schedule(void) {
+	struct thread *old = current, *next;
+	uint n, idx;
+
+	assert_msg(!old->stack || *(u32 *)old->stack == 0xdeaddead, "thread stack overflow");
+
+	while (true) {
+		for (n = 1; n <= MAX_EVENTS + 1; n++) {
+			idx = (cursor + n) % (MAX_EVENTS + 1);
+			next = &threads[idx];
+			if (next->state != READY || (stopping && idx && !next->active))
+				continue;
+
+			if (next != old && !next->sp)
+				prepareThread(next);
+
+			cursor = idx;
+			current = next;
+			next->state = RUNNING;
+			programNextDEC(mftb());
+			if (next != old)
+				TH_Switch(&old->sp, &next->sp);
+
+			return;
+		}
+
+		programNextDEC(mftb());
+		/* nothing to do */
+		CPU_Idle();
+	}
+}
+
+void TH_Yield(void) {
 	bool irqs;
-	u64 fireTB = mftb() + ((u64)fireInUsecs * ticksPerUsec);
+
+	if (!TH_CanBlock())
+		return;
 
 	irqs = IRQ_DisableSave();
-
-	max = latestQueuedEvent();
-	idx = eventIdxForTB(fireTB);
-	assert_msg(max != MAX_EVENTS - 1, "T_QueueEvent: events overflow");
-
-	/* shift queue forward to make room */
-	if (max != -1 && idx <= max) /* don't shift nothing */
-		memmove(&events[idx + 1], &events[idx], (uint)(max - idx + 1) * sizeof(struct timedEvent));
-
-	/* insert the event */
-	events[idx].fireTB = fireTB;
-	events[idx].callback = callback;
-	events[idx].cbData = cbData;
-
-	/* reprogram DEC if this is the first queued event */
-	if (eventsEnabled && idx == 0)
-		programNextDEC(mftb());
-
+	assert_msg(irqs, "yield with interrupts disabled");
+	current->state = READY;
+	schedule();
 	IRQ_Restore(irqs);
 }
 
-void T_EnableEvents(void) {
-	bool irqs;
+void TH_WaitLocked(const void *channel, u32 timeoutUsecs) {
+	assert(TH_CanBlock());
+	current->channel = channel;
+	current->deadline = mftb() + (u64)timeoutUsecs * ticksPerUsec;
+	current->state = WAITING;
+	schedule();
+	current->channel = NULL;
+}
 
-	irqs = IRQ_DisableSave();
+void TH_Sleep(u32 usecs) {
+	bool irqs = IRQ_DisableSave();
+
+	assert_msg(irqs, "sleep with interrupts disabled");
+	TH_WaitLocked(NULL, usecs);
+	IRQ_Restore(irqs);
+}
+
+void TH_Wake(const void *channel) {
+	uint i;
+	bool irqs = IRQ_DisableSave();
+
+	assert(channel);
+
+	for (i = 0; i <= MAX_EVENTS; i++) {
+		if (threads[i].state == WAITING && threads[i].channel == channel)
+			threads[i].state = READY;
+	}
+
+	programNextDEC(mftb());
+	IRQ_Restore(irqs);
+}
+
+static void queueEvent(u32 delay, u32 period, void (*callback)(void *), void *data) {
+	uint i;
+	bool irqs = IRQ_DisableSave();
+
+	assert(callback);
+
+	for (i = 1; i <= MAX_EVENTS; i++) {
+		if (threads[i].state == FREE)
+			break;
+	}
+
+	assert_msg(i <= MAX_EVENTS, "timer threads overflow");
+
+	threads[i].generation++;
+	threads[i].sp = NULL;
+	threads[i].callback = callback;
+	threads[i].data = data;
+	threads[i].period = period;
+	threads[i].channel = NULL;
+	threads[i].cancelled = threads[i].active = false;
+	threads[i].deadline = mftb() + (u64)delay * ticksPerUsec;
+	threads[i].state = WAITING;
+
+	programNextDEC(mftb());
+	IRQ_Restore(irqs);
+}
+
+void T_QueueEvent(u32 delay, void (*callback)(void *), void *data) {
+	queueEvent(delay, 0, callback, data);
+}
+
+void T_QueueRepeatingEvent(u32 period, void (*callback)(void *), void *data) {
+	assert(period);
+	queueEvent(period, period, callback, data);
+}
+
+void T_CancelEvent(void (*callback)(void *), void *data) {
+	struct thread *t;
+	u32 generation;
+	uint i;
+	bool irqs = IRQ_DisableSave();
+	for (i = 1; i <= MAX_EVENTS; i++) {
+		t = &threads[i];
+		generation = t->generation;
+		if (t->state == FREE || t->callback != callback || t->data != data)
+			continue;
+
+		t->cancelled = true;
+
+		if (!t->active)
+			t->state = FREE;
+		else if (t != current && irqs && TH_CanBlock()) {
+			while (t->generation == generation && t->active)
+				TH_WaitLocked(t, 0xffffffffu);
+		}
+	}
+
+	programNextDEC(mftb());
+	IRQ_Restore(irqs);
+}
+
+void T_CancelRepeatingEvent(void (*callback)(void *), void *data) {
+	T_CancelEvent(callback, data);
+}
+
+void TH_Quiesce(void) {
+	struct thread *t;
+	uint i;
+	bool enabled = IRQ_DisableSave();
+
+	stopping = true;
+	for (i = 0; i <= MAX_EVENTS; i++) {
+		t = &threads[i];
+		while (t != current && t->active) {
+			assert(enabled && TH_CanBlock());
+			TH_WaitLocked(t, 0xffffffffu);
+		}
+	}
+
+	IRQ_Restore(enabled);
+}
+
+void TH_Resume(void) {
+	bool enabled = IRQ_DisableSave();
+
+	stopping = false;
+	programNextDEC(mftb());
+	IRQ_Restore(enabled);
+}
+
+void T_EnableEvents(void) {
+	bool irqs = IRQ_DisableSave();
+
 	eventsEnabled = true;
 	programNextDEC(mftb());
 	IRQ_Restore(irqs);
 }
 
-static void repeatingEventCB(void *dat) {
-	struct repeatingEvent *repEv;
-	repEv = (struct repeatingEvent *)dat;
-
-	repEv->callback(repEv->cbData);
-	/* The callback may have cancelled itself while it was running. */
-	if (repEv->callback)
-		T_QueueEvent(repEv->periodUsecs, repeatingEventCB, dat);
-}
-
-void T_QueueRepeatingEvent(u32 periodUsecs, void (*callback)(void *), void *cbData) {
-	assert_msg(numRepeatingEvents != MAX_EVENTS, "T_QueueRepeatingEvent: repeatingEvents overflow");
-	repeatingEvents[numRepeatingEvents].periodUsecs = periodUsecs;
-	repeatingEvents[numRepeatingEvents].callback = callback;
-	repeatingEvents[numRepeatingEvents].cbData = cbData;
-	T_QueueEvent(periodUsecs, repeatingEventCB, &repeatingEvents[numRepeatingEvents++]);
-}
-
-void T_CancelRepeatingEvent(void (*callback)(void *), void *cbData) {
-	struct repeatingEvent *repEv;
-	bool irqs;
-	int i, out;
-
-	irqs = IRQ_DisableSave();
-	for (i = 0; i < (int)numRepeatingEvents; i++) {
-		repEv = &repeatingEvents[i];
-		if (repEv->callback != callback || repEv->cbData != cbData)
-			continue;
-
-		/* Stop a currently executing wrapper from rearming itself. */
-		repEv->callback = NULL;
-
-		/* Remove an already queued wrapper, if there is one. */
-		for (out = 0; out < MAX_EVENTS; out++) {
-			if (events[out].callback == repeatingEventCB && events[out].cbData == repEv)
-				break;
-		}
-		if (out != MAX_EVENTS) {
-			memmove(&events[out], &events[out + 1],
-			    (uint)(MAX_EVENTS - out - 1) * sizeof(struct timedEvent));
-			memset(&events[MAX_EVENTS - 1], 0, sizeof(struct timedEvent));
-		}
-	}
-	if (eventsEnabled)
-		programNextDEC(mftb());
-	IRQ_Restore(irqs);
-}
-
 void T_DECHandler(void) {
-	u64 tb;
-	struct timedEvent ev;
-	bool irqs;
+	uint i;
+	u64 now = mftb();
 
-	/* consume all pending events */
-	while (true) {
-		irqs = IRQ_DisableSave();
-		tb = mftb();
-		if (!eventsEnabled) {
-			mtdec(DEC_IDLE);
-			IRQ_Restore(irqs);
-			break;
+	if (eventsEnabled) {
+		for (i = 0; i <= MAX_EVENTS; i++) {
+			if (threads[i].state == WAITING && threads[i].deadline <= now)
+				threads[i].state = READY;
 		}
-		if (!events[0].callback || tb < events[0].fireTB) {
-			programNextDEC(tb);
-			IRQ_Restore(irqs);
-			break;
-		}
-
-		/* stash the event */
-		memcpy(&ev, &events[0], sizeof(struct timedEvent));
-
-		/* shift list forward */
-		memmove(&events[0], &events[1], sizeof(events) - sizeof(struct timedEvent));
-		memset(&events[MAX_EVENTS - 1], 0, sizeof(struct timedEvent));
-
-		/*
-		 * If the next event was already due when we entered this pass,
-		 * drain it after this callback to preserve event order.
-		 */
-		if (events[0].callback && events[0].fireTB <= tb)
-			mtdec(DEC_IDLE);
-		else
-			programNextDEC(tb);
-		IRQ_Enable();
-
-		ev.callback(ev.cbData);
 	}
+	programNextDEC(now);
+}
+
+void TH_Lock(struct threadMutex *mutex) {
+	bool enabled = IRQ_DisableSave();
+
+	while (mutex->owner && mutex->owner != current) {
+		assert_msg(enabled && TH_CanBlock(), "contended mutex in atomic context");
+		TH_WaitLocked(mutex, 0xffffffffu);
+	}
+
+	mutex->owner = current;
+	mutex->depth++;
+	IRQ_Restore(enabled);
+}
+
+void TH_Unlock(struct threadMutex *mutex) {
+	bool enabled = IRQ_DisableSave();
+
+	assert(mutex->owner == current && mutex->depth);
+	if (!--mutex->depth) {
+		mutex->owner = NULL;
+		TH_Wake(mutex);
+	}
+
+	IRQ_Restore(enabled);
 }

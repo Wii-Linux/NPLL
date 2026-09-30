@@ -18,6 +18,7 @@
 #include <npll/irq.h>
 #include <npll/panic.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 
@@ -55,11 +56,7 @@ struct exceptionFrame {
 	u32 dsisr;
 };
 
-#define MAX_EXCEPTION_RECURSION 32
-
 static struct exceptionFrame exceptionFrame __attribute__((aligned(32)));
-static struct exceptionFrame exceptionFrames[MAX_EXCEPTION_RECURSION];
-static uint exceptionRecursionCount = 0;
 
 void __attribute__((noreturn)) E_Handler(int exception) {
 	u32 sp;
@@ -68,18 +65,17 @@ void __attribute__((noreturn)) E_Handler(int exception) {
 
 	frame = &exceptionFrame;
 
-	if (exception == 0x0500) {
-		IRQ_Handle();
-		__builtin_unreachable();
-	}
-	else if (exception == 0x0900) {
-		if (exceptionRecursionCount >= MAX_EXCEPTION_RECURSION)
-			panic("DEC exception recursion overflow");
-		memcpy(&exceptionFrames[exceptionRecursionCount++], frame, sizeof(struct exceptionFrame));
-		IRQ_Enable();
-		T_DECHandler();
-		IRQ_Disable();
-		memcpy(frame, &exceptionFrames[--exceptionRecursionCount], sizeof(struct exceptionFrame));
+	if (exception == 0x0500 || exception == 0x0900) {
+		/* Never re-enter doze when returning from the idle wake IRQ */
+		frame->srr1 &= ~MSR_POW;
+		TH_InterruptEnter();
+
+		if (exception == 0x0500)
+			IRQ_Handle();
+		else
+			T_DECHandler();
+
+		TH_InterruptLeave();
 		IRQ_Return();
 		__builtin_unreachable();
 	}

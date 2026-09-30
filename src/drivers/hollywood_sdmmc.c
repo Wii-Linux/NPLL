@@ -31,6 +31,7 @@ static mmc_card_t mmcDev[2];
 static struct blockDevice sdmmcBdev[2];
 static bool sdmmcRegistered[2];
 static bool checkConnected = false;
+static bool connectionReady, connectionQueued, lastCardPresent;
 
 static inline mmc_card_t bdevToMMC(struct blockDevice *bdev) {
 	if (bdev == &sdmmcBdev[0])
@@ -218,9 +219,36 @@ static void sdmmcConnectionCheck(void *dummy) {
 	}
 }
 
+static void sdmmcConnectionWorker(void *data) {
+	bool enabled;
+
+	while (true) {
+		sdmmcConnectionCheck(data);
+		enabled = IRQ_DisableSave();
+		if (!checkConnected || !connectionReady) {
+			connectionQueued = false;
+			IRQ_Restore(enabled);
+			return;
+		}
+		IRQ_Restore(enabled);
+	}
+}
+
 static void sdmmcIRQ(enum irqDev dev) {
+	bool present;
+
 	sdio_handle_irq(irqToSDIO(dev), (int)dev);
-	checkConnected = true;
+	if (dev == IRQDEV_SDHCI0) {
+		present = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
+		if (present != lastCardPresent) {
+			lastCardPresent = present;
+			checkConnected = true;
+			if (connectionReady && !connectionQueued) {
+				connectionQueued = true;
+				T_QueueEvent(0, sdmmcConnectionWorker, NULL);
+			}
+		}
+	}
 }
 
 static void sdmmcInit(void) {
@@ -228,6 +256,7 @@ static void sdmmcInit(void) {
 	int ret;
 	uint i, maxHC;
 	void *addr;
+	bool enabled;
 
 	memset(sdioDev, 0, sizeof(sdioDev));
 	memset(mmcDev, 0, sizeof(mmcDev));
@@ -251,13 +280,17 @@ static void sdmmcInit(void) {
 		addr = (void *)sdhcAddrs[i];
 
 		/* initialize the controller */
-		ret = sdhc_init(addr, sdmmcIRQTable, 4, &sdioDev[i]);
+		ret = sdhc_init(addr, &sdmmcIRQTable[i], 1, &sdioDev[i]);
 		if (ret) {
 			log_printf("sdio_init (SDHCI%d) failed with %d\r\n", i, ret);
 			continue;
 		}
 		// log_printf("sdhc_init (SDHCI%d) success\r\n", i);
 
+		if (i == 0)
+			lastCardPresent = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
+
+		IRQ_Unmask((enum irqDev)sdmmcIRQTable[i]);
 		ret = sdio_reset(&sdioDev[i]);
 		if (ret) {
 			log_printf("sdio_reset (SDHCI%d) failed with %d\r\n", i, ret);
@@ -290,10 +323,18 @@ static void sdmmcInit(void) {
 	IRQ_Unmask(IRQDEV_SDHCI2);
 	IRQ_Unmask(IRQDEV_SDHCI3);
 
-	T_QueueRepeatingEvent(100 * 1000, sdmmcConnectionCheck, NULL);
+	enabled = IRQ_DisableSave();
+	connectionReady = true;
+	if (checkConnected && !connectionQueued) {
+		connectionQueued = true;
+		T_QueueEvent(0, sdmmcConnectionWorker, NULL);
+	}
+	IRQ_Restore(enabled);
 }
 
 static void sdmmcCleanup(void) {
+	connectionReady = false;
+	T_CancelEvent(sdmmcConnectionWorker, NULL);
 	IRQ_Mask(IRQDEV_SDHCI0);
 	sdio_reset(&sdioDev[0]);
 	IRQ_Mask(IRQDEV_SDHCI1);

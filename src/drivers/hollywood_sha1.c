@@ -15,6 +15,7 @@
 #include <npll/log.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/utils.h>
 #include <npll/hollywood/sha1.h>
 
@@ -29,6 +30,10 @@ static volatile struct sha1Regs *const regs = (volatile struct sha1Regs *)HOLLYW
 static const u32 iv[5] = { 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0 };
 
 #define SHA_CTRL_EXEC BIT(31)
+#define SHA_CTRL_IRQ BIT(30)
+static void shaIRQ(enum irqDev dev) {
+	(void)dev;
+}
 
 static int sha1Reset(void) {
 	bool irqs;
@@ -61,12 +66,12 @@ static int sha1Reset(void) {
 int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	int ret;
 	u64 tb;
-	u32 ctrl;
+	u32 ctrl, elapsed;
 	bool irqs;
 
 	assert(H_ConsoleType != CONSOLE_TYPE_GAMECUBE);
 
-	ctrl = SHA_CTRL_EXEC | ((u32)(size / 64) - 1);
+	ctrl = SHA_CTRL_EXEC | SHA_CTRL_IRQ | ((u32)(size / 64) - 1);
 	irqs = IRQ_DisableSave();
 
 	if (size < 64 || size & 63) {
@@ -109,6 +114,12 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 			IRQ_Restore(irqs);
 			return -ETIMEDOUT;
 		}
+		if (irqs && IRQ_CanWait(IRQDEV_SHA1)) {
+			elapsed = T_ElapsedUsecs(tb);
+			if (elapsed < 100 * 1000)
+				IRQ_WaitLocked(IRQDEV_SHA1, 100 * 1000 - elapsed);
+		}
+
 	}
 
 	barrier(); out[0] = regs->h[0];
@@ -128,10 +139,13 @@ static void sha1Init(void) {
 		sha1Drv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
+	IRQ_RegisterHandler(IRQDEV_SHA1, shaIRQ);
+	IRQ_Unmask(IRQDEV_SHA1);
 	sha1Drv.state = DRIVER_STATE_READY;
 }
 
 static void sha1Cleanup(void) {
+	IRQ_Mask(IRQDEV_SHA1);
 	sha1Reset();
 	sha1Drv.state = DRIVER_STATE_NOT_READY;
 }

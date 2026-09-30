@@ -315,6 +315,7 @@ static int sdhc_next_cmd(sdhc_dev_t host)
 		val16 |= INT_STATUS_DINT;
 	}
 	writew(val16, host->base + INT_STATUS_EN);
+	writew(val16, host->base + INT_SIGNAL_EN);
 
 	/* Check if the Host is ready for transit. */
 	{
@@ -715,6 +716,7 @@ static int _sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb
 	sdhc_dev_t host = sdio_get_sdhc(sdio);
 	bool irqs, wait_irqs = false;
 	int ret;
+	u32 elapsed;
 	u64 tb;
 	u8 val8;
 	IOSTATS_TB(fnTB);
@@ -756,9 +758,20 @@ static int _sdhc_send_cmd(sdio_host_dev_t *sdio, struct mmc_cmd *cmd, sdio_cb cb
 		tb = mftb();
 		/* Wait for completion */
 		while (!cmd->complete) {
-			/* Poll for DINT (SDMA boundary) to keep the DMA moving */
-			sdhc_handle_irq(sdio, 0);
-			udelay(20);
+			/* Test and sleep with EE clear: completion cannot race the
+			 * registration of the waiter. IRQ services PIO and SDMA too. */
+			if (wait_irqs && IRQ_CanWait((enum irqDev)host->irq_table[0])) {
+				elapsed = T_ElapsedUsecs(tb);
+				if (elapsed < SDHC_CMD_TIMEOUT_US)
+					IRQ_WaitLocked((enum irqDev)host->irq_table[0], SDHC_CMD_TIMEOUT_US - elapsed);
+			}
+			else {
+				/* Early initialization / explicitly masked callers. */
+				sdhc_handle_irq(sdio, 0);
+				udelay(20);
+			}
+			if (cmd->complete)
+				break;
 			if (T_HasElapsed(tb, SDHC_CMD_TIMEOUT_US)) {
 				u32 status32 = readl(host->base + INT_STATUS);
 				u32 pstate = readl(host->base + PRES_STATE);

@@ -221,6 +221,7 @@ extern void CPU_Init(void);
 extern void CPU_DCacheFlushAll(void);
 extern void CPU_L2Disable(void);
 extern void CPU_L2Enable(void);
+extern void CPU_Idle(void);
 
 #endif /* __ASSEMBLY__ */
 

@@ -15,6 +15,7 @@
 #include <npll/log.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/utils.h>
 
 static REGISTER_DRIVER(aesDrv);
@@ -34,6 +35,10 @@ static volatile struct aesRegs *const regs = (volatile struct aesRegs *)HOLLYWOO
 #define AES_CTRL_ERR  BIT(29)
 #define AES_CTRL_IRQ  BIT(30)
 #define AES_CTRL_EXEC BIT(31)
+
+static void aesIRQ(enum irqDev dev) {
+	(void)dev;
+}
 
 static int aesReset(void) {
 	bool irqs;
@@ -66,12 +71,12 @@ static int aesReset(void) {
 static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key, size_t size, u32 aesCtrlFlags) {
 	int ret;
 	u64 tb;
-	u32 ctrl;
+	u32 ctrl, elapsed;
 	bool irqs;
 
 	assert(H_ConsoleType != CONSOLE_TYPE_GAMECUBE);
 
-	ctrl = AES_CTRL_EXEC | aesCtrlFlags | ((u32)(size / 16) - 1);
+	ctrl = AES_CTRL_EXEC | AES_CTRL_IRQ | aesCtrlFlags | ((u32)(size / 16) - 1);
 	irqs = IRQ_DisableSave();
 
 	if (size < 16 || size & 15) {
@@ -126,6 +131,12 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 			IRQ_Restore(irqs);
 			return -ETIMEDOUT;
 		}
+		if (irqs && IRQ_CanWait(IRQDEV_AES)) {
+			elapsed = T_ElapsedUsecs(tb);
+			if (elapsed < 100 * 1000)
+				IRQ_WaitLocked(IRQDEV_AES, 100 * 1000 - elapsed);
+		}
+
 	}
 
 	IRQ_Restore(irqs);
@@ -150,10 +161,13 @@ static void aesInit(void) {
 		aesDrv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
+	IRQ_RegisterHandler(IRQDEV_AES, aesIRQ);
+	IRQ_Unmask(IRQDEV_AES);
 	aesDrv.state = DRIVER_STATE_READY;
 }
 
 static void aesCleanup(void) {
+	IRQ_Mask(IRQDEV_AES);
 	aesReset();
 	aesDrv.state = DRIVER_STATE_NOT_READY;
 }

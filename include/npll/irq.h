@@ -34,7 +34,7 @@ enum irqDev {
 
 typedef void (*irqHandler_t)(enum irqDev dev);
 
-extern void __attribute__((noreturn)) IRQ_Handle(void);
+extern void IRQ_Handle(void);
 extern void __attribute__((noreturn)) IRQ_Return(void);
 extern void IRQ_Init(void);
 extern void IRQ_Enable(void);
@@ -46,6 +46,8 @@ static inline void IRQ_Restore(bool enabled) {
 		IRQ_Enable();
 	/* already disabled, no need */
 }
+extern bool IRQ_CanWait(enum irqDev dev);
+extern void IRQ_WaitLocked(enum irqDev dev, unsigned int timeoutUsecs);
 extern void IRQ_Mask(enum irqDev dev);
 extern void IRQ_Unmask(enum irqDev dev);
 

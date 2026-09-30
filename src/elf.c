@@ -15,6 +15,7 @@
 #include <npll/elf.h>
 #include <npll/fs.h>
 #include <npll/irq.h>
+#include <npll/thread.h>
 #include <npll/linux.h>
 #include <npll/log.h>
 #include <npll/panic.h>
@@ -352,6 +353,7 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	 * disables IRQs before touching them as well.
 	 */
 	if (dtb) {
+		TH_Quiesce();
 		irqWasEnabled = IRQ_DisableSave();
 		irqStateSaved = true;
 	}
@@ -475,6 +477,7 @@ fail_closed:
 		if (loadStarted)
 			panic("Linux load failed after overwriting exception vectors");
 		IRQ_Restore(irqWasEnabled);
+		TH_Resume();
 	}
 	return ret;
 }

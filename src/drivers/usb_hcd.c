@@ -18,6 +18,8 @@
 #include <npll/log.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/irq.h>
+#include <npll/thread.h>
 #include <npll/usb.h>
 #include <npll/utils.h>
 
@@ -181,11 +183,15 @@ struct ohciIntEndpoint {
 };
 
 struct hcdPrivate {
+	struct threadMutex mutex;
+	volatile u32 irqSequence;
 	enum hcdType type;
 	struct ohciHCCA *hcca;
 	struct ehciSchedule *ehci;
 	u32 *periodicList;
 	struct ohciSchedule *ohci;
+	struct ohciControlQuirk *ohciControlQuirk;
+	bool ohciControlUsed;
 	struct ehciIntEndpoint *ehciInt;   /* resident interrupt QH chain */
 	struct ohciIntEndpoint *ohciInt;   /* resident interrupt ED chain */
 	bool periodicOn;
@@ -195,6 +201,12 @@ struct ehciSchedule {
 	struct ehciQh qh;
 	struct ehciQtd qtd[EHCI_MAX_QTDS];
 	struct usbSetupPacket setup __attribute__((aligned(32)));
+} __attribute__((aligned(32)));
+
+/* Separate from the reusable transfer schedule: hardware may retain this ED */
+struct ohciControlQuirk {
+	struct ohciED ed;
+	struct ohciTD dummy;
 } __attribute__((aligned(32)));
 
 struct ohciSchedule {
@@ -215,12 +227,82 @@ static struct hcdPrivate privateData[USB_MAX_CONTROLLERS];
 static struct usbHostController hcs[USB_MAX_CONTROLLERS];
 static uint numHCs;
 
+static enum irqDev hcdIRQ(struct usbHostController *hc) {
+	switch (hc->bus) {
+	case 0: return IRQDEV_EHCI0;
+	case 1: return IRQDEV_OHCI0;
+	case 2: return IRQDEV_OHCI1;
+	case 3: return IRQDEV_EHCI1;
+	case 4: return IRQDEV_OHCI2;
+	case 5: return IRQDEV_EHCI2;
+	case 6: return IRQDEV_OHCI3;
+	default: return IRQDEV_MAX;
+	}
+}
+
+static void hcdInterrupt(enum irqDev dev) {
+	uint i;
+	u32 status;
+	struct usbHostController *hc;
+	struct hcdPrivate *priv;
+
+	for (i = 0; i < numHCs; i++) {
+		hc = &hcs[i];
+		priv = hc->priv;
+
+		if (hcdIRQ(hc) != dev)
+			continue;
+
+		if (priv->type == HCD_EHCI) {
+			status = EHCI_ReadOp32(hc->mmioBase, EHCI_USBSTS_OFF) & 0x3fu;
+			EHCI_WriteOp32(hc->mmioBase, EHCI_USBSTS_OFF, status);
+		}
+		else {
+			status = OHCI_Read32(hc->mmioBase, OHCI_INTR_STATUS);
+			if ((status & OHCI_INTR_STATUS_WDH) && priv->hcca) {
+				dcache_invalidate(&priv->hcca->doneHead, sizeof(priv->hcca->doneHead));
+				priv->hcca->doneHead = 0;
+				dcache_flush(&priv->hcca->doneHead, sizeof(priv->hcca->doneHead));
+			}
+
+			OHCI_Write32(hc->mmioBase, OHCI_INTR_STATUS, status);
+		}
+
+		priv->irqSequence++;
+	}
+}
+
+static void hcdWait(struct usbHostController *hc, u32 sequence, u64 start, u32 timeout) {
+	struct hcdPrivate *priv = hc->priv;
+	enum irqDev dev = hcdIRQ(hc);
+	bool enabled = IRQ_DisableSave();
+	u32 elapsed = T_ElapsedUsecs(start);
+
+	if (elapsed >= timeout) {
+		IRQ_Restore(enabled);
+		return;
+	}
+
+	if (enabled && IRQ_CanWait(dev)) {
+		if (priv->irqSequence == sequence)
+			IRQ_WaitLocked(dev, timeout - elapsed);
+
+		IRQ_Restore(enabled);
+	}
+	else {
+		IRQ_Restore(enabled);
+		udelay(100);
+	}
+}
+
 static bool waitEHCI(struct usbHostController *hc, u32 off, u32 mask, bool set) {
 	u64 start = mftb();
+
 	while (!!(EHCI_ReadOp32(hc->mmioBase, off) & mask) != set) {
-		if (T_HasElapsed(start, 1000000u))
+		if (T_HasElapsed(start, 1000 * 1000))
 			return false;
 	}
+
 	return true;
 }
 
@@ -261,12 +343,18 @@ static int ehciStart(struct usbHostController *hc) {
 		priv->periodicList[i] = npll_cpu_to_le32(EHCI_LINK_TERMINATE);
 	dcache_flush(priv->periodicList, 4096);
 
-	EHCI_WriteOp32(hc->mmioBase, EHCI_USBINTR_OFF, 0);
+	if (hc->mmioBase == HOLLYWOOD_EHCI0_BASE)
+		EHCI_Write32(HOLLYWOOD_EHCI0_BASE, HLWD_EHCI_CTL_OFF,
+			EHCI_Read32(HOLLYWOOD_EHCI0_BASE, HLWD_EHCI_CTL_OFF) |
+			HLWD_EHCI_CTL_INTE);
+
+	EHCI_WriteOp32(hc->mmioBase, EHCI_USBINTR_OFF, EHCI_INTR_USBINTEN | EHCI_INTR_USBERINTEN);
 	EHCI_WriteOp32(hc->mmioBase, EHCI_PERIODICLIST_OFF, ehciPhys(priv->periodicList));
 	EHCI_WriteOp32(hc->mmioBase, EHCI_CONFIGFLAG_OFF, 1);
 
 	command = EHCI_ReadOp32(hc->mmioBase, EHCI_USBCMD_OFF);
-	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command | EHCI_CMD_RUN);
+	command = (command & ~EHCI_CMD_ITC_MASK) | EHCI_CMD_ITC_1 | EHCI_CMD_RUN;
+	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command);
 	if (!waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_HALTED, false)) {
 		free(priv->periodicList);
 		priv->periodicList = NULL;
@@ -368,6 +456,7 @@ static int ohciStart(struct usbHostController *hc) {
 	/* HC reset below clears PLE; keep the resident-interrupt tracking in sync */
 	priv->ohciInt = NULL;
 	priv->periodicOn = false;
+	priv->ohciControlUsed = false;
 
 	priv->hcca = M_PoolAlloc(POOL_MEM2, sizeof(*priv->hcca), 256);
 	memset(priv->hcca, 0, sizeof(*priv->hcca));
@@ -405,8 +494,14 @@ static int ohciStart(struct usbHostController *hc) {
 	OHCI_Write32(hc->mmioBase, OHCI_FM_INTERVAL, 0x27782edfu);
 	OHCI_Write32(hc->mmioBase, OHCI_PERIODIC_START, 0x2a2fu);
 	OHCI_Write32(hc->mmioBase, OHCI_HCCA, (u32)(uintptr_t)virtToPhys(priv->hcca));
+	if (hc->mmioBase == HOLLYWOOD_OHCI0_BASE || hc->mmioBase == HOLLYWOOD_OHCI1_BASE)
+		EHCI_Write32(HOLLYWOOD_EHCI0_BASE, HLWD_EHCI_CTL_OFF,
+			EHCI_Read32(HOLLYWOOD_EHCI0_BASE, HLWD_EHCI_CTL_OFF) |
+			HLWD_EHCI_CTL_UNKNOWN | HLWD_EHCI_CTL_OH0INTE | HLWD_EHCI_CTL_OH1INTE);
+
 	control = OHCI_Read32(hc->mmioBase, OHCI_CONTROL) & ~(OHCI_CTRL_HCFS_MASK | OHCI_CTRL_PERIODIC | OHCI_CTRL_CONTROL | OHCI_CTRL_BULK);
 	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_OPERATIONAL);
+	OHCI_Write32(hc->mmioBase, OHCI_INTR_ENABLE, OHCI_INTR_ENABLE_MIE | OHCI_INTR_ENABLE_WDH | OHCI_INTR_ENABLE_UE);
 	udelay(10000u);
 	return 0;
 }
@@ -427,6 +522,12 @@ static void ohciStop(struct usbHostController *hc) {
 		free(priv->hcca);
 		priv->hcca = NULL;
 	}
+	if (priv->ohciControlQuirk) {
+		free(priv->ohciControlQuirk);
+		priv->ohciControlQuirk = NULL;
+	}
+	priv->ohciControlUsed = false;
+
 }
 
 static int ohciPortStatus(struct usbHostController *hc, uint port, struct usbRootPortStatus *status) {
@@ -566,7 +667,7 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 	struct ehciSchedule *sched = priv->ehci;
 	struct ehciQtd *qtd;
 	u32 qhPhys, statusPhys, nextPhys, token, chunk, dmaLength, remaining, completed;
-	u32 command, overlayNext, qtdToken;
+	u32 command, overlayNext, qtdToken, sequence;
 	u32 failureToken = 0;
 	u8 *cursor;
 	uint dataFirst, statusIndex, count, i;
@@ -653,6 +754,8 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 
 	start = mftb();
 	while (true) {
+		sequence = ((struct hcdPrivate *)hc->priv)->irqSequence;
+
 		/*
 		 * Once a qTD has been prefetched, its backing token is not a
 		 * reliable indication of execution progress on Hollywood/Latte.
@@ -682,6 +785,7 @@ static int ehciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 			ehciDisableAsync(hc);
 			return -ETIMEDOUT;
 		}
+		hcdWait(hc, sequence, start, transfer->timeoutUsecs);
 	}
 
 finished:
@@ -748,7 +852,7 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 	struct usbEndpoint *endpoint = transfer->endpoint;
 	struct ehciQtd *qtd;
 	u32 qhPhys, nextPhys, token, chunk, remaining, qtdToken;
-	u32 completed = 0;
+	u32 sequence, completed = 0;
 	u8 *cursor = transfer->data;
 	uint count = 0, i, packets;
 	bool input, toggle, finished;
@@ -786,8 +890,8 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 		if (toggle)
 			token |= EHCI_QTD_TOGGLE;
 
-		if (i + 1u == count)
-			token |= EHCI_QTD_IOC;
+		/* A short IN packet may terminate at any qTD */
+		token |= EHCI_QTD_IOC;
 
 		ehciBuildQTD(&sched->qtd[i], nextPhys, input ? EHCI_LINK_TERMINATE : nextPhys, token, cursor, chunk);
 		packets = chunk ? (chunk + endpoint->maxPacketSize - 1u) / endpoint->maxPacketSize : 1u;
@@ -823,6 +927,7 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 
 	start = mftb();
 	while (true) {
+		sequence = ((struct hcdPrivate *)hc->priv)->irqSequence;
 		finished = true;
 		for (i = 0; i < count; i++) {
 			dcache_invalidate(&sched->qtd[i], sizeof(sched->qtd[i]));
@@ -856,6 +961,7 @@ static int ehciDataTransfer(struct usbHostController *hc, struct usbTransfer *tr
 			ehciDisableAsync(hc);
 			return -ETIMEDOUT;
 		}
+		hcdWait(hc, sequence, start, transfer->timeoutUsecs);
 	}
 
 dataFinished:
@@ -1161,7 +1267,7 @@ static void ohciBuildTD(struct ohciTD *td, u32 next, u32 flags,
 	u32 address = length ? ohciPhys(buffer) : 0;
 
 	memset(td, 0, sizeof(*td));
-	td->control = npll_cpu_to_le32(flags | OHCI_TD_NO_INTERRUPT | OHCI_TD_CC_NOT_ACCESSED);
+	td->control = npll_cpu_to_le32(flags | OHCI_TD_CC_NOT_ACCESSED);
 	td->currentBuffer = npll_cpu_to_le32(address);
 	td->next = npll_cpu_to_le32(next);
 	td->bufferEnd = npll_cpu_to_le32(length ? address + length - 1u : 0);
@@ -1203,11 +1309,12 @@ static void ohciWaitFrames(struct usbHostController *hc, uint frames) {
 		dcache_invalidate(priv->hcca, sizeof(*priv->hcca));
 		if ((u16)(npll_le16_to_cpu(priv->hcca->frameNumber) - start) >= frames)
 			return;
+		udelay(100);
 	} while (!T_HasElapsed(deadline, 1000u * (frames + 1u)));
 }
 
 static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched, uint numTDs, enum ohciListType list, u32 timeoutUsecs, u32 *conditionCode) {
-	u32 control, tdControl, cc = 0xfu;
+	u32 control, tdControl, cc = 0xfu, sequence;
 	u64 start;
 	uint i;
 	bool complete;
@@ -1227,6 +1334,7 @@ static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched,
 
 	start = mftb();
 	while (true) {
+		sequence = ((struct hcdPrivate *)hc->priv)->irqSequence;
 		complete = true;
 		for (i = 0; i < numTDs; i++) {
 			dcache_invalidate(&sched->td[i], sizeof(sched->td[i]));
@@ -1245,6 +1353,7 @@ static int ohciRunList(struct usbHostController *hc, struct ohciSchedule *sched,
 			cc = 0xfu;
 			break;
 		}
+		hcdWait(hc, sequence, start, timeoutUsecs);
 	}
 
 ohciDone:
@@ -1313,6 +1422,52 @@ static void ohciSetStatus(struct usbTransfer *transfer, u32 cc) {
 		transfer->status = USB_TRANSFER_ERROR;
 }
 
+/*
+ * Hollywood's OHCIs need an empty control ED processed before reusing a
+ * control list
+ */
+static void ohciPrimeControl(struct usbHostController *hc) {
+	struct hcdPrivate *priv = hc->priv;
+	struct ohciControlQuirk *quirk;
+	u32 control, head, dummy;
+	u64 start;
+	bool enabled;
+
+	if (hc->mmioBase != HOLLYWOOD_OHCI0_BASE && hc->mmioBase != HOLLYWOOD_OHCI1_BASE)
+		return;
+	if (!priv->ohciControlUsed) {
+		priv->ohciControlUsed = true;
+		return;
+	}
+
+	if (!priv->ohciControlQuirk) {
+		quirk = M_PoolAlloc(POOL_MEM2, sizeof(*quirk), 32);
+		memset(quirk, 0, sizeof(*quirk));
+		dummy = ohciPhys(&quirk->dummy);
+		quirk->ed.head = npll_cpu_to_le32(dummy);
+		quirk->ed.tail = npll_cpu_to_le32(dummy);
+		quirk->ed.control = npll_cpu_to_le32(OHCI_ED_OUT);
+		dcache_flush(quirk, sizeof(*quirk));
+		priv->ohciControlQuirk = quirk;
+	}
+
+	quirk = priv->ohciControlQuirk;
+	enabled = IRQ_DisableSave();
+	control = OHCI_Read32(hc->mmioBase, OHCI_CONTROL);
+	head = OHCI_Read32(hc->mmioBase, OHCI_CONTROL_HEAD);
+	OHCI_Write32(hc->mmioBase, OHCI_CONTROL_HEAD, ohciPhys(&quirk->ed));
+	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_CONTROL);
+	OHCI_Write32(hc->mmioBase, OHCI_COMMAND_STATUS, OHCI_CMD_CONTROL_FILLED);
+	start = mftb();
+	while (OHCI_Read32(hc->mmioBase, OHCI_CONTROL_CURRENT)) {
+		if (T_HasElapsed(start, 10u))
+			break;
+	}
+	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control);
+	OHCI_Write32(hc->mmioBase, OHCI_CONTROL_HEAD, head);
+	IRQ_Restore(enabled);
+}
+
 static int ohciControlTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
 	struct hcdPrivate *priv = hc->priv;
 	struct ohciSchedule *sched = priv->ohci;
@@ -1327,6 +1482,8 @@ static int ohciControlTransfer(struct usbHostController *hc, struct usbTransfer 
 		return -EINVAL;
 	if (transfer->length && ohciTDCapacity(transfer->data, transfer->length) < transfer->length)
 		return -EMSGSIZE;
+
+	ohciPrimeControl(hc);
 
 	memset(sched, 0, sizeof(*sched));
 	memcpy(&sched->setup, transfer->setup, sizeof(sched->setup));
@@ -1622,7 +1779,7 @@ static int ohciInterruptPoll(struct usbHostController *hc, struct usbEndpoint *e
 	return 1;
 }
 
-static int hcdTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
+static int hcdDoTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
 	struct hcdPrivate *priv = hc->priv;
 
 	if (priv->type == HCD_EHCI && (transfer->endpoint->attributes & USB_ENDPOINT_XFER_MASK) == USB_ENDPOINT_XFER_CONTROL)
@@ -1643,6 +1800,17 @@ static int hcdTransfer(struct usbHostController *hc, struct usbTransfer *transfe
 	 */
 	transfer->status = USB_TRANSFER_ERROR;
 	return -ENOSYS;
+}
+
+static int hcdTransfer(struct usbHostController *hc, struct usbTransfer *transfer) {
+	struct hcdPrivate *priv = hc->priv;
+	int ret;
+
+	TH_Lock(&priv->mutex);
+	ret = hcdDoTransfer(hc, transfer);
+	TH_Unlock(&priv->mutex);
+
+	return ret;
 }
 
 static const struct usbHostControllerOps ehciOps = {
@@ -1722,10 +1890,36 @@ static void usbHCDInit(void) {
 		usbHCDDriver.state = DRIVER_STATE_FAULTED;
 		return;
 	}
+
+	IRQ_RegisterHandler(IRQDEV_EHCI0, hcdInterrupt);
+	IRQ_RegisterHandler(IRQDEV_OHCI0, hcdInterrupt);
+	IRQ_RegisterHandler(IRQDEV_OHCI1, hcdInterrupt);
+	IRQ_Unmask(IRQDEV_EHCI0);
+	IRQ_Unmask(IRQDEV_OHCI0);
+	IRQ_Unmask(IRQDEV_OHCI1);
+
+	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+		IRQ_RegisterHandler(IRQDEV_EHCI1, hcdInterrupt);
+		IRQ_Unmask(IRQDEV_EHCI1);
+		IRQ_RegisterHandler(IRQDEV_OHCI2, hcdInterrupt);
+		IRQ_Unmask(IRQDEV_OHCI2);
+		IRQ_RegisterHandler(IRQDEV_EHCI2, hcdInterrupt);
+		IRQ_Unmask(IRQDEV_EHCI2);
+		IRQ_RegisterHandler(IRQDEV_OHCI3, hcdInterrupt);
+		IRQ_Unmask(IRQDEV_OHCI3);
+	}
+
 	usbHCDDriver.state = DRIVER_STATE_READY;
 }
 
 static void usbHCDCleanup(void) {
+	IRQ_Mask(IRQDEV_EHCI0);
+	IRQ_Mask(IRQDEV_OHCI0);
+	IRQ_Mask(IRQDEV_OHCI1);
+	IRQ_Mask(IRQDEV_EHCI1);
+	IRQ_Mask(IRQDEV_OHCI2);
+	IRQ_Mask(IRQDEV_EHCI2);
+	IRQ_Mask(IRQDEV_OHCI3);
 	while (numHCs) {
 		numHCs--;
 		USB_UnregisterHostController(&hcs[numHCs]);
