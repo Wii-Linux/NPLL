@@ -8,6 +8,9 @@
 #ifndef _LATTE_SMC_H
 #define _LATTE_SMC_H
 
+#include <npll/types.h>
+#include <npll/utils.h>
+
 #define SMC_ADDRESS             0x50
 
 #define SMC_CMD_ODD_EJECT       0x02
@@ -25,5 +28,9 @@
 #define SMC_EVENT_BUTTONS       (SMC_EVENT_EJECT_BUTTON | SMC_EVENT_POWER_BUTTON)
 
 #define SMC_DEVICE_WIFI24       BIT(0)
+
+extern int H_WiiUSMCReadRegister(u8 reg, u8 *value);
+extern int H_WiiUSMCWriteRegister(u8 reg, u8 value);
+extern int H_WiiUSMCSendCmd(u8 cmd);
 
 #endif /* _LATTE_SMC_H */

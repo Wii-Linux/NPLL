@@ -13,6 +13,7 @@
 #include <npll/log.h>
 #include <npll/timer.h>
 #include <npll/latte/smc.h>
+#include <npll/hollywood/gpio.h>
 
 static REGISTER_DRIVER(smcDrv);
 
@@ -22,7 +23,7 @@ static u8 previousEvents;
 static bool pollErrorLogged;
 u8 H_WiiUSMCFWRev = 0, H_WiiUSMCChipRev = 0;
 
-static int smcReadRegister(u8 reg, u8 *value) {
+int H_WiiUSMCReadRegister(u8 reg, u8 *value) {
 	struct i2cMsg msgs[2] = {
 		{
 			.addr = SMC_ADDRESS,
@@ -44,9 +45,18 @@ static int smcReadRegister(u8 reg, u8 *value) {
 	return ret == 2 ? 0 : -EIO;
 }
 
+int H_WiiUSMCWriteRegister(u8 reg, u8 value) {
+	u8 xfer[2] = { reg, value };
+	return I2C_Write(I2C_BUS_SMC, SMC_ADDRESS, xfer, 2);
+}
+
+int H_WiiUSMCSendCmd(u8 cmd) {
+	return I2C_Write(I2C_BUS_SMC, SMC_ADDRESS, &cmd, sizeof(cmd));
+}
+
 static void smcPoll(void) {
 	u8 events, pressed;
-	int ret = smcReadRegister(SMC_REG_SYSTEM_EVENT, &events);
+	int ret = H_WiiUSMCReadRegister(SMC_REG_SYSTEM_EVENT, &events);
 
 	if (ret) {
 		if (!pollErrorLogged) {
@@ -78,25 +88,25 @@ static void smcInit(void) {
 	u8 oddFlag, events;
 	int ret;
 
-	ret = smcReadRegister(SMC_REG_PROGRAM_REV, &H_WiiUSMCFWRev);
+	ret = H_WiiUSMCReadRegister(SMC_REG_PROGRAM_REV, &H_WiiUSMCFWRev);
 	if (ret) {
 		log_printf("SMC probe failed: %d\r\n", ret);
 		smcDrv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
-	ret = smcReadRegister(SMC_REG_CHIP_REV, &H_WiiUSMCChipRev);
+	ret = H_WiiUSMCReadRegister(SMC_REG_CHIP_REV, &H_WiiUSMCChipRev);
 	if (ret) {
 		log_printf("SMC chip revision read failed: %d\r\n", ret);
 		smcDrv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
-	ret = smcReadRegister(SMC_REG_ODD_FLAG, &oddFlag);
+	ret = H_WiiUSMCReadRegister(SMC_REG_ODD_FLAG, &oddFlag);
 	if (ret) {
 		log_printf("SMC optical-drive flag read failed: %d\r\n", ret);
 		smcDrv.state = DRIVER_STATE_FAULTED;
 		return;
 	}
-	ret = smcReadRegister(SMC_REG_SYSTEM_EVENT, &events);
+	ret = H_WiiUSMCReadRegister(SMC_REG_SYSTEM_EVENT, &events);
 	if (ret) {
 		log_printf("SMC system-event read failed: %d\r\n", ret);
 		smcDrv.state = DRIVER_STATE_FAULTED;

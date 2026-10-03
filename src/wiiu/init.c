@@ -65,9 +65,7 @@ static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 }
 
 static void wiiuEject(void) {
-	u8 cmd = SMC_CMD_ODD_EJECT;
-
-	I2C_Write(I2C_BUS_SMC, SMC_ADDRESS, &cmd, sizeof(cmd));
+	H_WiiUSMCSendCmd(SMC_CMD_ODD_EJECT);
 }
 
 static struct platOps wiiuPlatOps = {
