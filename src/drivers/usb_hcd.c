@@ -990,10 +990,7 @@ dataFinished:
 
 		chunk -= EHCI_QTD_REMAIN(qtdToken);
 		completed += chunk;
-		packets = chunk ? (chunk + endpoint->maxPacketSize - 1u) / endpoint->maxPacketSize : 1u;
-
-		if (packets & 1u)
-			toggle = !toggle;
+		toggle = !!(qtdToken & EHCI_QTD_TOGGLE);
 
 		if (qtdToken & EHCI_QTD_ERROR) {
 			transfer->actualLength = completed;
@@ -1149,6 +1146,12 @@ static void ehciInterruptStop(struct usbHostController *hc, struct usbEndpoint *
 	/* let the controller finish any in-flight frame before freeing */
 	udelay(2000);
 
+	dcache_invalidate(ie->sched, sizeof(*ie->sched));
+	if (npll_le32_to_cpu(ie->sched->qh.current) == ehciPhys(&ie->sched->qtd))
+		ep->toggle = !!(npll_le32_to_cpu(ie->sched->qh.overlayToken) & EHCI_QTD_TOGGLE);
+	else
+		ep->toggle = !!(npll_le32_to_cpu(ie->sched->qtd.token) & EHCI_QTD_TOGGLE);
+
 	free(ie->buffer);
 	free(ie->sched);
 	free(ie);
@@ -1178,13 +1181,20 @@ static int ehciInterruptArm(struct usbHostController *hc, struct usbDevice *dev,
 	ie->buffer = M_PoolAlloc(POOL_MEM2, alignUpU32(length, 32), 32);
 	ie->ep = ep;
 	ie->length = length;
+	ie->toggle = ep->toggle;
 
 	memset(&tmp, 0, sizeof(tmp));
 	tmp.device = dev;
 	tmp.endpoint = ep;
 
 	memset(ie->sched, 0, sizeof(*ie->sched));
-	ie->sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(&tmp, false));
+	/*
+	 * EHCI 4.9: periodic endpoints must disable NAK throttling.  The
+	 * asynchronous schedule reloads NakCnt, but this periodic chain does not;
+	 * inheriting RL=4 can stop polling a quiet endpoint without an error,
+	 * causeing incredibly strange looking problems, like DRC input crapping out.
+	 */
+	ie->sched->qh.endpoint = npll_cpu_to_le32(ehciQhEndpoint(&tmp, false) & ~EHCI_QH_RL(0xfu));
 	ie->sched->qh.endpointCaps = npll_cpu_to_le32(ehciIntCaps(&tmp));
 	ehciIntArmQtd(ie);
 
@@ -1233,12 +1243,7 @@ static int ehciInterruptPoll(struct usbHostController *hc, struct usbEndpoint *e
 		memcpy(data, ie->buffer, got);
 	}
 
-	/*
-	 * HID reports fit in one transaction, but resident bulk-IN can span many
-	 * packets.  Advance DATA0/DATA1 by the parity of packets transferred.
-	 */
-	if (got)
-		ie->toggle ^= (u8)(((got + ep->maxPacketSize - 1u) / ep->maxPacketSize) & 1u);
+	ie->toggle = !!(token & EHCI_QTD_TOGGLE);
 	ep->toggle = ie->toggle;
 	*actual = got;
 
