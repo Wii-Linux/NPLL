@@ -112,6 +112,7 @@ struct usbHostControllerOps {
 	int (*rootPortStatus)(struct usbHostController *hc, uint port, struct usbRootPortStatus *status);
 	int (*rootPortReset)(struct usbHostController *hc, uint port, enum usbSpeed *speed);
 	void (*rootPortClearChange)(struct usbHostController *hc, uint port);
+	int (*rootPortDisable)(struct usbHostController *hc, uint port);
 };
 
 struct usbHostController {

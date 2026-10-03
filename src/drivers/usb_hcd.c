@@ -448,6 +448,26 @@ static void ehciClearChange(struct usbHostController *hc, uint port) {
 	EHCI_WriteOp32(hc->mmioBase, EHCI_PORTSC_OFF(port), value | (value & EHCI_PORT_CHANGE));
 }
 
+static int ehciPortDisable(struct usbHostController *hc, uint port) {
+	u32 before, after;
+	u64 tb;
+
+	if (port >= hc->numPorts)
+		return -EINVAL;
+
+	before = EHCI_ReadOp32(hc->mmioBase, EHCI_PORTSC_OFF(port));
+	EHCI_WriteOp32(hc->mmioBase, EHCI_PORTSC_OFF(port), before & ~(EHCI_PORT_ENABLE | EHCI_PORT_CHANGE));
+
+	tb = mftb();
+	do {
+		after = EHCI_ReadOp32(hc->mmioBase, EHCI_PORTSC_OFF(port));
+		if (!(after & EHCI_PORT_ENABLE))
+			break;
+	} while (!T_HasElapsed(tb, 1000));
+
+	return (after & EHCI_PORT_ENABLE) ? -EIO : 0;
+}
+
 static int ohciStart(struct usbHostController *hc) {
 	struct hcdPrivate *priv = hc->priv;
 	u32 control, ports;
@@ -1830,6 +1850,7 @@ static const struct usbHostControllerOps ehciOps = {
 	.rootPortStatus = ehciPortStatus,
 	.rootPortReset = ehciPortReset,
 	.rootPortClearChange = ehciClearChange,
+	.rootPortDisable = ehciPortDisable,
 };
 static const struct usbHostControllerOps ohciOps = {
 	.start = ohciStart,
