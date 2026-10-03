@@ -62,4 +62,10 @@
 /* BCM2045A doesn't enumerate on Wii U without this */
 #define GPIO_BLUETOOTHMODE BIT(27)
 
+/* 2.4GHz WiFi Mode (Wii U) */
+#define GPIO_WIFI_MODE BIT(29)
+
+/* 5GHz (DRC) WiFi mode (Wii U) */
+#define GPIO_DWIFI_MODE BIT(1)
+
 #endif /* _GPIO_H */
