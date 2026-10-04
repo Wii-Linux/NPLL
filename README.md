@@ -138,10 +138,12 @@ For info about the dedicated NPLL config format, see `CONFIG_FORMAT.txt`.
   - [x] Swiss
   - [ ] HBC
   - [ ] Wii System Menu -> FOSS Apploader
+  - [x] Installed as TID 1-2 (sysmenu), loaded by IOS
 - `npll_virt.dol` - NPLL with virtual load addresses, virtual entrypoint
   - [x] Swiss
   - [x] HBC
   - [x] Wii System Menu -> FOSS Apploader
+  - [x] Installed as TID 1-2 (sysmenu), loaded by IOS
 
 
 ## Copyright / Legal / Disclaimers
