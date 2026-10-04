@@ -211,6 +211,7 @@ static void genericEntryThread(void *entry) {
 	if (H_PreEntryHook)
 		H_PreEntryHook();
 	CPU_DCacheFlushAll();
+	IRQ_Shutdown();
 	ELF_DoEntry(0, 0, 0, entry, false);
 }
 
