@@ -15,6 +15,8 @@ struct videoInfo {
 	u32 *fb;
 	uint width;
 	uint height;
+	/* Bytes per framebuffer row; zero means width * sizeof(u32). */
+	uint stride;
 	void (*flush)(uint x, uint y, uint width, uint height);
 	void (*scroll)(uint rows);
 	struct driver *driver;

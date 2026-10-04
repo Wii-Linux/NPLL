@@ -22,7 +22,7 @@ static void drcFlush(uint x, uint y, uint width, uint height);
 #define TV_FB  ((u32 *)NPLL_WIIU_TV_FB_BASE)
 #define DRC_FB ((u32 *)NPLL_WIIU_DRC_FB_BASE)
 
-#define FB_SIZE(info) ((info).width * (info).height * (uint)sizeof(u32))
+#define FB_SIZE(info) ((info).stride * (info).height)
 
 static u32 *tvShadowFB;
 static u32 *drcShadowFB;
@@ -31,6 +31,7 @@ static u32 *drcSavedFB;
 static struct videoInfo tvVidInfo = {
 	.fb = NULL,
 	.width = 1280,
+	.stride = 1280 * sizeof(u32),
 	.height = 720,
 	.flush = tvFlush,
 	.scroll = tvScroll,
@@ -39,7 +40,8 @@ static struct videoInfo tvVidInfo = {
 
 static struct videoInfo drcVidInfo = {
 	.fb = NULL,
-	.width = 896,
+	.width = 854,
+	.stride = 896 * sizeof(u32),
 	/* linux-loader says it's 504 but that places the bottom line offsecreen for me */
 	.height = 480,
 	.flush = drcFlush,
@@ -66,7 +68,7 @@ static void flushFB(u32 *realFB, u32 *shadowFB, uint stride,
 }
 
 static void tvFlush(uint x, uint y, uint width, uint height) {
-	flushFB(TV_FB, tvShadowFB, tvVidInfo.width, x, y, width, height);
+	flushFB(TV_FB, tvShadowFB, tvVidInfo.stride / sizeof(u32), x, y, width, height);
 }
 
 static void drcFlush(uint x, uint y, uint width, uint height) {
@@ -74,8 +76,8 @@ static void drcFlush(uint x, uint y, uint width, uint height) {
 	u32 pixel, *src, *dest;
 
 	for (row = 0; row < height; row++) {
-		src = drcShadowFB + (y + row) * drcVidInfo.width + x;
-		dest = DRC_FB + (y + row) * drcVidInfo.width + x;
+		src = drcShadowFB + (y + row) * (drcVidInfo.stride / sizeof(u32)) + x;
+		dest = DRC_FB + (y + row) * (drcVidInfo.stride / sizeof(u32)) + x;
 		for (col = 0; col < width; col++) {
 			pixel = src[col];
 			/* linux-loader's DRC surface uses G/R/B? */
@@ -85,12 +87,12 @@ static void drcFlush(uint x, uint y, uint width, uint height) {
 			dest[col] = pixel;
 		}
 	}
-	dcache_flush(DRC_FB + y * drcVidInfo.width + x,
-	    ((height - 1) * drcVidInfo.width + width) * sizeof(u32));
+	dcache_flush(DRC_FB + y * (drcVidInfo.stride / sizeof(u32)) + x,
+	    (height - 1) * drcVidInfo.stride + width * sizeof(u32));
 }
 
 static void tvScroll(uint rows) {
-	uint rowSize = tvVidInfo.width * (uint)sizeof(u32);
+	uint rowSize = tvVidInfo.stride;
 	uint size = (tvVidInfo.height - rows) * rowSize;
 
 	memmove(TV_FB, (const u8 *)TV_FB + rows * rowSize, size);

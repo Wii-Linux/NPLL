@@ -76,6 +76,8 @@ extern u8 font[];
 #define CUR_FB (activeConsole->info->fb)
 #define CUR_WIDTH (activeConsole->info->width)
 #define CUR_HEIGHT (activeConsole->info->height)
+#define FB_STRIDE(info) ((info)->stride ? (info)->stride : (info)->width * (uint)sizeof(u32))
+#define CUR_STRIDE FB_STRIDE(activeConsole->info)
 
 /* stolen from the VGA color palette */
 static u32 colors[16] = {
@@ -228,7 +230,7 @@ static void handleEscape(char c) {
 		parsenum(escapeBuf + 1, &mode);
 
 		if (mode == 2) {
-			memset(CUR_FB, 0, CUR_WIDTH * CUR_HEIGHT * sizeof(u32));
+			memset(CUR_FB, 0, CUR_STRIDE * CUR_HEIGHT);
 			markDirty(0, 0, CUR_WIDTH, CUR_HEIGHT);
 			posX = 0;
 			posY = 0;
@@ -349,9 +351,9 @@ static void maybeScroll(void) {
 		return;
 
 	posY = videoOutDev.rows - 1;
-	fontSz = CUR_WIDTH * sizeof(u32) * FONT_HEIGHT;
+	fontSz = CUR_STRIDE * FONT_HEIGHT;
 	srcAddr = (u8 *)CUR_FB + fontSz;
-	size = CUR_WIDTH * sizeof(u32) * (CUR_HEIGHT - FONT_HEIGHT);
+	size = CUR_STRIDE * (CUR_HEIGHT - FONT_HEIGHT);
 
 	/*
 	 * Bring the driver's native framebuffer up to date before shifting it.
@@ -426,7 +428,7 @@ static void odevWriteChar(char c) {
 	}
 
 	row = font + ((u8)c * FONT_HEIGHT);
-	dst = CUR_FB + (posY * FONT_HEIGHT * CUR_WIDTH) +
+	dst = (u32 *)((u8 *)CUR_FB + posY * FONT_HEIGHT * CUR_STRIDE) +
 	    (posX * FONT_WIDTH);
 
 	for (y = 0; y < FONT_HEIGHT; y++) {
@@ -439,7 +441,7 @@ static void odevWriteChar(char c) {
 		}
 
 		row++;
-		dst += CUR_WIDTH;
+		dst = (u32 *)((u8 *)dst + CUR_STRIDE);
 	}
 	markDirty(posX * FONT_WIDTH, posY * FONT_HEIGHT,
 	    FONT_WIDTH, FONT_HEIGHT);
@@ -557,7 +559,7 @@ void V_Register(struct videoInfo *info) {
 		V_FbPtr = info->fb;
 		V_FbWidth = info->width;
 		V_FbHeight = info->height;
-		V_FbStride = info->width * sizeof(u32);
+		V_FbStride = FB_STRIDE(info);
 		V_ActiveDriver = info;
 
 	#ifdef VID_BENCH
@@ -596,7 +598,7 @@ void V_Update(struct videoInfo *info) {
 		V_FbPtr = info->fb;
 		V_FbWidth = info->width;
 		V_FbHeight = info->height;
-		V_FbStride = info->width * sizeof(u32);
+		V_FbStride = FB_STRIDE(info);
 	}
 
 	UI_Invalidate();
@@ -721,7 +723,7 @@ int V_SaveScreenshot(void) {
 	}
 	for (y = V_FbHeight; y-- > 0;) {
 		for (x = 0; x < V_FbWidth; x++) {
-			pixel = V_FbPtr[y * V_FbWidth + x];
+			pixel = ((u32 *)((u8 *)V_FbPtr + y * V_FbStride))[x];
 			row[x * 3] = (u8)pixel;
 			row[x * 3 + 1] = (u8)(pixel >> 8);
 			row[x * 3 + 2] = (u8)(pixel >> 16);
