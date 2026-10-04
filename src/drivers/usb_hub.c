@@ -274,12 +274,22 @@ static void hubRemove(struct usbInterface *interface) {
 	interface->driverData = NULL;
 }
 
-static const struct usbDeviceId hubIds[] = {{
-	.interfaceClass = USB_CLASS_HUB,
-	.interfaceSubclass = 0,
-	.interfaceProtocol = 1,
-	.matchFlags = USB_MATCH_INTERFACE,
-}, { 0 }};
+static const struct usbDeviceId hubIds[] = {
+	{
+		.interfaceClass = USB_CLASS_HUB,
+		.interfaceSubclass = 0,
+		.interfaceProtocol = 0,
+		.matchFlags = USB_MATCH_INTERFACE,
+	},
+	{
+		.interfaceClass = USB_CLASS_HUB,
+		.interfaceSubclass = 0,
+		.interfaceProtocol = 1,
+		.matchFlags = USB_MATCH_INTERFACE,
+	},
+	/* TODO: we can't handle protocol 2 (TT per port) yet */
+	{ 0 }
+};
 
 static struct usbDriver hubDriver = {
 	.name = "USB Hub",
