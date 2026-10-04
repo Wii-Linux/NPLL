@@ -116,34 +116,40 @@ For info about the dedicated NPLL config format, see `CONFIG_FORMAT.txt`.
   - [x] MINI
   - [x] linux-loader
   - [ ] NDEV Boot Program
+  - [x] Priiloader
 - `npll_phys.elf` - NPLL with physical LMA and VMA, physical entrypoint
   - [x] Swiss
   - [x] HBC
   - [x] MINI
   - [x] linux-loader
   - [ ] NDEV Boot Program
+  - [x] Priiloader
 - `npll_virt.elf` - NPLL with virtual LMA and VMA, virtual entrypoint
   - [x] Swiss
   - [x] HBC
   - [ ] MINI
   - [ ] linux-loader
   - [x] NDEV Boot Program
+  - [x] Priiloader
 - `npll_virt_physentry.elf` - NPLL with virtual LMA and VMA, physical entrypoint
   - [x] Swiss
   - [x] HBC
   - [ ] MINI
   - [ ] linux-loader
   - [ ] NDEV Boot Program
+  - [x] Priiloader
 - `npll.dol` - NPLL with physical load addresses, physical entrypoint
   - [x] Swiss
   - [ ] HBC
   - [ ] Wii System Menu -> FOSS Apploader
   - [x] Installed as TID 1-2 (sysmenu), loaded by IOS
+  - [ ] Priiloader
 - `npll_virt.dol` - NPLL with virtual load addresses, virtual entrypoint
   - [x] Swiss
   - [x] HBC
   - [x] Wii System Menu -> FOSS Apploader
   - [x] Installed as TID 1-2 (sysmenu), loaded by IOS
+  - [x] Priiloader
 
 
 ## Copyright / Legal / Disclaimers
