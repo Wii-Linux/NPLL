@@ -4,6 +4,8 @@
  * Copyright (C) 2025 Techflash
  */
 
+#define MODULE "WiiU"
+
 #include <npll/types.h>
 #include <npll/soc.h>
 #include <npll/console.h>
@@ -11,10 +13,16 @@
 #include <npll/timer.h>
 #include <npll/utils.h>
 #include <npll/drivers.h>
+#include <npll/usb.h>
 #include <npll/cpu.h>
+#include <npll/cache.h>
 #include <npll/i2c.h>
 #include <npll/latte/ipc.h>
 #include <npll/latte/smc.h>
+#include <npll/hollywood/gpio.h>
+#include <npll/menu.h>
+#include <npll/video.h>
+#include <npll/log.h>
 
 enum wiiuRev H_WiiURev;
 
@@ -46,7 +54,47 @@ static __attribute__((noreturn)) void wiiuReboot(void) {
 	while (1); /* hang in the hopes that it'll eventually process it */
 }
 
+/* TODO: a lot of this should probably be moved into linux-loader so that Linux can do it too */
+static void powerOffWiFi(void) {
+	u8 value;
+	int ret;
+
+	ret = H_WiiUSMCReadRegister(SMC_REG_DEVICE_ENABLE, &value);
+	if (ret) {
+		log_printf("WiFi shutdown: SMC read failed: %d\r\n", ret);
+		goto disableMode;
+	}
+	udelay(100000);
+	ret = H_WiiUSMCWriteRegister(SMC_REG_DEVICE_ENABLE, (u8)(value & ~SMC_DEVICE_WIFI24));
+	if (ret) {
+		log_printf("WiFi shutdown: SMC write failed: %d\r\n", ret);
+		goto disableMode;
+	}
+	udelay(100000);
+disableMode:
+	HW_GPIO_ENABLE |= GPIO_WIFI_MODE;
+	HW_GPIO_OWNER |= GPIO_WIFI_MODE;
+	HW_GPIOB_OUT &= ~GPIO_WIFI_MODE;
+	HW_GPIO_OUT &= ~GPIO_WIFI_MODE;
+	HW_GPIOB_DIR |= GPIO_WIFI_MODE;
+	HW_GPIO_DIR |= GPIO_WIFI_MODE;
+}
+
 static __attribute__((noreturn)) void wiiuShutdown(void) {
+	powerOffWiFi();
+	USBHID_PowerOffDRC();
+	USB_Shutdown();
+	/* put DRH into standby */
+	HW_GPIO_ENABLE |= GPIO_DWIFI_MODE;
+	HW_GPIOB_OUT &= ~GPIO_DWIFI_MODE;
+	HW_GPIO_OUT &= ~GPIO_DWIFI_MODE;
+	HW_GPIOB_DIR |= GPIO_DWIFI_MODE;
+	HW_GPIO_DIR |= GPIO_DWIFI_MODE;
+	HW_GPIO_OWNER |= GPIO_DWIFI_MODE;
+	udelay(100000);
+	/* send final reset command */
+	H_WiiUSMCSendCmd(SMC_CMD_RESET_WIFI5);
+	udelay(155000);
 	HW_IPC_PPCMSG = LATTE_IPC_CMD_POWEROFF; /* set our data */
 	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
 

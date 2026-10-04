@@ -21,7 +21,7 @@
 #include <npll/usb.h>
 
 #define MAX_USB_KEYBOARDS 8
-#define MAX_USB_DRH 2
+#define DRH_HID_INTERFACES 2
 #define KEYBOARD_POLL_US  10000u
 #define KEYBOARD_REPEAT_DELAY_US 400000u
 #define KEYBOARD_REPEAT_PERIOD_US 100000u
@@ -59,7 +59,7 @@ struct usbDRHState {
 	bool charging;
 };
 
-struct usbDRH {
+struct usbDRHInterface {
 	struct usbInterface *interface;
 	struct usbEndpoint *endpoint;
 	struct usbDRHState state;
@@ -71,7 +71,224 @@ struct usbDRH {
 
 static REGISTER_DRIVER(usbHIDTopDriver);
 static struct usbKeyboard keyboards[MAX_USB_KEYBOARDS];
-static struct usbDRH drhs[MAX_USB_DRH];
+static struct {
+	struct usbDevice *device;
+	struct usbDRHInterface interfaces[DRH_HID_INTERFACES];
+	struct usbEndpoint *cdcIn, *cdcOut;
+	bool cdcArmed;
+	bool shuttingDown;
+} drh;
+
+/* Consume asynchronous notifications while waiting for our CDC reply */
+static int drhStartupCommand(struct usbDevice *dev, struct usbEndpoint *out, struct usbEndpoint *in, u16 *transaction) {
+	u8 command[13] ALIGN(32) = { 0x7e, 1, 0, 0, 0, 0x20, 4, 0, 0, 0, 0, 1, 0xff };
+	u8 reply[1024] ALIGN(32);
+	u8 *p;
+	u32 actual, offset, length;
+	u16 tag = (++*transaction << 4) | 8;
+	uint attempt;
+	int ret;
+
+	command[2] = (u8)(tag >> 8);
+	command[3] = (u8)tag;
+	length = sizeof(command);
+	ret = USB_BulkTransfer(dev, out, command, length, &actual, 100000);
+	if (ret || actual != length)
+		return ret ? ret : -EIO;
+
+	for (attempt = 0; attempt < 8; attempt++) {
+		ret = USB_BulkTransfer(dev, in, reply, sizeof(reply), &actual, 100000);
+		if (ret)
+			return ret;
+
+		for (offset = 0; offset + 12 <= actual; offset += 12 + length) {
+			p = reply + offset;
+			length = ((u32)p[10] << 8) | p[11];
+			if (p[0] != 0x7e || p[1] != 1 || length > actual - offset - 12)
+				break;
+			if (p[2] != command[2] || (p[3] & 0xf0) != (command[3] & 0xf0) ||
+			    p[5] != 0x05 || p[6] != 4 || p[7] != command[7])
+				continue;
+			if (p[8] || p[9])
+				return -EIO;
+
+			return 0;
+		}
+	}
+
+	return -ETIMEDOUT;
+}
+
+static void drhInitializeMode(void) {
+	struct usbInterface *interface;
+	struct usbDevice *dev = drh.device;
+	struct usbEndpoint *candidateOut = NULL, *candidateIn = NULL, *out = NULL, *in = NULL, *ep;
+	u16 transaction = 0x100;
+	uint i, j;
+	int ret;
+
+	for (i = 0; i < dev->numInterfaces; i++) {
+		interface = &dev->interfaces[i];
+		candidateOut = candidateIn = NULL;
+		if (interface->descriptor.interfaceClass != 0x0a)
+			continue;
+
+		for (j = 0; j < interface->numEndpoints; j++) {
+			ep = &interface->endpoints[j];
+			if ((ep->attributes & USB_ENDPOINT_XFER_MASK) != USB_ENDPOINT_XFER_BULK)
+				continue;
+
+			if (ep->address & USB_ENDPOINT_DIR_MASK)
+				candidateIn = ep;
+			else
+				candidateOut = ep;
+		}
+		if (candidateOut && candidateIn) {
+			out = candidateOut;
+			in = candidateIn;
+			break;
+		}
+	}
+	drh.cdcIn = in;
+	drh.cdcOut = out;
+	if (!out)
+		return;
+
+	ret = drhStartupCommand(dev, out, in, &transaction);
+	if (ret)
+		log_printf("DRH normal-mode setup failed: %d\r\n", ret);
+}
+
+static int drhShutdownStationCount(struct usbDevice *dev, struct usbEndpoint *out, struct usbEndpoint *in, u16 *transaction, u32 timeout, u8 *count) {
+	u8 command[12] ALIGN(32) = { 0x7e, 1, 0, 0, 0, 0x20, 2, 2, 0, 0, 0, 0 };
+	u8 reply[1024] ALIGN(32);
+	u16 tag;
+	int ret;
+	u32 actual = 0, remaining;
+	uint offset, length;
+	u64 start = mftb();
+	const u8 *p;
+
+	*transaction = (*transaction % 0x0fff) + 1;
+	tag = (u16)(*transaction << 4) | 8u;
+	command[2] = (u8)(tag >> 8);
+	command[3] = (u8)tag;
+	ret = USB_BulkTransfer(dev, out, command, sizeof(command), &actual, timeout);
+	if (ret || actual != sizeof(command)) {
+		log_printf("DRH station query OUT: USB=%d bytes=%u\r\n", ret, actual);
+		return ret ? ret : -EIO;
+	}
+
+	while (T_ElapsedUsecs(start) < timeout) {
+		remaining = timeout - T_ElapsedUsecs(start);
+		if (!remaining || remaining > timeout)
+			break;
+
+		ret = USB_BulkTransfer(dev, in, reply, sizeof(reply), &actual, remaining);
+		if (ret) {
+			log_printf("DRH station query IN: USB=%d bytes=%u\r\n", ret, actual);
+			return ret;
+		}
+
+		for (offset = 0; offset + 12 <= actual;) {
+			p = reply + offset;
+			length = ((uint)p[10] << 8) | p[11];
+			if (p[0] != 0x7e || p[1] != 1 || length > actual - offset - 12) {
+				log_printf("DRH station query framing: bytes=%u offset=%u length=%u\r\n", actual, offset, length);
+				return -EIO;
+			}
+
+			if (p[2] == command[2] && (p[3] & 0xf0) == (command[3] & 0xf0) &&
+			    p[5] == 5 && p[6] == 2 && p[7] == 2) {
+				if (!p[8] && p[9] == 0x0f && !length)
+					return -EBUSY;
+
+				if (p[8] || p[9] || length != 55 || p[12] > 2) {
+					log_printf("DRH station query rejected: error=%02x%02x length=%u\r\n", p[8], p[9], length);
+					return -EIO;
+				}
+
+				*count = p[12];
+				return 0;
+			}
+			offset += 12 + length;
+		}
+	}
+
+	return -ETIMEDOUT;
+}
+
+void USBHID_PowerOffDRC(void) {
+	static u16 transaction;
+	u8 command[12] ALIGN(32) = { 0x7e, 1, 0, 0, 0, 0, 4, 0x1a, 0, 0, 0, 0 };
+	struct usbDevice *dev;
+	struct usbEndpoint *out = drh.cdcOut, *in = drh.cdcIn;
+	uint target;
+	bool sent = false;
+	u64 tb;
+	u32 actual, elapsed;
+	u16 tag;
+	u8 stationCount = 255;
+	int stationResult, ret;
+	drh.shuttingDown = true;
+
+	if (drh.cdcArmed) {
+		USB_ResidentInStop(drh.device, in);
+		drh.cdcArmed = false;
+	}
+
+	USB_LockTopology();
+	dev = drh.device;
+	if (!dev || !dev->connected)
+		goto unlock;
+	if (!out || !in) {
+		log_puts("DRH shutdown: CDC bulk endpoints missing");
+		goto unlock;
+	}
+	stationResult = drhShutdownStationCount(dev, out, in, &transaction, 100000, &stationCount);
+
+	for (target = stationResult || stationCount > 1 ? 3u : 2u; target >= 2; target--) {
+		actual = 0;
+		transaction = (transaction % 0x0fff) + 1;
+		tag = (u16)(transaction << 4) | 8u;
+		command[2] = (u8)(tag >> 8);
+		command[3] = (u8)tag;
+		command[5] = (u8)((target << 5) | 2);
+		ret = USB_BulkTransfer(dev, out, command, sizeof(command), &actual, 100000);
+		if (ret || actual != sizeof(command))
+			log_printf("DRH shutdown target %u: USB error %d, sent %u/12 bytes\r\n", target, ret, actual);
+		else
+			sent = true;
+	}
+
+	if (sent) {
+		tb = mftb();
+		stationCount = 255;
+		do {
+			elapsed = T_ElapsedUsecs(tb);
+			if (elapsed >= 40000)
+				break;
+			stationResult = drhShutdownStationCount(dev, out, in, &transaction, 40000 - elapsed, &stationCount);
+			if (stationResult != -EBUSY && (stationResult || !stationCount))
+				break;
+
+			udelay(1000);
+		} while (!T_HasElapsed(tb, 40000));
+		elapsed = T_ElapsedUsecs(tb);
+		if (elapsed < 40000 && (stationResult || stationCount))
+			udelay(40000 - elapsed);
+	}
+
+	if (!dev->parent && dev->hc->ops->rootPortDisable) {
+		ret = dev->hc->ops->rootPortDisable(dev->hc, dev->port);
+		if (ret)
+			log_printf("DRH USB disable failed: %d\r\n", ret);
+	}
+	else
+		log_puts("DRH USB disable: unsupported topology/controller");
+unlock:
+	USB_UnlockTopology();
+}
 
 static inputEvent_t keyAction(u8 key) {
 	switch (key) {
@@ -106,19 +323,23 @@ static u8 reportActionKey(const u8 *report) {
  * negative errno on a fatal error.  A halted endpoint is recovered and re-armed
  * transparently, reported as "nothing this round".
  */
-static int hidReadReport(struct usbInterface *interface, struct usbEndpoint *endpoint, void *report, u32 length, u32 *actual) {
-	int ret = USB_ResidentInPoll(interface->device, endpoint, report, length, actual);
+static int hidReadReport(struct usbDevice *dev, struct usbEndpoint *endpoint, void *report, u32 length, u32 *actual) {
+	int ret = USB_ResidentInPoll(dev, endpoint, report, length, actual);
 
 	if (ret == -EPIPE) {
-		USB_ClearHalt(interface->device, endpoint);
-		USB_ResidentInArm(interface->device, endpoint, length);
+		ret = USB_ClearHalt(dev, endpoint);
+		if (ret < 0)
+			return ret;
+		ret = USB_ResidentInArm(dev, endpoint, length);
+		if (ret < 0)
+			return ret;
 		return 0;
 	}
 	return ret;
 }
 
 static int keyboardReadReport(struct usbKeyboard *keyboard, u8 *report, u32 *actual) {
-	return hidReadReport(keyboard->interface, keyboard->endpoint, report, sizeof(keyboard->report), actual);
+	return hidReadReport(keyboard->interface->device, keyboard->endpoint, report, sizeof(keyboard->report), actual);
 }
 
 static i16 drhLE16(const u8 *data) {
@@ -155,7 +376,7 @@ static u32 drhFirstButton(u32 buttons) {
 }
 
 /* FIXME: this is really ugly, should probably use a struct, but the linux-wiiu driver basically did the same thing */
-static void drhParseReport(struct usbDRH *drh, const u8 *data) {
+static void drhParseReport(struct usbDRHInterface *pad, const u8 *data) {
 	struct usbDRHState next;
 	u32 pressed, button, base;
 	u64 now = mftb();
@@ -191,58 +412,68 @@ static void drhParseReport(struct usbDRH *drh, const u8 *data) {
 	next.battery = data[5];
 	next.charging = !!(data[4] & 0x40u);
 
-	pressed = (next.buttons & ~drh->state.buttons) & DRH_MENU_BUTTONS;
+	pressed = (next.buttons & ~pad->state.buttons) & DRH_MENU_BUTTONS;
 	button = drhFirstButton(pressed);
 	if (button) {
 		IN_NewEvent(drhButtonAction(button));
-		drh->repeatButton = button;
-		drh->repeatStarted = now;
-		drh->lastRepeat = now;
+		pad->repeatButton = button;
+		pad->repeatStarted = now;
+		pad->lastRepeat = now;
 	}
-	else if (!(next.buttons & drh->repeatButton)) {
-		drh->repeatButton = drhFirstButton(next.buttons & DRH_MENU_BUTTONS);
-		drh->repeatStarted = now;
-		drh->lastRepeat = now;
+	else if (!(next.buttons & pad->repeatButton)) {
+		pad->repeatButton = drhFirstButton(next.buttons & DRH_MENU_BUTTONS);
+		pad->repeatStarted = now;
+		pad->lastRepeat = now;
 	}
-	else if (drh->repeatButton != DRH_BTN_A &&
-	         T_HasElapsed(drh->repeatStarted, KEYBOARD_REPEAT_DELAY_US) &&
-	         T_HasElapsed(drh->lastRepeat, KEYBOARD_REPEAT_PERIOD_US)) {
-		drh->lastRepeat = now;
-		IN_NewEvent(drhButtonAction(drh->repeatButton));
+	else if (pad->repeatButton != DRH_BTN_A &&
+	         T_HasElapsed(pad->repeatStarted, KEYBOARD_REPEAT_DELAY_US) &&
+	         T_HasElapsed(pad->lastRepeat, KEYBOARD_REPEAT_PERIOD_US)) {
+		pad->lastRepeat = now;
+		IN_NewEvent(drhButtonAction(pad->repeatButton));
 	}
-	drh->state = next;
+	pad->state = next;
+}
+
+static void drhPollCDC(void) {
+	u8 data[1024] ALIGN(32);
+	u32 actual;
+	if (drh.cdcArmed)
+		hidReadReport(drh.device, drh.cdcIn, data, sizeof(data), &actual);
 }
 
 static void drhPoll(void) {
-	struct usbDRH *drh;
+	struct usbDRHInterface *pad;
 	u8 report[DRH_REPORT_SIZE] ALIGN(32);
 	u32 actual;
 	int ret;
 	uint i;
 
-	for (i = 0; i < MAX_USB_DRH; i++) {
-		drh = &drhs[i];
-		if (!drh->interface || !drh->interface->device->connected)
+	if (drh.shuttingDown || !drh.device || !drh.device->connected)
+		return;
+	drhPollCDC();
+	for (i = 0; i < DRH_HID_INTERFACES; i++) {
+		pad = &drh.interfaces[i];
+		if (!pad->interface || pad->interface->driverData != pad || !pad->interface->device->connected)
 			continue;
 
 		memset(report, 0, sizeof(report));
 		actual = 0;
-		ret = hidReadReport(drh->interface, drh->endpoint, report, sizeof(report), &actual);
+		ret = hidReadReport(pad->interface->device, pad->endpoint, report, sizeof(report), &actual);
 
 		if (ret == 0)
 			continue;   /* no new report queued */
 
 		if (ret < 0) {
-			if (!drh->errorLogged) {
+			if (!pad->errorLogged) {
 				log_printf("DRH interrupt poll failed: %d\r\n", ret);
-				drh->errorLogged = true;
+				pad->errorLogged = true;
 			}
 			continue;
 		}
 
-		drh->errorLogged = false;
+		pad->errorLogged = false;
 		if (actual == sizeof(report))
-			drhParseReport(drh, report);
+			drhParseReport(pad, report);
 	}
 }
 
@@ -387,7 +618,7 @@ static void keyboardRemove(struct usbInterface *interface) {
 }
 
 static int drhProbe(struct usbInterface *interface, const struct usbDeviceId *id) {
-	struct usbDRH *drh = NULL;
+	struct usbDRHInterface *pad = NULL;
 	struct usbEndpoint *endpoint = NULL;
 	uint i;
 	(void)id;
@@ -405,23 +636,34 @@ static int drhProbe(struct usbInterface *interface, const struct usbDeviceId *id
 	}
 	if (!endpoint)
 		return -ENODEV;
-	for (i = 0; i < MAX_USB_DRH; i++) {
-		if (!drhs[i].interface) {
-			drh = &drhs[i];
+	if (drh.device && drh.device != interface->device)
+		return -ENODEV;
+	for (i = 0; i < DRH_HID_INTERFACES; i++) {
+		if (!drh.interfaces[i].interface) {
+			pad = &drh.interfaces[i];
 			break;
 		}
 	}
-	if (!drh)
+	if (!pad)
 		return -ENOSPC;
-	memset(drh, 0, sizeof(*drh));
-	drh->interface = interface;
-	drh->endpoint = endpoint;
-
+	memset(pad, 0, sizeof(*pad));
+	pad->interface = interface;
+	pad->endpoint = endpoint;
 	if (USB_ResidentInArm(interface->device, endpoint, DRH_REPORT_SIZE)) {
-		memset(drh, 0, sizeof(*drh));
+		memset(pad, 0, sizeof(*pad));
 		return -EIO;
 	}
-	interface->driverData = drh;
+	if (!drh.device) {
+		drh.device = interface->device;
+		drhInitializeMode();
+	}
+	if (drh.cdcIn && !drh.cdcArmed) {
+		drh.cdcArmed = !USB_ResidentInArm(interface->device, drh.cdcIn, 1024);
+		if (!drh.cdcArmed)
+			log_puts("DRH CDC receive setup failed");
+	}
+
+	interface->driverData = pad;
 	log_printf("DRH bound on bus %u address %u interface %u, endpoint %02x/%u\r\n",
 		interface->device->hc->bus, interface->device->address,
 		interface->descriptor.interfaceNumber, endpoint->address,
@@ -430,12 +672,22 @@ static int drhProbe(struct usbInterface *interface, const struct usbDeviceId *id
 }
 
 static void drhRemove(struct usbInterface *interface) {
-	struct usbDRH *drh = interface->driverData;
-	if (!drh)
+	struct usbDRHInterface *pad = interface->driverData;
+	uint i;
+
+	if (!pad)
 		return;
-	USB_ResidentInStop(interface->device, drh->endpoint);
-	memset(drh, 0, sizeof(*drh));
+	USB_ResidentInStop(interface->device, pad->endpoint);
+	memset(pad, 0, sizeof(*pad));
 	interface->driverData = NULL;
+
+	for (i = 0; i < DRH_HID_INTERFACES; i++)
+		if (drh.interfaces[i].interface)
+			return;
+
+	if (drh.cdcArmed)
+		USB_ResidentInStop(interface->device, drh.cdcIn);
+	memset(&drh, 0, sizeof(drh));
 }
 
 static const struct usbDeviceId keyboardIds[] = {
@@ -476,7 +728,7 @@ static struct usbDriver drhDriver = {
 
 static void usbHIDInit(void) {
 	memset(keyboards, 0, sizeof(keyboards));
-	memset(drhs, 0, sizeof(drhs));
+	memset(&drh, 0, sizeof(drh));
 	if (USB_RegisterDriver(&drhDriver)) {
 		usbHIDTopDriver.state = DRIVER_STATE_FAULTED;
 		return;
@@ -495,7 +747,7 @@ static void usbHIDCleanup(void) {
 	USB_UnregisterDriver(&keyboardDriver);
 	USB_UnregisterDriver(&drhDriver);
 	memset(keyboards, 0, sizeof(keyboards));
-	memset(drhs, 0, sizeof(drhs));
+	memset(&drh, 0, sizeof(drh));
 	usbHIDTopDriver.state = DRIVER_STATE_NOT_READY;
 }
 

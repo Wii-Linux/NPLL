@@ -148,6 +148,7 @@ struct usbDriver {
 extern void USB_Init(void);
 extern void USB_Start(void);
 extern void USB_Shutdown(void);
+extern void USBHID_PowerOffDRC(void);
 extern void USB_Poll(void);
 extern void USB_LockTopology(void);
 extern void USB_UnlockTopology(void);
