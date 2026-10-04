@@ -474,6 +474,7 @@ static REGISTER_DRIVER(nandDrv) = {
 	.mask = DRIVER_ALLOW_WII | DRIVER_ALLOW_WIIU,
 	.state = DRIVER_STATE_NOT_READY,
 	.type = DRIVER_TYPE_BLOCK,
+	.initOwnsMount = true,
 	.init = nandInit,
 	.cleanup = nandCleanup
 };

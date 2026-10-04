@@ -14,6 +14,7 @@
 #include <npll/endian.h>
 #include <npll/log.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/usb.h>
 
 #define USB_MSC_MAX_DEVICES 8
@@ -45,6 +46,7 @@ struct usbMassStorage {
 	u32 commandTimeoutUsecs;
 	u8 numLuns;
 	bool scanPending;
+	struct threadMutex commandMutex;
 	struct usbMassLun luns[USB_MSC_MAX_LUNS];
 };
 
@@ -104,7 +106,7 @@ static int botReset(struct usbMassStorage *storage) {
 	return ret;
 }
 
-static int botCommand(struct usbMassStorage *storage, u8 lun, const u8 *cdb, u8 cdbLength, void *data, u32 dataLength, bool input, u32 *actualData) {
+static int botCommandLocked(struct usbMassStorage *storage, u8 lun, const u8 *cdb, u8 cdbLength, void *data, u32 dataLength, bool input, u32 *actualData) {
 	struct usbBotCbw cbw ALIGN(32);
 	struct usbBotCsw csw ALIGN(32);
 	u32 actual, tag, residue;
@@ -196,6 +198,16 @@ recover:
 		log_puts("BOT reset recovery failed");
 
 	return ret ? ret : -EIO;
+}
+
+static int botCommand(struct usbMassStorage *storage, u8 lun, const u8 *cdb,
+	u8 cdbLength, void *data, u32 dataLength, bool input, u32 *actualData) {
+	int ret;
+
+	TH_Lock(&storage->commandMutex);
+	ret = botCommandLocked(storage, lun, cdb, cdbLength, data, dataLength, input, actualData);
+	TH_Unlock(&storage->commandMutex);
+	return ret;
 }
 
 static int scsiRequestSense(struct usbMassStorage *storage, u8 lun,
@@ -404,7 +416,7 @@ static int setupLun(struct usbMassStorage *storage, u8 lunNumber) {
 	lun->bdev.write = massWrite;
 	lun->bdev.probePartitions = true;
 	lun->bdev.flags = BLOCK_FLAG_STANDARD;
-	B_Register(&lun->bdev);
+	B_RegisterAsync(&lun->bdev);
 	lun->registered = true;
 	log_printf("LUN %u: %llu bytes, %u-byte blocks\r\n", lunNumber, lun->bdev.size, blockSize);
 	return 0;
@@ -510,21 +522,14 @@ static void massRemove(struct usbInterface *interface) {
 
 	if (!storage)
 		return;
+	T_CancelEvent(massScan, storage);
 	for (i = 0; i < storage->numLuns; i++) {
 		if (storage->luns[i].registered) {
 			B_Unregister(&storage->luns[i].bdev);
 			storage->luns[i].registered = false;
 		}
 	}
-	if (storage->scanPending) {
-		/*
-		 * The queued one-shot cannot be cancelled.  Reserve this slot until
-		 * it fires; massScan will observe the missing interface and clear it.
-		 */
-		storage->interface = NULL;
-	}
-	else
-		memset(storage, 0, sizeof(*storage));
+	memset(storage, 0, sizeof(*storage));
 
 	interface->driverData = NULL;
 }

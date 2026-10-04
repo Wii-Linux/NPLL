@@ -7,6 +7,7 @@
 #ifndef _DRIVERS_H
 #define _DRIVERS_H
 
+#include <stdbool.h>
 #include <npll/types.h>
 
 enum driverState {
@@ -36,6 +37,7 @@ struct driver {
 	enum driverState state;
 	enum driverType type;
 
+	bool initOwnsMount;
 	void (*init)(void);
 	void (*cleanup)(void);
 };
@@ -56,8 +58,11 @@ extern struct driver __drivers_end[];
 extern u8 D_DriverMask;
 
 /*
- * Initialize all possible drivers
+ * Initialize core drivers and queue independent block-driver initialization
  */
 extern void D_Init(void);
+/* Join queued storage initialization after starting other subsystems */
+extern void D_WaitForInit(void);
+extern bool D_Initializing;
 
 #endif /* _DRIVERS_H */

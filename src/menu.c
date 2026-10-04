@@ -24,6 +24,7 @@
 #include <npll/output.h>
 #include <npll/partition.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/utils.h>
 #include <npll/video.h>
 
@@ -33,6 +34,7 @@
 #define MENU_ENTRY_CAPACITY_OWNED BIT(31)
 
 static bool hasChanged = true;
+static bool uiActionActive;
 static uint selected = 0;
 static uint bodyScroll = 0;
 static uint curFooterLines;
@@ -127,10 +129,24 @@ static void cancelAutoboot(void) {
 	hasChanged = true;
 }
 
+static void selectCurrentEntry(void) {
+	/* other UI callbacks must finish */
+	if (uiActionActive)
+		return;
+	uiActionActive = true;
+
+	/* finish active discovery first */
+	TH_Quiesce();
+	curMenu->entries[selected]->selected(curMenu->entries[selected]);
+	TH_Resume();
+
+	uiActionActive = false;
+}
+
 static void autobootEventCB(void *arg) {
 	(void)arg;
 
-	if (!autobootActive)
+	if (D_Initializing || uiActionActive || !autobootActive)
 		return;
 
 	if (autobootTimeout)
@@ -141,7 +157,7 @@ static void autobootEventCB(void *arg) {
 	}
 
 	autobootActive = false;
-	curMenu->entries[selected]->selected(curMenu->entries[selected]);
+	selectCurrentEntry();
 }
 
 static void uiRedrawWrapper(void *arg) {
@@ -454,7 +470,7 @@ static void drawAutoboot(const struct outputDevice *odev) {
 	uint len, col;
 	const char *color = "\x1b[0m";
 
-	if (!autobootActive)
+	if (D_Initializing || !autobootActive)
 		return;
 
 	if (autobootTimeout <= 1)
@@ -530,14 +546,22 @@ void UI_HandleInputs(void) {
 
 	assert(curMenu);
 
+	if (D_Initializing || uiActionActive)
+		return;
+
 	ev = IN_ConsumeEvent();
 	while (ev) {
 		cancelAutoboot();
 		hasChanged = true;
 		bodyHeight = canonicalBodyHeight();
 		firstEntryLine = menuEntryBaseLine(curMenu) + selected;
-		if (ev & INPUT_EV_SCREENSHOT)
+		if (ev & INPUT_EV_SCREENSHOT) {
+			uiActionActive = true;
+			TH_Quiesce();
 			(void)V_SaveScreenshot();
+			TH_Resume();
+			uiActionActive = false;
+		}
 
 		if (ev & INPUT_EV_DOWN) {
 			if (firstEntryLine >= bodyScroll + bodyHeight) {
@@ -559,7 +583,7 @@ void UI_HandleInputs(void) {
 			}
 		}
 		if (ev & INPUT_EV_SELECT) {
-			curMenu->entries[selected]->selected(curMenu->entries[selected]);
+			selectCurrentEntry();
 			break;
 		}
 
@@ -750,7 +774,7 @@ void UI_AddPart(struct partition *part) {
 		}
 		IRQ_Restore(irqs);
 		if (bootNow)
-			autobootEventCB(NULL);
+			T_QueueEvent(0, autobootEventCB, NULL);
 	}
 }
 

@@ -15,21 +15,20 @@
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/menu.h>
 #include <npll/partition.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 
 static int initialized = 0;
+static uint pendingScans;
+static struct blockScan {
+	struct blockDevice *bdev;
+} scans[MAX_BDEV];
 
 uint B_NumDevices = 0;
 struct blockDevice *B_Devices[MAX_BDEV];
-
-static struct blockTransfer defaultTransfer = {
-	.size = 0,
-	.mode = BLOCK_TRANSFER_MULTIPLE,
-	.dmaAlign = 0
-};
 
 static int findDev(const struct blockDevice *bdev) {
 	int i;
@@ -56,15 +55,15 @@ static bool transferSupports(const struct blockTransfer *xfer, size_t len, u64 o
 	}
 }
 
-static const struct blockTransfer *selectTransfer(const struct blockDevice *bdev, size_t len, u64 off, bool supported) {
+static const struct blockTransfer *selectTransfer(const struct blockDevice *bdev, size_t len, u64 off, bool supported, struct blockTransfer *fallback) {
 	const struct blockTransfer *xfer, *best = NULL;
 	uint i, n;
 
 	xfer = bdev->transfers;
 	n = bdev->numTransfers;
 	if (!xfer || !n) {
-		defaultTransfer.size = bdev->blockSize;
-		xfer = &defaultTransfer;
+		*fallback = (struct blockTransfer){ .size = bdev->blockSize, .mode = BLOCK_TRANSFER_MULTIPLE };
+		xfer = fallback;
 		n = 1;
 	}
 
@@ -118,6 +117,7 @@ static ssize_t bounceDMA(struct blockDevice *bdev, const struct blockTransfer *x
 
 static ssize_t blockRW(struct blockDevice *bdev, void *buf, size_t len, u64 off, bool write) {
 	const struct blockTransfer *xfer;
+	struct blockTransfer fallback;
 	u8 *tmp, *cursor;
 	const u8 *writeCursor;
 	u64 pos, end, chunkOff;
@@ -127,7 +127,7 @@ static ssize_t blockRW(struct blockDevice *bdev, void *buf, size_t len, u64 off,
 	if (!len)
 		return 0;
 
-	xfer = selectTransfer(bdev, len, off, true);
+	xfer = selectTransfer(bdev, len, off, true, &fallback);
 	if (xfer) {
 		if (ptrAligned(buf, xfer->dmaAlign))
 			return write ?
@@ -143,7 +143,7 @@ static ssize_t blockRW(struct blockDevice *bdev, void *buf, size_t len, u64 off,
 	if (bdev->blockAlignMode != BLOCK_ALIGN_BOUNCE)
 		return -1;
 
-	xfer = selectTransfer(bdev, len, off, false);
+	xfer = selectTransfer(bdev, len, off, false, &fallback);
 	if (!xfer)
 		return -1;
 
@@ -221,28 +221,17 @@ void B_Shutdown(void) {
 	if (!initialized)
 		return;
 
-	assert(!B_NumDevices);
+	assert(!B_NumDevices && !pendingScans);
 	initialized = 0;
 }
 
-void B_Register(struct blockDevice *bdev) {
-	bool irqs;
+static void scanDevice(struct blockDevice *bdev) {
 	int ret;
 	uint i;
 	struct filesystem *fs;
 
-	assert_msg(initialized, "block: B_Register w/o B_Init");
-	assert_msg(B_NumDevices < MAX_BDEV, "block: B_Devices overflow");
-	assert_msg(!B_Devices[B_NumDevices], "block: B_Devices corruption");
-	assert_msg(addrIsValidCached((void *)bdev), "block: invalid device passed to B_Register");
-	assert_msg(findDev(bdev) == -1, "block: registering already-registered device");
-
 	if (bdev->probePartitions)
 		P_ProbePartitions(bdev);
-
-	irqs = IRQ_DisableSave();
-	B_Devices[B_NumDevices++] = bdev;
-	IRQ_Restore(irqs);
 
 	log_printf("registered %s (%llu bytes, %d partition(s))\r\n",
 		   bdev->name, bdev->size, bdev->numPartitions);
@@ -250,16 +239,74 @@ void B_Register(struct blockDevice *bdev) {
 	/* now probe all of its partitions for filesystems */
 	ret = -1;
 	for (i = 0; i < bdev->numPartitions; i++) {
+		/* Probes can also retain state needed by mount (SFFS/WFS/ISO9660) */
+		FS_Lock();
 		fs = FS_Probe(bdev->partitions[i]);
-		if (!fs)
+		if (!fs) {
+			FS_Unlock();
 			continue;
+		}
 
 		ret = FS_Mount(fs, bdev->partitions[i]);
 		if (ret)
 			log_printf("FS_Mount failed on %s part %d: %d\r\n", bdev->name, i, ret);
 		else
 			UI_AddPart(bdev->partitions[i]);
+		FS_Unlock();
 	}
+}
+
+static void registerDevice(struct blockDevice *bdev) {
+	bool irqs = IRQ_DisableSave();
+
+	assert_msg(initialized, "block: B_Register w/o B_Init");
+	assert_msg(addrIsValidCached((void *)bdev), "block: invalid device passed to B_Register");
+	assert_msg(findDev(bdev) == -1, "block: registering already-registered device");
+	assert_msg(B_NumDevices < MAX_BDEV && !B_Devices[B_NumDevices], "block: B_Devices overflow/corruption");
+	B_Devices[B_NumDevices++] = bdev;
+	IRQ_Restore(irqs);
+}
+
+void B_Register(struct blockDevice *bdev) {
+	registerDevice(bdev);
+	scanDevice(bdev);
+}
+
+static void scanWorker(void *arg) {
+	struct blockScan *scan = arg;
+	bool enabled;
+
+	scanDevice(scan->bdev);
+	enabled = IRQ_DisableSave();
+	scan->bdev = NULL;
+	pendingScans--;
+	TH_Wake(&pendingScans);
+	IRQ_Restore(enabled);
+}
+
+void B_RegisterAsync(struct blockDevice *bdev) {
+	uint i;
+	bool enabled;
+
+	registerDevice(bdev);
+	enabled = IRQ_DisableSave();
+	for (i = 0; i < MAX_BDEV; i++) {
+		if (!scans[i].bdev)
+			break;
+	}
+	assert_msg(i < MAX_BDEV, "block: scan workers overflow");
+	scans[i].bdev = bdev;
+	pendingScans++;
+	T_QueueEvent(0, scanWorker, &scans[i]);
+	IRQ_Restore(enabled);
+}
+
+void B_WaitForScans(void) {
+	bool enabled = IRQ_DisableSave();
+
+	while (pendingScans)
+		TH_WaitLocked(&pendingScans, 0xffffffffu);
+	IRQ_Restore(enabled);
 }
 
 void B_Unregister(const struct blockDevice *bdev) {
@@ -270,9 +317,26 @@ void B_Unregister(const struct blockDevice *bdev) {
 	assert_msg(initialized, "block: B_Unregister w/o B_Init");
 	assert_msg(B_NumDevices > 0, "block: B_Devices underflow");
 	assert_msg(addrIsValidCached((void *)bdev), "block: invalid device passed to B_Unregister");
+
+	for (i = 0; i < MAX_BDEV; i++) {
+		if (scans[i].bdev != bdev)
+			continue;
+
+		T_CancelEvent(scanWorker, &scans[i]);
+		irqs = IRQ_DisableSave();
+
+		if (scans[i].bdev == bdev) {
+			scans[i].bdev = NULL;
+			pendingScans--;
+			TH_Wake(&pendingScans);
+		}
+
+		IRQ_Restore(irqs);
+	}
 	idx = findDev(bdev);
 	assert_msg(idx > -1, "block: unregistering non-existent device");
 
+	FS_Lock();
 	for (i = 0; i < bdev->numPartitions; i++) {
 		if (bdev->partitions[i] == FS_MountedPartition)
 			FS_Unmount();
@@ -282,6 +346,8 @@ void B_Unregister(const struct blockDevice *bdev) {
 			free(bdev->partitions[i]);
 	}
 
+	idx = findDev(bdev);
+	assert(idx >= 0);
 	size = (uint)(MAX_BDEV - idx - 1) * sizeof(struct blockDevice *);
 
 	irqs = IRQ_DisableSave();
@@ -289,6 +355,7 @@ void B_Unregister(const struct blockDevice *bdev) {
 	B_Devices[MAX_BDEV - 1] = NULL;
 	B_NumDevices--;
 	IRQ_Restore(irqs);
+	FS_Unlock();
 
 	log_printf("unregistered %s\r\n", bdev->name);
 }

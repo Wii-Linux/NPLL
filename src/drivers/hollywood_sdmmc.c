@@ -20,6 +20,7 @@
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 #include "sdmmc/sdhc.h"
@@ -163,7 +164,7 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	}
 
 
-	B_Register(bdev);
+	B_RegisterAsync(bdev);
 }
 
 static void sdmmcConnectionCheck(void *dummy) {
@@ -251,11 +252,64 @@ static void sdmmcIRQ(enum irqDev dev) {
 	}
 }
 
-static void sdmmcInit(void) {
+static uint initializingHC;
+
+static void sdmmcInitHost(void *arg) {
+	uint i = (uint)(uintptr_t)arg;
 	u32 pstate;
 	int ret;
-	uint i, maxHC;
 	void *addr;
+	bool enabled;
+
+	addr = (void *)sdhcAddrs[i];
+
+	/* initialize the controller */
+	ret = sdhc_init(addr, &sdmmcIRQTable[i], 1, &sdioDev[i]);
+	if (ret) {
+		log_printf("sdhc_init (SDHCI%d) failed with %d\r\n", i, ret);
+		goto done;
+	}
+	// log_printf("sdhc_init (SDHCI%d) success\r\n", i);
+
+	if (i == 0)
+		lastCardPresent = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
+
+	IRQ_Unmask((enum irqDev)sdmmcIRQTable[i]);
+	ret = sdio_reset(&sdioDev[i]);
+	if (ret) {
+		log_printf("sdio_reset (SDHCI%d) failed with %d\r\n", i, ret);
+		goto done;
+	}
+
+	/* initialize an attached MMC/SD Card */
+	pstate = sdio_get_present_state(&sdioDev[i]);
+	if (!(pstate & SDHC_PRES_STATE_CINST)) {
+		log_printf("no card inserted (SDHCI%d)\r\n", i);
+		goto done;
+	}
+
+	if (i != 0 && i != 2)
+		goto done; /* don't do MMC init on WiFi/Toucan */
+
+	ret = mmc_init(&sdioDev[i], &mmcDev[sdhcToBdevIdx[i]]);
+	if (ret) {
+		log_printf("mmc_init failed (SDHCI%d) with %d\r\n", i, ret);
+		goto done;
+	}
+	log_printf("mmc_init (SDHCI%d) success\r\n", i);
+
+	sdmmcRegisterBlock(&sdmmcBdev[sdhcToBdevIdx[i]], bdevNames[sdhcToBdevIdx[i]]);
+	sdmmcRegistered[sdhcToBdevIdx[i]] = true;
+
+done:
+	enabled = IRQ_DisableSave();
+	initializingHC--;
+	TH_Wake(&initializingHC);
+	IRQ_Restore(enabled);
+}
+
+static void sdmmcInit(void) {
+	uint i, maxHC;
 	bool enabled;
 
 	memset(sdioDev, 0, sizeof(sdioDev));
@@ -275,48 +329,14 @@ static void sdmmcInit(void) {
 		IRQ_RegisterHandler(IRQDEV_SDHCI3, sdmmcIRQ);
 	}
 
-	sdmmcDrv.state = DRIVER_STATE_READY;
-	for (i = 0; i < maxHC; i++) {
-		addr = (void *)sdhcAddrs[i];
+	initializingHC = maxHC;
+	for (i = 0; i < maxHC; i++)
+		T_QueueEvent(0, sdmmcInitHost, (void *)(uintptr_t)i);
 
-		/* initialize the controller */
-		ret = sdhc_init(addr, &sdmmcIRQTable[i], 1, &sdioDev[i]);
-		if (ret) {
-			log_printf("sdio_init (SDHCI%d) failed with %d\r\n", i, ret);
-			continue;
-		}
-		// log_printf("sdhc_init (SDHCI%d) success\r\n", i);
-
-		if (i == 0)
-			lastCardPresent = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
-
-		IRQ_Unmask((enum irqDev)sdmmcIRQTable[i]);
-		ret = sdio_reset(&sdioDev[i]);
-		if (ret) {
-			log_printf("sdio_reset (SDHCI%d) failed with %d\r\n", i, ret);
-			continue;
-		}
-
-		/* initialize an attached MMC/SD Card */
-		pstate = sdio_get_present_state(&sdioDev[i]);
-		if (!(pstate & SDHC_PRES_STATE_CINST)) {
-			log_printf("no card inserted (SDHCI%d)\r\n", i);
-			continue;
-		}
-
-		if (i != 0 && i != 2)
-			continue; /* don't do MMC init on WiFi/Toucan */
-
-		ret = mmc_init(&sdioDev[i], &mmcDev[sdhcToBdevIdx[i]]);
-		if (ret) {
-			log_printf("mmc_init failed (SDHCI%d) with %d\r\n", i, ret);
-			continue;
-		}
-		log_printf("mmc_init (SDHCI%d) success\r\n", i);
-
-		sdmmcRegisterBlock(&sdmmcBdev[sdhcToBdevIdx[i]], bdevNames[sdhcToBdevIdx[i]]);
-		sdmmcRegistered[sdhcToBdevIdx[i]] = true;
-	}
+	enabled = IRQ_DisableSave();
+	while (initializingHC)
+		TH_WaitLocked(&initializingHC, 0xffffffffu);
+	IRQ_Restore(enabled);
 
 	IRQ_Unmask(IRQDEV_SDHCI0);
 	IRQ_Unmask(IRQDEV_SDHCI1);
@@ -324,6 +344,7 @@ static void sdmmcInit(void) {
 	IRQ_Unmask(IRQDEV_SDHCI3);
 
 	enabled = IRQ_DisableSave();
+	sdmmcDrv.state = DRIVER_STATE_READY;
 	connectionReady = true;
 	if (checkConnected && !connectionQueued) {
 		connectionQueued = true;
@@ -348,13 +369,13 @@ static void sdmmcCleanup(void) {
 
 	if (sdmmcRegistered[0]) {
 		sdmmcRegistered[0] = false;
-		free(mmcDev[0]);
 		B_Unregister(&sdmmcBdev[0]);
+		free(mmcDev[0]);
 	}
 	if (sdmmcRegistered[1]) {
 		sdmmcRegistered[1] = false;
-		free(mmcDev[1]);
 		B_Unregister(&sdmmcBdev[1]);
+		free(mmcDev[1]);
 	}
 	sdmmcDrv.state = DRIVER_STATE_NOT_READY;
 }

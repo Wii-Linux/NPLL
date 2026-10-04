@@ -11,6 +11,7 @@
 #include <npll/log.h>
 #include <npll/partition.h>
 #include <npll/types.h>
+#include <npll/thread.h>
 #include "fs/fat/glue.h"
 #include "fs/ext4.h"
 #include "fs/sffs.h"
@@ -20,6 +21,15 @@
 struct filesystem *FS_Mounted = NULL;
 struct partition *FS_MountedPartition = NULL;
 static bool initialized = false;
+static struct threadMutex mountMutex;
+
+void FS_Lock(void) {
+	TH_Lock(&mountMutex);
+}
+
+void FS_Unlock(void) {
+	TH_Unlock(&mountMutex);
+}
 
 static struct filesystem *filesystems[] = {
 	&FS_FAT,

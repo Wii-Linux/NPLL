@@ -139,6 +139,7 @@ void __attribute__((noreturn)) I_InitCommon(void) {
 	T_EnableEvents();
 	D_Init();
 	USB_Start();
+	D_WaitForInit();
 	TH_BootComplete();
 	_log_puts("Driver initialization done, entering mainLoop");
 	mainLoop();

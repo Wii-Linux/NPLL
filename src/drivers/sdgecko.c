@@ -147,7 +147,7 @@ static int sdgeckoRegisterBlock(uint i) {
 		log_printf("WARNING: %s is read-only\r\n", bdev->name);
 	}
 
-	B_Register(bdev);
+	B_RegisterAsync(bdev);
 	sdgeckoRegistered[i] = true;
 	sdgeckoProbeFailed[i] = false;
 	sdgeckoUpdateDriverState();

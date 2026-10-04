@@ -98,6 +98,8 @@ extern void B_Shutdown(void);
  * spanning the entire device is created.
  */
 extern void B_Register(struct blockDevice *bdev);
+extern void B_RegisterAsync(struct blockDevice *bdev);
+extern void B_WaitForScans(void);
 
 /* unregister a block device */
 extern void B_Unregister(const struct blockDevice *bdev);

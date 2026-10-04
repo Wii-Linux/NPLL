@@ -15,7 +15,7 @@
 #include <npll/timer.h>
 #include <npll/types.h>
 
-#define MAX_EVENTS 32
+#define MAX_EVENTS 64
 #define DEC_IDLE 0x7fffffff
 #define THREAD_STACK_SIZE (64 * 1024)
 

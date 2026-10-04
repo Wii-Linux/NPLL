@@ -18,6 +18,10 @@
  * Only one filesystem can be mounted at a time; all FS_* operations act
  * on the currently mounted filesystem.
  */
+/* Hold across probe/mount and all reads depending on that global mount */
+void FS_Lock(void);
+void FS_Unlock(void);
+
 struct filesystem {
 	/* human-readable name (e.g. "fat32", "ext2") */
 	const char *name;
