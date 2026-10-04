@@ -21,6 +21,11 @@
   - No recursion permitted
 
 === Globals ===
+- Each optional global is locked independently by the first successfully parsed config file that explicitly sets it, in discovery order.  Later files cannot override that global.
+- Omitting a global leaves it unlocked and at its default until a later file sets it.  A file with no globals locks nothing.
+- Includes are parsed as part of the containing config; the existing rules for repeated keys within that config still apply.
+- Legacy `gumboot.lst` timeout/default directives follow the same per-global rule.  On the same partition, `npll.cfg` is processed first.
+- A `default` ID that is not found warns and retains the first-entry fallback, but still locks `default` because it was explicitly set.
 - Supported globals:
   - `cfg_version` (REQUIRED): Describes the version of the config file that follows.  Must be the first line of the file.  Current version is 1.
   - `default` (optional): Entry ID to boot as the default entry.  Defaults to the first discovered entry.

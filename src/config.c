@@ -92,10 +92,12 @@ struct npllEntry {
 };
 
 /*
- * Tracks whether *any* npll.cfg has been successfully parsed across calls.
- * Once true, gumboot.lst can no longer override globals (timeout/default).
+ * Each global is locked only after a successfully parsed file sets it
  */
-static bool npllEverConsumed = false;
+#define GLOBAL_TIMEOUT BIT(0)
+#define GLOBAL_DEFAULT BIT(1)
+#define GLOBAL_VI_MODE BIT(2)
+static u32 globalsSet;
 
 /*
  * Shared helpers
@@ -205,7 +207,7 @@ static void gumbootSelectedCB(struct menuEntry *entry) {
 	}												\
 	isInEntry = false;
 
-static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
+static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, u32 *globalsOut) {
 	int fd;
 	ssize_t size, ret;
 	uint lineNum = 1, titleCur = 0, pathCur = 0, numEntries = 0;
@@ -288,6 +290,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 		else if (!isInEntry && !memcmp(curLine, "timeout ", 8)) {
 			if (timeoutOut)
 				*timeoutOut = (int)strtol(curLine + 8, NULL, 10);
+			*globalsOut |= GLOBAL_TIMEOUT;
 			skipToEndOfLine = true;
 			cur += 8;
 			continue;
@@ -295,6 +298,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 		else if (!isInEntry && !memcmp(curLine, "default ", 8)) {
 			if (defaultOut)
 				*defaultOut = (uint)strtoul(curLine + 8, NULL, 10);
+			*globalsOut |= GLOBAL_DEFAULT;
 			skipToEndOfLine = true;
 			cur += 8;
 			continue;
@@ -1447,7 +1451,7 @@ static void npllSelectedCB(struct menuEntry *entry) {
  * On success returns the number of entries (may be 0). On hard parse failure
  * returns -1. Absent file returns 0 without complaint.
  */
-static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, bool allowGlobals) {
+static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, u32 *globalsOut) {
 	static const char *paths[3] = { "npll.cfg", "boot/npll.cfg", NULL };
 	struct npllCtx ctx;
 	struct menuEntry *menuEntries = NULL;
@@ -1509,33 +1513,34 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 		return -1;
 	}
 
-	if (allowGlobals) {
-		if (ctx.hasVIMode && (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII)) {
-			ret = H_VISetModeTier(VI_MODE_CHOICE_CONF, ctx.viMode);
-			if (ret)
-				log_printf("Config video mode selection failed: %d\r\n", ret);
-		}
+	if (!(globalsSet & GLOBAL_VI_MODE) && ctx.hasVIMode && (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII)) {
+		*globalsOut |= GLOBAL_VI_MODE;
+		ret = H_VISetModeTier(VI_MODE_CHOICE_CONF, ctx.viMode);
+		if (ret)
+			log_printf("Config video mode selection failed: %d\r\n", ret);
+	}
 
-		if (ctx.hasTimeout)
-			*timeoutOut = ctx.timeout;
+	if (!(globalsSet & GLOBAL_TIMEOUT) && ctx.hasTimeout) {
+		*timeoutOut = ctx.timeout;
+		*globalsOut |= GLOBAL_TIMEOUT;
+	}
 
-		if (ctx.defaultId) {
-			for (i = 0; i < ctx.numEntries; i++) {
-				if (!strcmp(ctx.entries[i]->id, ctx.defaultId)) {
-					*defaultOut = i;
-					break;
-				}
+	if (!(globalsSet & GLOBAL_DEFAULT) && ctx.defaultId) {
+		*globalsOut |= GLOBAL_DEFAULT;
+		for (i = 0; i < ctx.numEntries; i++) {
+			if (!strcmp(ctx.entries[i]->id, ctx.defaultId)) {
+				*defaultOut = i;
+				break;
 			}
-			if (i == ctx.numEntries)
-				log_printf("warn: default entry '%s' not found\r\n", ctx.defaultId);
 		}
+		if (i == ctx.numEntries)
+			log_printf("warn: default entry '%s' not found\r\n", ctx.defaultId);
 	}
 	sfree(ctx.defaultId);
 
 	if (ctx.numEntries == 0) {
 		sfree(ctx.entries);
 		*entriesOut = NULL;
-		npllEverConsumed = true;
 		return 0;
 	}
 
@@ -1560,7 +1565,6 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	free(ctx.entries);
 
 	*entriesOut = menuEntries;
-	npllEverConsumed = true;
 	return (int)ctx.numEntries;
 }
 
@@ -1571,22 +1575,17 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 	struct menuEntry *npllEnts = NULL, *gbEnts = NULL, *merged;
 	int npllN, gbN, npllTimeout = -1, gbTimeout = -1;
 	uint i, npllDefault = 0, gbDefault = 0;
-	bool firstNPLLEver, npllGlobalsApplied = false;
+	u32 npllGlobals = 0, gbGlobals = 0;
 
 	*timeoutOut = -1;
 	*defaultOut = 0;
 	*entriesOut = NULL;
 
-	/* only the *first* npll.cfg overall is permitted to set globals */
-	firstNPLLEver = !npllEverConsumed;
-	npllN = npllProbe(&npllEnts, &npllTimeout, &npllDefault, firstNPLLEver);
+	npllN = npllProbe(&npllEnts, &npllTimeout, &npllDefault, &npllGlobals);
 	if (npllN < 0)
 		return -1;
 
-	if (firstNPLLEver && npllEverConsumed)
-		npllGlobalsApplied = true;
-
-	gbN = gumbootProbe(&gbEnts, &gbTimeout, &gbDefault);
+	gbN = gumbootProbe(&gbEnts, &gbTimeout, &gbDefault, &gbGlobals);
 	if (gbN < 0) {
 		for (i = 0; i < (uint)npllN; i++)
 			C_FreeEntryData(&npllEnts[i]);
@@ -1594,19 +1593,18 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 		return -1;
 	}
 
-	if (npllGlobalsApplied) {
+	/* npll.cfg is discovered before gumboot.lst on the same partition. */
+	if (npllGlobals & GLOBAL_TIMEOUT)
 		*timeoutOut = npllTimeout;
-		*defaultOut = npllDefault;
-	}
-	else if (!npllEverConsumed) {
+	else if (!(globalsSet & GLOBAL_TIMEOUT) && (gbGlobals & GLOBAL_TIMEOUT))
 		*timeoutOut = gbTimeout;
-		*defaultOut = gbDefault;
-	}
-	/*
-	 * else: an earlier partition already locked globals via npll.cfg;
-	 * leave the (-1, 0) defaults so the caller knows we have nothing
-	 * new to contribute here.
-	 */
+
+	if (npllGlobals & GLOBAL_DEFAULT)
+		*defaultOut = npllDefault;
+	else if (!(globalsSet & GLOBAL_DEFAULT) && (gbGlobals & GLOBAL_DEFAULT))
+		*defaultOut = (uint)npllN + gbDefault;
+
+	globalsSet |= npllGlobals | gbGlobals;
 
 	if (npllN + gbN == 0) {
 		sfree(npllEnts);
