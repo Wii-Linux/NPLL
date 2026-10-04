@@ -31,6 +31,11 @@ static const u32 iv[5] = { 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d
 
 #define SHA_CTRL_EXEC BIT(31)
 #define SHA_CTRL_IRQ BIT(30)
+/*
+ * The blocks field is only 10-bit, interpreted as [num blocks - 1], meaning
+ * the max that the engine can hash in one go is 1024 blocks
+ */
+#define SHA_MAX_BYTES (1024u * 64u)
 static void shaIRQ(enum irqDev dev) {
 	(void)dev;
 }
@@ -66,12 +71,12 @@ static int sha1Reset(void) {
 int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	int ret;
 	u64 tb;
-	u32 ctrl, elapsed;
+	u32 ctrl, elapsed, chunk;
+	const u8 *cursor = in;
 	bool irqs;
 
 	assert(H_ConsoleType != CONSOLE_TYPE_GAMECUBE);
 
-	ctrl = SHA_CTRL_EXEC | SHA_CTRL_IRQ | ((u32)(size / 64) - 1);
 	irqs = IRQ_DisableSave();
 
 	if (size < 64 || size & 63) {
@@ -105,21 +110,26 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 
 	dcache_flush(in, (u32)size);
 
-	regs->src = (u32)(uintptr_t)virtToPhys(in); barrier();
-	regs->ctrl = ctrl;
-	tb = mftb();
-	while (regs->ctrl & SHA_CTRL_EXEC) {
-		if (T_HasElapsed(tb, 100 * 1000)) {
-			log_printf("H_SHA1Process: timeout on SHA-1 eng to finish, ctrl=0x%08x\r\n", regs->ctrl);
-			IRQ_Restore(irqs);
-			return -ETIMEDOUT;
+	while (size) {
+		chunk = size > SHA_MAX_BYTES ? SHA_MAX_BYTES : (u32)size;
+		ctrl = SHA_CTRL_EXEC | SHA_CTRL_IRQ | (chunk / 64 - 1);
+		regs->src = (u32)(uintptr_t)virtToPhys(cursor); barrier();
+		regs->ctrl = ctrl;
+		tb = mftb();
+		while (regs->ctrl & SHA_CTRL_EXEC) {
+			if (T_HasElapsed(tb, 100 * 1000)) {
+				log_printf("H_SHA1Process: timeout on SHA-1 eng to finish, ctrl=0x%08x\r\n", regs->ctrl);
+				IRQ_Restore(irqs);
+				return -ETIMEDOUT;
+			}
+			if (irqs && IRQ_CanWait(IRQDEV_SHA1)) {
+				elapsed = T_ElapsedUsecs(tb);
+				if (elapsed < 100 * 1000)
+					IRQ_WaitLocked(IRQDEV_SHA1, 100 * 1000 - elapsed);
+			}
 		}
-		if (irqs && IRQ_CanWait(IRQDEV_SHA1)) {
-			elapsed = T_ElapsedUsecs(tb);
-			if (elapsed < 100 * 1000)
-				IRQ_WaitLocked(IRQDEV_SHA1, 100 * 1000 - elapsed);
-		}
-
+		cursor += chunk;
+		size -= chunk;
 	}
 
 	barrier(); out[0] = regs->h[0];
