@@ -50,5 +50,6 @@ extern bool IRQ_CanWait(enum irqDev dev);
 extern void IRQ_WaitLocked(enum irqDev dev, unsigned int timeoutUsecs);
 extern void IRQ_Mask(enum irqDev dev);
 extern void IRQ_Unmask(enum irqDev dev);
+extern void IRQ_Shutdown(void);
 
 #endif /* _IRQ_H */

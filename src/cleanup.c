@@ -87,37 +87,7 @@ void H_PrepareForExecEntry(void) {
 	 * newer builds can re-enable it post-init if possible
 	 */
 	CPU_L2Disable();
-
-	/* mask and ack all IRQs */
-	switch (H_ConsoleType) {
-	case CONSOLE_TYPE_WII_U: {
-		LT_PPC0INT1EN = 0;
-		LT_PPC1INT1EN = 0;
-		LT_PPC2INT1EN = 0;
-		LT_PPC0INT2EN = 0;
-		LT_PPC1INT2EN = 0;
-		LT_PPC2INT2EN = 0;
-
-		LT_PPC0INT1STS = LT_PPC0INT1STS;
-		LT_PPC1INT1STS = LT_PPC1INT1STS;
-		LT_PPC2INT1STS = LT_PPC2INT1STS;
-		LT_PPC0INT2STS = LT_PPC0INT2STS;
-		LT_PPC1INT2STS = LT_PPC1INT2STS;
-		LT_PPC2INT2STS = LT_PPC2INT2STS;
-	}
-		/* fallthrough */
-	case CONSOLE_TYPE_WII: {
-		HW_PPCIRQMASK = 0;
-		HW_PPCIRQFLAG = HW_PPCIRQFLAG;
-		HW_RESETS |= RESETS_RSTB_DSP;
-	}
-		/* fallthrough */
-	case CONSOLE_TYPE_GAMECUBE: {
-		PI_INTMR = 0;
-		PI_INTSR = PI_INTSR;
-		break;
-	}
-	}
+	IRQ_Shutdown();
 
 	/* now somewhat more well prepared for executable entry */
 }
