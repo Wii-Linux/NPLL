@@ -1256,6 +1256,9 @@ static void preEntryHook(void) {
 static void installPreEntryHook(struct npllEntry *ne) {
 	preEntryIOSVer = 0;
 	preEntryMINISD = false;
+	H_PreEntryMEM1 = H_ConsoleType == CONSOLE_TYPE_WII &&
+	                 (ne->type == NPLL_TYPE_GENERIC || ne->type == NPLL_TYPE_GENERIC_DOL) &&
+	                 (ne->mods & NPLL_MOD_IOS) && ne->ios;
 	preEntryDisableVI = (ne->type == NPLL_TYPE_GENERIC || ne->type == NPLL_TYPE_GENERIC_DOL) &&
 	                    (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII);
 	H_PreEntryHook = preEntryDisableVI ? preEntryHook : NULL;

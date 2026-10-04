@@ -152,15 +152,7 @@ int DOL_LoadFile(int fd) {
 
 	FS_Close(fd);
 
-	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
-	H_PrepareForExecEntry();
-
-	if (H_PreEntryHook)
-		H_PreEntryHook();
-
-	CPU_DCacheFlushAll();
-
-	ELF_DoEntry(0, 0, 0, virtToPhys(entry), false);
+	ELF_EnterGeneric(virtToPhys(entry));
 	__builtin_unreachable();
 
 fail:

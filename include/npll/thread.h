@@ -7,6 +7,7 @@
 #ifndef _THREAD_H
 #define _THREAD_H
 #include <stdbool.h>
+#include <npll/allocator.h>
 #include <npll/types.h>
 
 struct threadMutex {
@@ -20,6 +21,11 @@ void TH_Unlock(struct threadMutex *mutex);
 /* Pause starting new callbacks and join other active callbacks before teardown */
 void TH_Quiesce(void);
 void TH_Resume(void);
+/* Join other callbacks, then enter a new thread with IRQs and switching disabled.
+ * The callback must not return. The calling thread is abandoned.
+ */
+void TH_Handoff(enum pool_idx pool, void (*callback)(void *), void *data)
+	__attribute__((noreturn));
 void TH_Init(void);
 void TH_BootComplete(void);
 bool TH_CanBlock(void);

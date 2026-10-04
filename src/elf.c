@@ -206,6 +206,22 @@ static bool ELF_LoadPhdr(const Elf32_Phdr *phdr, bool linuxDirect, void **dest, 
 	return true;
 }
 
+static void genericEntryThread(void *entry) {
+	H_PrepareForExecEntry();
+	if (H_PreEntryHook)
+		H_PreEntryHook();
+	CPU_DCacheFlushAll();
+	ELF_DoEntry(0, 0, 0, entry, false);
+}
+
+void ELF_EnterGeneric(const void *entry) {
+	/* Pass the entry value, never a pointer into the abandoned MEM2 stack. */
+	if (H_PreEntryMEM1)
+		TH_Handoff(POOL_MEM1, genericEntryThread, (void *)entry);
+	genericEntryThread((void *)entry);
+	__builtin_unreachable();
+}
+
 int ELF_LoadMem(const void *data) {
 	const Elf32_Ehdr *ehdr = (const Elf32_Ehdr *)data;
 	const Elf32_Phdr *phdr;
@@ -248,17 +264,7 @@ int ELF_LoadMem(const void *data) {
 		phdr = (const Elf32_Phdr *)((uintptr_t)phdr + ehdr->e_phentsize);
 	}
 
-	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
-	H_PrepareForExecEntry();
-
-	if (H_PreEntryHook)
-		H_PreEntryHook();
-
-	/* Do not let the entry stub's L1 invalidation discard dirty handoff data. */
-	CPU_DCacheFlushAll();
-
-	/* lets do this thing */
-	ELF_DoEntry(0, 0, 0, virtToPhys((uintptr_t)ehdr->e_entry), false);
+	ELF_EnterGeneric(virtToPhys((uintptr_t)ehdr->e_entry));
 
 	/* ELF_DoEntry does not return */
 	__builtin_unreachable();
@@ -441,6 +447,9 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 		log_printf("ELF: Linux PT_LOAD end %08x, moved DTB to %08x-%08x\r\n",
 		           linuxLoadEnd, dtbPhys, dtbEnd);
 	}
+
+	if (H_PreEntryMEM1)
+		ELF_EnterGeneric(virtToPhys((uintptr_t)ehdr.e_entry));
 
 	/* get ready to jump ship (shut down subsystems, ack, mask, and disable IRQs, etc) */
 	H_PrepareForExecEntry();

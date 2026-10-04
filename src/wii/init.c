@@ -26,6 +26,7 @@
 #include <npll/output.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
+#include <npll/thread.h>
 #include <npll/tiny_usbgecko.h>
 #include <npll/types.h>
 #include <npll/utils.h>
@@ -349,11 +350,11 @@ void H_WiiReloadIOS(u32 iosVer) {
 	}
 }
 
-static void __attribute__((noreturn)) wiiExit(void) {
+static void __attribute__((noreturn)) wiiExitThread(void *data) {
 	u32 iosVer = (u32)H_WiiBootIOS;
 	void (*stub)(void);
 
-	IRQ_Disable();
+	(void)data;
 	L_Method = LOG_METHOD_ALL_ODEV;
 	log_printf("\x1b[1;1H\x1b[2JReloading...\r\n");
 	H_PrepareForExecEntry();
@@ -369,6 +370,11 @@ static void __attribute__((noreturn)) wiiExit(void) {
 	stub = (void (*)(void))(MEM1_CACHED_BASE + 0x1800);
 	stub();
 	__builtin_unreachable();
+}
+
+static void __attribute__((noreturn)) wiiExit(void) {
+	/* BOOT2_RUN, as well as later IOS itself, protects upper MEM2, which is where our stack is */
+	TH_Handoff(POOL_MEM1, wiiExitThread, NULL);
 }
 
 void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo) {

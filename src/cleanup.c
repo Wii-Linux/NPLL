@@ -21,6 +21,7 @@
 #include <npll/thread.h>
 
 void (*H_PreEntryHook)(void) = NULL;
+bool H_PreEntryMEM1 = false;
 
 /*
  * We work backwards to give us the best shot at freeing any allocations made,

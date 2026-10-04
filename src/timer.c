@@ -41,7 +41,7 @@ struct thread {
 static struct thread threads[MAX_EVENTS + 1];
 static struct thread *current;
 static uint cursor, interruptDepth;
-static bool eventsEnabled, stopping;
+static bool eventsEnabled, stopping, switchingDisabled;
 extern void TH_Switch(u32 **oldSP, u32 **newSP);
 static void programNextDEC(u64 now);
 static void schedule(void);
@@ -114,6 +114,7 @@ void TH_Init(void) {
 	current->state = RUNNING;
 	current->active = true;
 	stopping = false;
+	switchingDisabled = false;
 	cursor = interruptDepth = 0;
 }
 
@@ -134,7 +135,7 @@ void TH_InterruptLeave(void) {
 }
 
 bool TH_CanBlock(void) {
-	return current && eventsEnabled && !interruptDepth;
+	return current && eventsEnabled && !interruptDepth && !switchingDisabled;
 }
 
 static void programNextDEC(u64 now) {
@@ -191,6 +192,7 @@ static void schedule(void) {
 	struct thread *old = current, *next;
 	uint n, idx;
 
+	assert(!switchingDisabled);
 	assert_msg(!old->stack || *(u32 *)old->stack == 0xdeaddead, "thread stack overflow");
 
 	while (true) {
@@ -352,6 +354,38 @@ void TH_Resume(void) {
 	stopping = false;
 	programNextDEC(mftb());
 	IRQ_Restore(enabled);
+}
+
+static void handoffEntry(void) {
+	current->callback(current->data);
+	panic("thread handoff callback returned");
+}
+
+void TH_Handoff(enum pool_idx pool, void (*callback)(void *), void *data) {
+	static struct thread handoff;
+	struct thread *old;
+
+	assert(callback && !interruptDepth && !switchingDisabled);
+	TH_Quiesce();
+	IRQ_Disable();
+
+	handoff.stack = M_PoolAlloc(pool, THREAD_STACK_SIZE, 32);
+	handoff.callback = callback;
+	handoff.data = data;
+	handoff.active = true;
+	handoff.state = RUNNING;
+	prepareThread(&handoff);
+	handoff.sp[1] = (u32)(uintptr_t)handoffEntry;
+
+	old = current;
+	old->active = false;
+	old->state = FREE;
+	current = &handoff;
+	eventsEnabled = false;
+	switchingDisabled = true;
+	mtdec(DEC_IDLE);
+	TH_Switch(&old->sp, &handoff.sp);
+	__builtin_unreachable();
 }
 
 void T_EnableEvents(void) {
