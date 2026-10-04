@@ -822,8 +822,7 @@ found:
 }
 
 static int wfsMount(struct filesystem *fs, struct partition *part) {
-	(void)fs;
-	if (state.part != part || !state.buf || !state.valid)
+	if ((state.part != part || !state.buf || !state.valid) && !wfsProbe(fs, part))
 		return -ENODEV;
 	memset(state.files, 0, sizeof(state.files));
 	return 0;
