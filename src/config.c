@@ -13,6 +13,7 @@
 #include <string.h>
 #include <npll/allocator.h>
 #include <npll/block.h>
+#include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/config.h>
 #include <npll/elf.h>
@@ -1237,6 +1238,7 @@ static int npllEnsureFS(const struct npllOrigin *origin, char *pathspec, const c
 static u32 preEntryIOSVer;
 static bool preEntryMINISD;
 static bool preEntryDisableVI;
+static bool preEntryLibogcMem;
 
 static void preEntryHook(void) {
 	enum MINI_Err err;
@@ -1251,6 +1253,15 @@ static void preEntryHook(void) {
 	/* Force libogc to initialize VI and restore its display interrupts. */
 	if (preEntryDisableVI)
 		H_VIDisable();
+	/* Force libogc to reset memory state, IOS doesn't do it for us when not launching a PPC title */
+	if (preEntryLibogcMem) {
+		*(vu32 *)(MEM1_CACHED_BASE + 0x3100) = 0;
+		*(vu32 *)(MEM1_CACHED_BASE + 0x3104) = 0;
+		*(vu32 *)(MEM1_CACHED_BASE + 0x3108) = 0;
+		*(vu32 *)(MEM1_CACHED_BASE + 0x310c) = 0;
+		*(vu32 *)(MEM1_CACHED_BASE + 0x3110) = 0;
+		dcache_flush((void *)(MEM1_CACHED_BASE + 0x3100), 0x14);
+	}
 }
 
 static void installPreEntryHook(struct npllEntry *ne) {
@@ -1261,6 +1272,7 @@ static void installPreEntryHook(struct npllEntry *ne) {
 	                 (ne->mods & NPLL_MOD_IOS) && ne->ios;
 	preEntryDisableVI = (ne->type == NPLL_TYPE_GENERIC || ne->type == NPLL_TYPE_GENERIC_DOL) &&
 	                    (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII);
+	preEntryLibogcMem = preEntryDisableVI;
 	H_PreEntryHook = preEntryDisableVI ? preEntryHook : NULL;
 
 	if (H_ConsoleType != CONSOLE_TYPE_WII)
