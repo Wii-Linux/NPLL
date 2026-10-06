@@ -136,7 +136,7 @@ void _log_printf(const char *fmt, ...) {
 }
 
 void L_Init(void) {
-	extern char __reloc_dest_start;
+	extern u32 __reloc_dest_start;
 
 	/* Follow the relocated MEM1 image, including 48 MiB devkits. */
 	if ((uintptr_t)&__reloc_dest_start < MEM2_CACHED_BASE) {
