@@ -256,7 +256,7 @@ static void ext4Close(struct filesystem *fs, int fd) {
 }
 
 static ssize_t ext4Read(struct filesystem *fs, int fd, void *dest, size_t len) {
-	size_t read;
+	size_t read = 0;
 	int ret;
 
 	(void)fs;
