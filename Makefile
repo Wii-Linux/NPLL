@@ -124,22 +124,22 @@ else
 COMPILER_SPECIFIC_LDFLAGS :=
 endif
 else
-COMPILER_SPECIFIC_CFLAGS := -meabi -Wshift-overflow=2 -msdata=none -mrelocatable -mstack-protector-guard=global
+COMPILER_SPECIFIC_CFLAGS := -meabi -Wshift-overflow=2 -msdata=none -mrelocatable
 COMPILER_SPECIFIC_LDFLAGS :=
 endif
 # NPLL doesn't save FP state yet, even though Gekko/Broadway/Espresso all have hardware FPUs
-CFLAGS  := -mregnames -msoft-float -mcpu=750 -Iinclude -isystem external/dtc/libfdt -isystem external/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-jump-tables -fno-omit-frame-pointer -fstack-protector-strong '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
+CFLAGS  := -mregnames -msoft-float -mcpu=750 -Iinclude -isystem external/dtc/libfdt -isystem external/lwext4/include -ggdb3 -nostdinc -ffreestanding -fno-omit-frame-pointer '-DVERSION="$(VERSION)"' -D__BSD_VISIBLE=1
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-CFLAGS  += -Os -ffunction-sections -fdata-sections -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
+CFLAGS  += -Os -flto=auto -ffunction-sections -fdata-sections -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
 LDFLAGS := $(COMPILER_SPECIFIC_LDFLAGS) -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -ffreestanding
 ifeq ($(LLVM),1)
 LDFLAGS_TMP_OBJ := $(LDFLAGS)
 else
 LDFLAGS_TMP_OBJ := $(COMPILER_SPECIFIC_LDFLAGS)
 endif
-LDFLAGS_FINAL := $(LDFLAGS) -Wl,--gc-sections
+LDFLAGS_FINAL := $(CFLAGS) -g0 $(LDFLAGS) -Wl,--gc-sections
 
 # The fixed-address bootstrap deliberately uses absolute linker symbols while
 # it copies and fixes the relocatable runtime image.
@@ -260,17 +260,17 @@ endif
 
 $(FAT_COMBINED): $(FAT_OBJ)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
+	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS_TMP_OBJ) -nostdlib -nostartfiles -r -o $@ $^
 	$(info $s  OBJCOPY $@)
 	$(HIDE)$(OBJCOPY) $(addprefix -G ,$(FAT_EXPORTS)) $@
 
 $(LIBFDT_COMBINED): $(LIBFDT_OBJS)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
+	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS_TMP_OBJ) -nostdlib -nostartfiles -r -o $@ $^
 
 $(LWEXT4_COMBINED): $(LWEXT4_OBJS)
 	$(info $s  LD(r) $@)
-	$(HIDE)$(LD) $(LDFLAGS_TMP_OBJ) -r -o $@ $^
+	$(HIDE)$(CC) $(CFLAGS) $(LDFLAGS_TMP_OBJ) -nostdlib -nostartfiles -r -o $@ $^
 
 build/lwext4/%.o: external/lwext4/src/%.c
 	$(info $s  CC $<)
@@ -291,7 +291,7 @@ build/fs/fat/ff.o: src/fs/fat/ff.c
 build/libc/cc-runtime.o: src/libc/cc-runtime.c
 	$(info $s  CC $<)
 	$(HIDE)mkdir -p $(@D)
-	$(HIDE)$(CC) $(CFLAGS) -Wno-conversion -Wno-undef -Wno-sign-conversion -o $@ -c $<
+	$(HIDE)$(CC) $(CFLAGS) -fno-lto -Wno-conversion -Wno-undef -Wno-sign-conversion -o $@ -c $<
 
 build/%.o: src/%.c
 	$(info $s  CC $<)
