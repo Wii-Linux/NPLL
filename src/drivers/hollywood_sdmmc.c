@@ -236,9 +236,13 @@ static void sdmmcConnectionWorker(void *data) {
 }
 
 static void sdmmcIRQ(enum irqDev dev) {
+	sdio_host_dev_t *sdio = irqToSDIO(dev);
 	bool present;
 
-	sdio_handle_irq(irqToSDIO(dev), (int)dev);
+	if (!sdio->handle_irq)
+		return;
+
+	sdio_handle_irq(sdio, (int)dev);
 	if (dev == IRQDEV_SDHCI0) {
 		present = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
 		if (present != lastCardPresent) {
