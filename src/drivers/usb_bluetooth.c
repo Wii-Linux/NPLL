@@ -932,10 +932,9 @@ static void tryStoredRemote(void) {
 	}
 }
 
-static void btPoll(void *data) {
+static void btPollLocked(void) {
 	uint i;
 	struct btRemote *remote;
-	(void)data;
 
 	if (!adapter.interface || !adapter.interface->device->connected)
 		return;
@@ -965,6 +964,13 @@ static void btPoll(void *data) {
 			IN_NewEvent(buttonAction(remote->repeatButton));
 		}
 	}
+}
+
+static void btPoll(void *data) {
+	(void)data;
+	USB_LockTopology();
+	btPollLocked();
+	USB_UnlockTopology();
 }
 
 static int btProbe(struct usbInterface *interface, const struct usbDeviceId *id) {

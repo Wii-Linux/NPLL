@@ -477,7 +477,7 @@ static void drhPoll(void) {
 	}
 }
 
-static void keyboardPoll(void *data) {
+static void keyboardPollLocked(void) {
 	struct usbKeyboard *keyboard;
 	inputEvent_t action;
 	u8 report[8], key;
@@ -485,7 +485,6 @@ static void keyboardPoll(void *data) {
 	u32 actual;
 	int ret;
 	uint i;
-	(void)data;
 	drhPoll();
 
 	for (i = 0; i < MAX_USB_KEYBOARDS; i++) {
@@ -543,6 +542,13 @@ static void keyboardPoll(void *data) {
 		}
 	}
 
+}
+
+static void keyboardPoll(void *data) {
+	(void)data;
+	USB_LockTopology();
+	keyboardPollLocked();
+	USB_UnlockTopology();
 }
 
 static int keyboardProbe(struct usbInterface *interface, const struct usbDeviceId *id) {
