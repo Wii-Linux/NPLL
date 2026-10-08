@@ -42,6 +42,8 @@ static struct menu *curMenu = NULL;
 static bool autobootActive = false;
 static bool autobootCanceled = false;
 static uint autobootTimeout = 0;
+static int configuredTimeout = -1;
+static struct menuEntry *configuredDefault;
 static char autobootText[32];
 
 struct configPartition {
@@ -700,6 +702,9 @@ void UI_AppendEntry(struct menu *menu, struct menuEntry *e) {
 void UI_PrependEntry(struct menu *menu, struct menuEntry *e) {
 	hasChanged = true;
 	ensureMenuEntryCapacity(menu, menu->numEntries + 1);
+	/* Keep the same entry selected when discovery inserts before it. */
+	if (menu == curMenu && menu->numEntries)
+		selected++;
 	memmove(&menu->entries[1], &menu->entries[0], menu->numEntries * sizeof(struct menuEntry *));
 	menu->entries[0] = e;
 	menu->numEntries++;
@@ -715,6 +720,8 @@ void UI_DelEntry(struct menu *menu, struct menuEntry *e) {
 
 	if (i == menu->numEntries)
 		return; /* not found */
+	if (e == configuredDefault)
+		configuredDefault = NULL;
 
 	if (i != menu->numEntries - 1)
 		memmove(&menu->entries[i], &menu->entries[i + 1], sizeof(struct menuEntry *) * (menu->numEntries - i - 1));
@@ -746,16 +753,19 @@ void UI_UpLevel(struct menuEntry *_dummy) {
 void UI_AddPart(struct partition *part) {
 	bool irqs, bootNow = false;
 	int num, timeout;
-	uint defaultEntry, i;
+	uint defaultEntry, globals, i;
 	struct menuEntry *entries;
 
-	num = C_Probe(&entries, &timeout, &defaultEntry);
-	if (num == -1)
-		log_printf("C_Probe failed for partition %u of %s (%s)\r\n", part->index, part->bdev->name, FS_Mounted->name);
-	else if (num == 0)
-		return; /* no entries */
-	else if (num >= 1) {
-		irqs = IRQ_DisableSave();
+	num = C_Probe(&entries, &timeout, &defaultEntry, &globals);
+	if (num < 0) {
+		log_printf("C_Probe failed for partition %u of %s\r\n", part->index, part->bdev->name);
+		return;
+	}
+
+	irqs = IRQ_DisableSave();
+	if (globals & CONFIG_GLOBAL_TIMEOUT)
+		configuredTimeout = timeout;
+	if (num > 0) {
 		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
 		partitions[numParts].part = part;
 		partitions[numParts].numEntries = (uint)num;
@@ -763,19 +773,30 @@ void UI_AddPart(struct partition *part) {
 		for (i = (uint)num; i > 0; i--)
 			UI_PrependEntry(&rootMenu, &entries[i - 1]);
 		numParts++;
-		if (!autobootCanceled && !IN_HasReceivedInput() && timeout >= 0 &&
-			defaultEntry < (uint)num && rootMenu.entries[defaultEntry] != &sysInfoEntry) {
-			selected = defaultEntry;
-			autobootTimeout = (uint)timeout;
+		if (!configuredDefault)
+			configuredDefault = &entries[0];
+		if ((globals & CONFIG_GLOBAL_DEFAULT) && defaultEntry < (uint)num)
+			configuredDefault = &entries[defaultEntry];
+	}
+
+	if (!autobootCanceled && !IN_HasReceivedInput() && configuredDefault && curMenu == &rootMenu) {
+		for (i = 0; i < rootMenu.numEntries; i++) {
+			if (rootMenu.entries[i] == configuredDefault) {
+				selected = i;
+				break;
+			}
+		}
+		if (configuredTimeout >= 0 && !autobootActive) {
+			autobootTimeout = (uint)configuredTimeout;
 			autobootActive = true;
 			updateAutobootContent();
 			if (!autobootTimeout)
 				bootNow = true;
 		}
-		IRQ_Restore(irqs);
-		if (bootNow)
-			T_QueueEvent(0, autobootEventCB, NULL);
 	}
+	IRQ_Restore(irqs);
+	if (bootNow)
+		T_QueueEvent(0, autobootEventCB, NULL);
 }
 
 void UI_DelPart(struct partition *part) {

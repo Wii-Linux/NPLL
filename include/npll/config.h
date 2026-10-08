@@ -9,7 +9,11 @@
 
 #include <npll/menu.h>
 
-extern int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut);
+#define CONFIG_GLOBAL_TIMEOUT BIT(0)
+#define CONFIG_GLOBAL_DEFAULT BIT(1)
+#define CONFIG_GLOBAL_VI_MODE BIT(2)
+
+extern int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, uint *globalsOut);
 
 /* Free any heap-allocated state behind a menuEntry produced by C_Probe. */
 extern void C_FreeEntryData(struct menuEntry *entry);

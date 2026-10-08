@@ -95,9 +95,6 @@ struct npllEntry {
 /*
  * Each global is locked only after a successfully parsed file sets it
  */
-#define GLOBAL_TIMEOUT BIT(0)
-#define GLOBAL_DEFAULT BIT(1)
-#define GLOBAL_VI_MODE BIT(2)
 static u32 globalsSet;
 
 /*
@@ -291,7 +288,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 		else if (!isInEntry && !memcmp(curLine, "timeout ", 8)) {
 			if (timeoutOut)
 				*timeoutOut = (int)strtol(curLine + 8, NULL, 10);
-			*globalsOut |= GLOBAL_TIMEOUT;
+			*globalsOut |= CONFIG_GLOBAL_TIMEOUT;
 			skipToEndOfLine = true;
 			cur += 8;
 			continue;
@@ -299,7 +296,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 		else if (!isInEntry && !memcmp(curLine, "default ", 8)) {
 			if (defaultOut)
 				*defaultOut = (uint)strtoul(curLine + 8, NULL, 10);
-			*globalsOut |= GLOBAL_DEFAULT;
+			*globalsOut |= CONFIG_GLOBAL_DEFAULT;
 			skipToEndOfLine = true;
 			cur += 8;
 			continue;
@@ -1532,20 +1529,20 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 		return -1;
 	}
 
-	if (!(globalsSet & GLOBAL_VI_MODE) && ctx.hasVIMode && (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII)) {
-		*globalsOut |= GLOBAL_VI_MODE;
+	if (!(globalsSet & CONFIG_GLOBAL_VI_MODE) && ctx.hasVIMode && (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII)) {
+		*globalsOut |= CONFIG_GLOBAL_VI_MODE;
 		ret = H_VISetModeTier(VI_MODE_CHOICE_CONF, ctx.viMode);
 		if (ret)
 			log_printf("Config video mode selection failed: %d\r\n", ret);
 	}
 
-	if (!(globalsSet & GLOBAL_TIMEOUT) && ctx.hasTimeout) {
+	if (!(globalsSet & CONFIG_GLOBAL_TIMEOUT) && ctx.hasTimeout) {
 		*timeoutOut = ctx.timeout;
-		*globalsOut |= GLOBAL_TIMEOUT;
+		*globalsOut |= CONFIG_GLOBAL_TIMEOUT;
 	}
 
-	if (!(globalsSet & GLOBAL_DEFAULT) && ctx.defaultId) {
-		*globalsOut |= GLOBAL_DEFAULT;
+	if (!(globalsSet & CONFIG_GLOBAL_DEFAULT) && ctx.defaultId) {
+		*globalsOut |= CONFIG_GLOBAL_DEFAULT;
 		for (i = 0; i < ctx.numEntries; i++) {
 			if (!strcmp(ctx.entries[i]->id, ctx.defaultId)) {
 				*defaultOut = i;
@@ -1590,7 +1587,7 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 /*
  * Orchestrator: try both parsers, merge results.
  */
-int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
+int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, uint *globalsOut) {
 	struct menuEntry *npllEnts = NULL, *gbEnts = NULL, *merged;
 	int npllN, gbN, npllTimeout = -1, gbTimeout = -1;
 	uint i, npllDefault = 0, gbDefault = 0;
@@ -1599,6 +1596,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 	*timeoutOut = -1;
 	*defaultOut = 0;
 	*entriesOut = NULL;
+	*globalsOut = 0;
 
 	npllN = npllProbe(&npllEnts, &npllTimeout, &npllDefault, &npllGlobals);
 	if (npllN < 0)
@@ -1613,15 +1611,23 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut) {
 	}
 
 	/* npll.cfg is discovered before gumboot.lst on the same partition. */
-	if (npllGlobals & GLOBAL_TIMEOUT)
+	if (npllGlobals & CONFIG_GLOBAL_TIMEOUT) {
 		*timeoutOut = npllTimeout;
-	else if (!(globalsSet & GLOBAL_TIMEOUT) && (gbGlobals & GLOBAL_TIMEOUT))
+		*globalsOut |= CONFIG_GLOBAL_TIMEOUT;
+	}
+	else if (!(globalsSet & CONFIG_GLOBAL_TIMEOUT) && (gbGlobals & CONFIG_GLOBAL_TIMEOUT)) {
 		*timeoutOut = gbTimeout;
+		*globalsOut |= CONFIG_GLOBAL_TIMEOUT;
+	}
 
-	if (npllGlobals & GLOBAL_DEFAULT)
+	if (npllGlobals & CONFIG_GLOBAL_DEFAULT) {
 		*defaultOut = npllDefault;
-	else if (!(globalsSet & GLOBAL_DEFAULT) && (gbGlobals & GLOBAL_DEFAULT))
+		*globalsOut |= CONFIG_GLOBAL_DEFAULT;
+	}
+	else if (!(globalsSet & CONFIG_GLOBAL_DEFAULT) && (gbGlobals & CONFIG_GLOBAL_DEFAULT)) {
 		*defaultOut = (uint)npllN + gbDefault;
+		*globalsOut |= CONFIG_GLOBAL_DEFAULT;
+	}
 
 	globalsSet |= npllGlobals | gbGlobals;
 
