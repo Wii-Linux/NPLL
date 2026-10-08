@@ -1318,7 +1318,11 @@ static void npllBootLinux(struct npllEntry *ne) {
 			goto fail;
 		}
 
-		L_RelocateNetConfigDat(reserved, reservedCount);
+		ret = L_RelocateNetConfigDat(reserved, reservedCount);
+		if (ret) {
+			log_printf("npllBootLinux: failed to relocate network config: %d\r\n", ret);
+			goto fail;
+		}
 
 		files.dtb = M_PoolAllocAvoid(POOL_MEM1, files.dtbSize + dtbExtra, 64, reserved, reservedCount);
 		if (!files.dtb) {

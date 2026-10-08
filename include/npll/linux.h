@@ -24,6 +24,6 @@ extern int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t ca
 extern bool L_RangeReserved(const void *fdt, u32 start, u32 size);
 extern int L_PrepareDTB(struct linuxBootFiles *files, const char *cmdline);
 extern int L_LoadNetConfigDatFromSFFS(void);
-extern void L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount);
+extern int L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount);
 
 #endif /* _LINUX_H */

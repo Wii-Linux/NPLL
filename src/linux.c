@@ -56,15 +56,23 @@ int L_LoadNetConfigDatFromSFFS(void) {
 	return 0;
 }
 
-void L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount) {
+int L_RelocateNetConfigDat(const struct memRange *avoid, size_t avoidCount) {
+	u8 *relocated;
+
 	if (!netcfgLoaded)
-		return;
+		return 0;
 
 	/* must be page-aligned for Linux */
-	netcfg = M_PoolAllocAvoid(POOL_MEM2, NETCFG_SIZE + 8, 4096, avoid, avoidCount);
+	relocated = M_PoolAllocAvoid(POOL_MEM2, NETCFG_SIZE + 8, 4096, avoid, avoidCount);
+	if (!relocated)
+		return -ENOMEM;
+	if (netcfg)
+		free(netcfg);
+	netcfg = relocated;
 	memcpy(netcfg, netcfgMagic, 8);
 	memcpy(netcfg + 8, netcfgTmp, NETCFG_SIZE);
 	dcache_flush(netcfg, NETCFG_SIZE + 8);
+	return 0;
 }
 
 
