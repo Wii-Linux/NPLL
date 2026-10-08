@@ -92,6 +92,17 @@ jobs:
           echo "$RUNNER_TEMP/devkitppc/bin" >> "$GITHUB_PATH"
           echo "DEVKITPPC=$RUNNER_TEMP/devkitppc" >> "$GITHUB_ENV"
 
+      - name: Install elf2dol
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/gamecube-tools/bin"
+          docker pull "$DEVKITPPC_IMAGE"
+          docker run --rm \
+            -v "$RUNNER_TEMP/gamecube-tools/bin:/out" \
+            "$DEVKITPPC_IMAGE" \
+            sh -c 'cp /opt/devkitpro/tools/bin/elf2dol /out/'
+          echo "$RUNNER_TEMP/gamecube-tools/bin" >> "$GITHUB_PATH"
+
       - name: Build NPLL
         run: |
           set -eu
