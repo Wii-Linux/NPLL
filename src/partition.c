@@ -258,6 +258,7 @@ void P_ProbePartitions(struct blockDevice *bdev) {
 none:
 	/* no recognized partition table; create a pseudo-partition spanning the entire device */
 	bdev->partitions[0] = malloc(sizeof(struct partition));
+	bdev->partitions[0]->fsName = NULL;
 	bdev->partitions[0]->bdev = bdev;
 	bdev->partitions[0]->offset = 0;
 	bdev->partitions[0]->size = bdev->size;

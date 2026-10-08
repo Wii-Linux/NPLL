@@ -260,9 +260,9 @@ static void sysinfoMenuInit(struct menu *m) {
 			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx%s%s%s\r\n",
 				FS_MountedPartition == B_Devices[i]->partitions[j] ? '*' : ' ',
 				j + 1, B_Devices[i]->partitions[j]->size, B_Devices[i]->partitions[j]->offset,
-				FS_MountedPartition == B_Devices[i]->partitions[j] ? " (" : "",
-				FS_MountedPartition == B_Devices[i]->partitions[j] ? FS_Mounted->name : "",
-				FS_MountedPartition == B_Devices[i]->partitions[j] ? ")" : "");
+				B_Devices[i]->partitions[j]->fsName ? " (" : "",
+				B_Devices[i]->partitions[j]->fsName ? B_Devices[i]->partitions[j]->fsName : "",
+				B_Devices[i]->partitions[j]->fsName ? ")" : "");
 			strcat(m->content, tmp);
 		}
 	}

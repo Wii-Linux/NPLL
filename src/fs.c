@@ -78,6 +78,7 @@ int FS_Mount(struct filesystem *fs, struct partition *part) {
 
 	FS_Mounted = fs;
 	FS_MountedPartition = part;
+	part->fsName = fs->name;
 	log_printf("mounted %s on partition %d of %s\r\n",
 		   fs->name, part->index, part->bdev->name);
 	return 0;
@@ -154,6 +155,7 @@ ssize_t FS_GetSize(int fd) {
 struct filesystem *FS_Probe(struct partition *part) {
 	int i;
 	assert_msg(initialized, "fs: FS_Probe w/o FS_Init");
+	part->fsName = NULL;
 
 	for (i = 0; i < (int)(sizeof(filesystems) / sizeof(struct filesystem *)); i++) {
 		assert_msg(filesystems[i], "fs: FS_Probe hit null filesystem ptr in `filesystems`");
@@ -166,6 +168,7 @@ struct filesystem *FS_Probe(struct partition *part) {
 
 		if (filesystems[i]->probe(filesystems[i], part)) {
 			log_puts("Success");
+			part->fsName = filesystems[i]->name;
 			return filesystems[i];
 		}
 		else

@@ -24,6 +24,9 @@ struct partition {
 
 	/* partition index (0-based) */
 	uint index;
+
+	/* detected filesystem name, retained after unmount, NULL if unknown */
+	const char *fsName;
 };
 
 /* https://en.wikipedia.org/wiki/Partition_type#List_of_partition_IDs */
