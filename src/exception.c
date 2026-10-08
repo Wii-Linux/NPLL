@@ -34,7 +34,7 @@ static void dump_stack_trace(u32 *sp) {
 		prev_sp = sp[0];
 		lr = sp[1];
 
-		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (uintptr_t)sp, lr);
+		printf("  #%d  SP=0x%08x  LR=0x%08x\r\n", depth, (u32)(uintptr_t)sp, lr);
 
 		// sanity checks
 		if (prev_sp <= (uintptr_t)sp || prev_sp == 0 || prev_sp == 0xffffffff)

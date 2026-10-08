@@ -181,7 +181,7 @@ static int findNewestSuperblock(struct partition *part, const struct sffsLayout 
 
 		ret = nandReadPage(part, buf, NAND_PAGE_SIZE, offset);
 		if (ret != NAND_PAGE_SIZE) {
-			log_printf("findNewestSuperblock: nandReadPage failed: %d\r\n", ret);
+			log_printf("findNewestSuperblock: nandReadPage failed: %zd\r\n", ret);
 			return -EIO;
 		}
 

@@ -40,14 +40,14 @@ int L_LoadNetConfigDatFromSFFS(void) {
 
 	size = FS_GetSize(fd);
 	if (size != NETCFG_SIZE) {
-		log_printf("net config.dat wrong size: %d != %d\r\n", size, NETCFG_SIZE);
+		log_printf("net config.dat wrong size: %zd != %d\r\n", size, NETCFG_SIZE);
 		FS_Close(fd);
 		return -EINVAL;
 	}
 
 	size = FS_Read(fd, netcfgTmp, NETCFG_SIZE);
 	if (size != NETCFG_SIZE) {
-		log_printf("net config.dat read failed: %d\r\n", size);
+		log_printf("net config.dat read failed: %zd\r\n", size);
 		return (int)size;
 	}
 
@@ -184,7 +184,7 @@ int L_CollectReserved(const void *fdt, struct memRange *ranges, size_t capacity,
 	const struct fdt_property *prop;
 	const fdt32_t *reg;
 	const char *name;
-	u64 start, size;
+	u64 start = 0, size = 0;
 	u32 tag;
 	int addrCells, sizeCells, child, depth, entries, i, next, node, regLen, ret, propLen;
 	bool disabled;

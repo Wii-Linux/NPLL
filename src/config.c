@@ -220,7 +220,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 
 	size = FS_GetSize(fd);
 	if (size <= 0) {
-		log_printf("FS_GetSize on gumboot/gumboot.lst failed: %d\r\n", size);
+		log_printf("FS_GetSize on gumboot/gumboot.lst failed: %zd\r\n", size);
 		FS_Close(fd);
 		return -1;
 	}
@@ -228,7 +228,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 	file = malloc((size_t)size + 1);
 	ret = FS_Read(fd, file, (size_t)size);
 	if (ret != size) {
-		log_printf("FS_Read on gumboot/gumboot.lst failed: %d\r\n", ret);
+		log_printf("FS_Read on gumboot/gumboot.lst failed: %zd\r\n", ret);
 		free(file);
 		FS_Close(fd);
 		return -1;
@@ -1069,7 +1069,7 @@ static void doInclude(struct npllCtx *ctx, const char *spec) {
 
 	size = FS_GetSize(fd);
 	if (size <= 0) {
-		log_printf("warn: @include '%s' has bad size %d; skipping\r\n", spec, size);
+		log_printf("warn: @include '%s' has bad size %zd; skipping\r\n", spec, size);
 		FS_Close(fd);
 		goto restore;
 	}
@@ -1490,7 +1490,7 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 
 		size = FS_GetSize(fd);
 		if (size <= 0) {
-			log_printf("FS_GetSize on %s failed: %d\r\n", path, size);
+			log_printf("FS_GetSize on %s failed: %zd\r\n", path, size);
 			FS_Close(fd);
 			continue;
 		}

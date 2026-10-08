@@ -125,7 +125,7 @@ static int ipc_recv_reply(void) {
 		if (((u32 *)reply) == virtToPhys(&ipc))
 			break;
 
-		log_printf("Ignoring unexpected IPC reply @ 0x%08x\r\n", reply);
+		log_printf("Ignoring unexpected IPC reply @ 0x%08x\r\n", (u32)reply);
 	}
 
 	dcache_invalidate(&ipc, sizeof ipc);

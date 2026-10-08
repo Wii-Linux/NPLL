@@ -32,7 +32,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 
 	ret = B_ReadDevice(bdev, _mbr, 512, 0);
 	if (ret != 512) {
-		log_printf("read failed trying to probe for MBR: %d\r\n", ret);
+		log_printf("read failed trying to probe for MBR: %zd\r\n", ret);
 		return 0;
 	}
 
@@ -83,7 +83,7 @@ static uint probeMBR(struct blockDevice *bdev) {
 
 		ret = B_ReadDevice(bdev, _mbr, 512, extendedOff);
 		if (ret != 512) {
-			log_printf("read failed trying to probe for extended partitions: %d\r\n", ret);
+			log_printf("read failed trying to probe for extended partitions: %zd\r\n", ret);
 			return count; /* we at least got something */
 		}
 
@@ -166,7 +166,7 @@ static int probeGPT(struct blockDevice *bdev) {
 
 	ret = B_ReadDevice(bdev, _sect, 512, 0);
 	if (ret != 512) {
-		log_printf("read failed trying to probe for PMBR: %d\r\n", ret);
+		log_printf("read failed trying to probe for PMBR: %zd\r\n", ret);
 		return -1;
 	}
 
@@ -181,7 +181,7 @@ static int probeGPT(struct blockDevice *bdev) {
 	gptLBA = npll_le32_to_cpu(pmbr->entries[0].lbaStart);
 	ret = B_ReadDevice(bdev, _sect, 512, gptLBA * bdev->blockSize);
 	if (ret != 512) {
-		log_printf("read failed trying to probe for GPT: %d\r\n", ret);
+		log_printf("read failed trying to probe for GPT: %zd\r\n", ret);
 		return 0;
 	}
 
@@ -199,7 +199,7 @@ static int probeGPT(struct blockDevice *bdev) {
 	numEntries = npll_le32_to_cpu(gpt->numEntries);
 	entrySize = npll_le32_to_cpu(gpt->entrySize);
 	if (entrySize > 512) {
-		log_printf("refusing to parse absurdly large GPT entries of size %d\r\n", entrySize);
+		log_printf("refusing to parse absurdly large GPT entries of size %zd\r\n", entrySize);
 		return 0;
 	}
 
@@ -210,7 +210,7 @@ static int probeGPT(struct blockDevice *bdev) {
 	for (i = 0; i < numEntries && count < MAX_PARTITIONS; i++) {
 		ret = B_ReadDevice(bdev, _sect, 512, curOff);
 		if (ret != 512) {
-			log_printf("read failed trying to probe for GPT entry: %d\r\n", ret);
+			log_printf("read failed trying to probe for GPT entry: %zd\r\n", ret);
 			return (int)count;
 		}
 

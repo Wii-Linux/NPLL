@@ -85,7 +85,7 @@ static int drhStartupCommand(struct usbDevice *dev, struct usbEndpoint *out, str
 	u8 reply[1024] ALIGN(32);
 	u8 *p;
 	u32 actual, offset, length;
-	u16 tag = (++*transaction << 4) | 8;
+	u16 tag = (u16)(++*transaction << 4) | 8u;
 	uint attempt;
 	int ret;
 

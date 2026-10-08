@@ -266,7 +266,7 @@ static int wfsReadBlock(const struct wfsArea *area, u32 areaBlock, u8 blockLog2,
 		iv[3] = state.part->bdev->blockSize;
 		ret = H_AESDecrypt(state.buf, state.buf, iv, state.key, len);
 		if (ret) {
-			log_printf("wfsReadBlock: H_AESDecrypt failed: %d\r\n", ret);
+			log_printf("wfsReadBlock: H_AESDecrypt failed: %zd\r\n", ret);
 			return -EIO;
 		}
 	}

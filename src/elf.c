@@ -288,13 +288,13 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	/* read in the ehdr */
 	res = FS_Seek(fd, 0);
 	if (res != 0) {
-		log_printf("FS_Seek for ehdr returned: %d\r\n", res);
+		log_printf("FS_Seek for ehdr returned: %zd\r\n", res);
 		ret = ELF_ERR_FS_ERROR;
 		goto fail;
 	}
 	res = FS_Read(fd, &ehdr, sizeof(ehdr));
 	if (res != sizeof(ehdr)) {
-		log_printf("FS_Read for ehdr returned: %d\r\n", res);
+		log_printf("FS_Read for ehdr returned: %zd\r\n", res);
 		ret = ELF_ERR_FS_ERROR;
 		goto fail;
 	}
@@ -368,13 +368,13 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		res = FS_Seek(fd, (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize)));
 		if (res != (ssize_t)(ehdr.e_phoff + (i * ehdr.e_phentsize))) {
-			log_printf("FS_Seek for phdr returned: %d\r\n", res);
+			log_printf("FS_Seek for phdr returned: %zd\r\n", res);
 			ret = ELF_ERR_FS_ERROR;
 			goto fail;
 		}
 		res = FS_Read(fd, &phdr, sizeof(phdr));
 		if (res != sizeof(phdr)) {
-			log_printf("FS_Read for phdr returned: %d\r\n", res);
+			log_printf("FS_Read for phdr returned: %zd\r\n", res);
 			ret = ELF_ERR_FS_ERROR;
 			goto fail;
 		}
@@ -387,7 +387,7 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 		res = FS_Seek(fd, (ssize_t)off);
 		if (res != (ssize_t)off) {
-			log_printf("FS_Seek for segment %d returned: %d\r\n", i, res);
+			log_printf("FS_Seek for segment %d returned: %zd\r\n", i, res);
 			ret = ELF_ERR_FS_ERROR;
 			goto fail;
 		}
@@ -395,7 +395,7 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 		loadStarted = true;
 		res = FS_Read(fd, addr, size);
 		if (res != (ssize_t)size) {
-			log_printf("FS_Read for segment %d returned: %d\r\n", i, res);
+			log_printf("FS_Read for segment %d returned: %zd\r\n", i, res);
 			ret = ELF_ERR_FS_ERROR;
 			goto fail;
 		}

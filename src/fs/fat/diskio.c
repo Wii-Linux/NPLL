@@ -79,7 +79,7 @@ DRESULT disk_read (
 	blocksz = partitions[pdrv]->bdev->blockSize;
 	result = B_Read(partitions[pdrv], buff, (size_t)((u64)count * blocksz), sector * blocksz);
 	if (result != (ssize_t)(count * blocksz)) {
-		log_printf("B_Read ret %d\r\n", result);
+		log_printf("B_Read ret %zd\r\n", result);
 		return RES_ERROR;
 	}
 

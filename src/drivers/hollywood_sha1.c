@@ -80,7 +80,7 @@ int H_SHA1Process(const void *in, u32 *out, size_t size) {
 	irqs = IRQ_DisableSave();
 
 	if (size < 64 || size & 63) {
-		log_printf("H_SHA1Process: invalid size: %u\r\n", size);
+		log_printf("H_SHA1Process: invalid size: %zu\r\n", size);
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}

@@ -80,7 +80,7 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 	irqs = IRQ_DisableSave();
 
 	if (size < 16 || size & 15) {
-		log_printf("%s: invalid size: %u\r\n", func, size);
+		log_printf("%s: invalid size: %zu\r\n", func, size);
 		IRQ_Restore(irqs);
 		return -EINVAL;
 	}
