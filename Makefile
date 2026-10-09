@@ -8,6 +8,10 @@ ifeq ($(HOSTCC),)
 HOSTCC := $(CC)
 endif
 
+ifeq ($(HOSTLDFLAGS),)
+HOSTLDFLAGS := $(LDFLAGS)
+endif
+
 ifneq ($(LLVM),1)
 ifneq ($(uname -m),ppc)
 CROSS_PREFIX ?= $(word 1, \
@@ -308,9 +312,9 @@ external/mini/armboot.bin: external/mini/Makefile
 	$(HIDE)$(MAKE) -C external/mini FOR_NPLL=1 MAKEOVERRIDES="$(filter-out OBJCOPY=%,$(MAKEOVERRIDES))"
 
 external/dol-tools/bin/dol-info: external/dol-tools/Makefile
-	$(HIDE)$(MAKE) -C external/dol-tools dol-info CC="$(HOSTCC)"
+	$(HIDE)$(MAKE) -C external/dol-tools dol-info CC="$(HOSTCC)" LDFLAGS="$(HOSTLDFLAGS)"
 external/dol-tools/bin/dol-patch: external/dol-tools/Makefile
-	$(HIDE)$(MAKE) -C external/dol-tools dol-patch CC="$(HOSTCC)"
+	$(HIDE)$(MAKE) -C external/dol-tools dol-patch CC="$(HOSTCC)" LDFLAGS="$(HOSTLDFLAGS)"
 
 src/armboot_bin.c: util/bin2c external/mini/armboot.bin
 	$(info $s  BIN2C $@)
