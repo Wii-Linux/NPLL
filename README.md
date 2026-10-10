@@ -160,4 +160,7 @@ For info about the dedicated NPLL config format, see `CONFIG_FORMAT.txt`.
 "PowerPC®" is a registered trademark of International Business Machines Corp.  
 "Linux®" is the registered trademark of Linus Torvalds in the U.S. and other countries.  
 
-All code unless otherwise stated is Copyright (C) 2025-2026 Techflash and NPLL contributors.  See the relevant file for additional copyright information.
+All code unless otherwise stated is Copyright (C) 2025-2026 Techflash and NPLL contributors.  See the relevant file for additional copyright information.  
+
+The image under `assets/hbc` is used under permission of [Tech64](https://github.com/tech64dd).
+It is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC-BY-NC-SA) License, Copyright (C) 2026 Tech64.  
