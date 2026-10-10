@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+	<name>NPLL</name>
+	<version>v0.6</version>
+	<release_date>20260407000000</release_date>
+	<coder>Techflash</coder>
+	<short_description>Nintendo PowerPC Linux Loader</short_description>
+	<long_description>NPLL is a program for booting Linux on your GameCube, Wii, or Wii U.  This same executable can run on all 3 consoles, though you're looking at it packaged as a Wii HBC application currently.  It offers an interactive menu to pick the Linux kernel you want to boot.  It offers many, many features for doing so.  For more info, see its wiki page at https://wiki.wii-linux.org/wiki/NPLL
+</long_description>
+<ahb_access/>
+</app>
+
