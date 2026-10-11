@@ -96,6 +96,7 @@ struct npllEntry {
  * Each global is locked only after a successfully parsed file sets it
  */
 static u32 globalsSet;
+static char *pendingDefaultId;
 
 /*
  * Shared helpers
@@ -1542,17 +1543,24 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	}
 
 	if (!(globalsSet & CONFIG_GLOBAL_DEFAULT) && ctx.defaultId) {
+		sfree(pendingDefaultId);
+		pendingDefaultId = ctx.defaultId;
+		ctx.defaultId = NULL;
 		*globalsOut |= CONFIG_GLOBAL_DEFAULT;
+	}
+	sfree(ctx.defaultId);
+
+	if (pendingDefaultId) {
 		for (i = 0; i < ctx.numEntries; i++) {
-			if (!strcmp(ctx.entries[i]->id, ctx.defaultId)) {
+			if (!strcmp(ctx.entries[i]->id, pendingDefaultId)) {
 				*defaultOut = i;
+				*globalsOut |= CONFIG_GLOBAL_DEFAULT;
+				sfree(pendingDefaultId);
+				pendingDefaultId = NULL;
 				break;
 			}
 		}
-		if (i == ctx.numEntries)
-			log_printf("warn: default entry '%s' not found\r\n", ctx.defaultId);
 	}
-	sfree(ctx.defaultId);
 
 	if (ctx.numEntries == 0) {
 		sfree(ctx.entries);
@@ -1630,6 +1638,10 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, ui
 	}
 
 	globalsSet |= npllGlobals | gbGlobals;
+	if (pendingDefaultId) {
+		*defaultOut = (uint)-1;
+		*globalsOut |= CONFIG_DEFAULT_PENDING;
+	}
 
 	if (npllN + gbN == 0) {
 		sfree(npllEnts);

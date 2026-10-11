@@ -765,6 +765,10 @@ void UI_AddPart(struct partition *part) {
 	irqs = IRQ_DisableSave();
 	if (globals & CONFIG_GLOBAL_TIMEOUT)
 		configuredTimeout = timeout;
+	if (globals & CONFIG_DEFAULT_PENDING) {
+		configuredDefault = NULL;
+		autobootActive = false;
+	}
 	if (num > 0) {
 		assert(numParts < (MAX_BDEV * MAX_PARTITIONS) - 1);
 		partitions[numParts].part = part;
@@ -773,7 +777,7 @@ void UI_AddPart(struct partition *part) {
 		for (i = (uint)num; i > 0; i--)
 			UI_PrependEntry(&rootMenu, &entries[i - 1]);
 		numParts++;
-		if (!configuredDefault)
+		if (!configuredDefault && !(globals & CONFIG_DEFAULT_PENDING))
 			configuredDefault = &entries[0];
 		if ((globals & CONFIG_GLOBAL_DEFAULT) && defaultEntry < (uint)num)
 			configuredDefault = &entries[defaultEntry];

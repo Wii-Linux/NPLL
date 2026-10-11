@@ -12,6 +12,7 @@
 #define CONFIG_GLOBAL_TIMEOUT BIT(0)
 #define CONFIG_GLOBAL_DEFAULT BIT(1)
 #define CONFIG_GLOBAL_VI_MODE BIT(2)
+#define CONFIG_DEFAULT_PENDING BIT(3)
 
 extern int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, uint *globalsOut);
 
