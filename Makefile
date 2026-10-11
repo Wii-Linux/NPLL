@@ -136,7 +136,7 @@ CFLAGS  := -mregnames -msoft-float -mcpu=750 -Iinclude -isystem external/dtc/lib
 #CFLAGS  += -DDO_TRACE
 # no UI, only logs
 #CFLAGS  += -DDEBUG_ONLY_LOGS
-CFLAGS  += -Os -flto=auto -ffunction-sections -fdata-sections -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
+CFLAGS  += -Os -flto=auto -ffunction-sections -fdata-sections -fno-stack-protector -Wall -Wextra -Wformat=2 -Wconversion -Wsign-conversion -Wshadow -Wundef -Wstrict-overflow=5 -Wtype-limits $(COMPILER_SPECIFIC_CFLAGS)
 LDFLAGS := $(COMPILER_SPECIFIC_LDFLAGS) -nostdlib -nostartfiles -Wl,-no-pie,--no-warn-mismatch -ffreestanding
 ifeq ($(LLVM),1)
 LDFLAGS_TMP_OBJ := $(LDFLAGS)
