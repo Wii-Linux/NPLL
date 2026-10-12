@@ -199,8 +199,7 @@ int S_SCFMLoadFile(const char *path) {
 }
 
 void S_SCFMClear(void) {
-	if (scfm.metadata)
-		free(scfm.metadata);
+	free(scfm.metadata);
 	SFFS_SnapshotFree(&scfm.snap);
 	memset(&scfm, 0, sizeof(scfm));
 }

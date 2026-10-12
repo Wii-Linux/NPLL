@@ -94,8 +94,7 @@ int WM_LoadPairingsFromSFFS(void) {
 	if (!ret)
 		ret = WM_ParsePairings(buffer, size);
 
-	if (buffer)
-		free(buffer);
+	free(buffer);
 
 	if (ret >= 0)
 		log_printf("cached %d Wii Remote pairing(s) from SFFS\r\n", ret);

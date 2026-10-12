@@ -830,8 +830,7 @@ static int wfsMount(struct filesystem *fs, struct partition *part) {
 
 static void wfsUnmount(struct filesystem *fs) {
 	(void)fs;
-	if (state.buf)
-		free(state.buf);
+	free(state.buf);
 	memset(&state, 0, sizeof(state));
 }
 

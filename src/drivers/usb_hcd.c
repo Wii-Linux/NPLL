@@ -374,15 +374,10 @@ static void ehciStop(struct usbHostController *hc) {
 	EHCI_WriteOp32(hc->mmioBase, EHCI_USBCMD_OFF, command & ~EHCI_CMD_RUN);
 	waitEHCI(hc, EHCI_USBSTS_OFF, EHCI_STS_HALTED, true);
 
-	if (priv->periodicList) {
-		free(priv->periodicList);
-		priv->periodicList = NULL;
-	}
-
-	if (priv->ehci) {
-		free(priv->ehci);
-		priv->ehci = NULL;
-	}
+	free(priv->periodicList);
+	priv->periodicList = NULL;
+	free(priv->ehci);
+	priv->ehci = NULL;
 }
 
 static int ehciPortStatus(struct usbHostController *hc, uint port, struct usbRootPortStatus *status) {
@@ -533,19 +528,12 @@ static void ohciStop(struct usbHostController *hc) {
 	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, OHCI_Read32(hc->mmioBase, OHCI_CONTROL) & ~OHCI_CTRL_HCFS_MASK);
 	OHCI_Write32(hc->mmioBase, OHCI_COMMAND_STATUS, OHCI_CMD_RESET);
 
-	if (priv->ohci) {
-		free(priv->ohci);
-		priv->ohci = NULL;
-	}
-
-	if (priv->hcca) {
-		free(priv->hcca);
-		priv->hcca = NULL;
-	}
-	if (priv->ohciControlQuirk) {
-		free(priv->ohciControlQuirk);
-		priv->ohciControlQuirk = NULL;
-	}
+	free(priv->ohci);
+	priv->ohci = NULL;
+	free(priv->hcca);
+	priv->hcca = NULL;
+	free(priv->ohciControlQuirk);
+	priv->ohciControlQuirk = NULL;
 	priv->ohciControlUsed = false;
 
 }

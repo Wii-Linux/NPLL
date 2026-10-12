@@ -204,10 +204,8 @@ static void sdmmcConnectionCheck(void *dummy) {
 		sdmmcRegistered[0] = false;
 		B_Unregister(&sdmmcBdev[0]);
 		sdmmcDrv.state = DRIVER_STATE_NO_HARDWARE;
-		if (mmcDev[0]) {
-			free(mmcDev[0]);
-			mmcDev[0] = NULL;
-		}
+		free(mmcDev[0]);
+		mmcDev[0] = NULL;
 		memset(&sdmmcBdev[0], 0, sizeof(sdmmcBdev[0]));
 		/*
 		 * Hot-remove/reinsert needs a full host reset here. Without it,

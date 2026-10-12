@@ -417,10 +417,8 @@ static int iso9660Mount(struct filesystem *fs, struct partition *part) {
 
 static void iso9660Unmount(struct filesystem *fs) {
 	(void)fs;
-	if (root) {
-		free(root);
-		root = NULL;
-	}
+	free(root);
+	root = NULL;
 	rootSz = 0;
 	mountedPart = NULL;
 	memset(files, 0, sizeof(files));

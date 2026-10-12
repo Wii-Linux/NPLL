@@ -1156,10 +1156,8 @@ static int viApplyMode(enum viMode desired) {
 
 	IRQ_Restore(irqs);
 	if (resize) {
-		if (oldXFB)
-			free(oldXFB);
-		if (oldRGB)
-			free(oldRGB);
+		free(oldXFB);
+		free(oldRGB);
 	}
 	return result == VI_INIT_RESULT_SUCCESS ? 0 : -EOPNOTSUPP;
 }

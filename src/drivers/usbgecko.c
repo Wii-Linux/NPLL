@@ -210,8 +210,7 @@ static void usbgeckoPoll(void *dummy) {
 		return;
 
 	if (usbgeckoState != STATE_IDLE && lastRxTB && T_HasElapsed(lastRxTB, UG_LOAD_TIMEOUT_US)) {
-		if (buf)
-			free(buf);
+		free(buf);
 		buf = NULL;
 		usbgeckoResetState();
 		log_puts("USB Gecko receive timed out");
@@ -353,8 +352,7 @@ static void usbgeckoEXIRemove(struct exi_device *dev) {
 	if (dev->drv_data)
 		O_RemoveDevice(&outDev);
 
-	if (buf)
-		free(buf);
+	free(buf);
 	buf = NULL;
 	dev->drv_data = NULL;
 	slot = (uint)-1;

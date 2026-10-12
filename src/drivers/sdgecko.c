@@ -159,10 +159,9 @@ static void sdgeckoRemove(uint i) {
 		B_Unregister(&sdgeckoBdev[i]);
 		sdgeckoRegistered[i] = false;
 	}
-	if (sdgeckoMMC[i]) {
-		free(sdgeckoMMC[i]);
-		sdgeckoMMC[i] = NULL;
-	}
+
+	free(sdgeckoMMC[i]);
+	sdgeckoMMC[i] = NULL;
 	memset(&sdgeckoBdev[i], 0, sizeof(sdgeckoBdev[i]));
 	memset(&sdgeckoSDIO[i], 0, sizeof(sdgeckoSDIO[i]));
 	sdgeckoProbeFailed[i] = false;

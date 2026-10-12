@@ -102,12 +102,6 @@ static char *pendingDefaultId;
  * Shared helpers
  */
 
-/* This allocator's free() panics on NULL; this wrapper makes free(NULL) a no-op. */
-static void sfree(void *p) {
-	if (p)
-		free(p);
-}
-
 static void ensureEntryCapacity(struct menuEntry **entries, uint *capacity, uint numEntries, uint needed) {
 	struct menuEntry *newEntries;
 	uint newCapacity;
@@ -134,7 +128,7 @@ void C_FreeEntryData(struct menuEntry *entry) {
 
 	switch ((enum entryKind)entry->data[DATA_IDX_KIND]) {
 	case KIND_GUMBOOT:
-		sfree((void *)entry->data[DATA_IDX_GB_PATH]);
+		free((void *)entry->data[DATA_IDX_GB_PATH]);
 		break;
 
 	case KIND_NPLL:
@@ -142,13 +136,13 @@ void C_FreeEntryData(struct menuEntry *entry) {
 		if (!ne)
 			break;
 
-		sfree(ne->id);
-		sfree(ne->name);
-		sfree(ne->execPath);
-		sfree(ne->initrdPath);
-		sfree(ne->dtbPath);
-		sfree(ne->cmdline);
-		sfree(ne);
+		free(ne->id);
+		free(ne->name);
+		free(ne->execPath);
+		free(ne->initrdPath);
+		free(ne->dtbPath);
+		free(ne->cmdline);
+		free(ne);
 		break;
 
 	default:
@@ -320,8 +314,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 				log_printf("Garbage 'root' directive @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
-				if (entries)
-					free(entries);
+				free(entries);
 				free(file);
 				return -1;
 			}
@@ -334,8 +327,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 				log_printf("Garbage 'kernel' directive @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 				while (numEntries)
 					free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
-				if (entries)
-					free(entries);
+				free(entries);
 				free(file);
 				return -1;
 			}
@@ -366,8 +358,7 @@ static int gumbootProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *de
 			log_printf("Garbage in config file @ line %d:%d (offset %d)\r\n", lineNum, (int)((uintptr_t)cur - (uintptr_t)curLine), (int)((uintptr_t)cur - (uintptr_t)file));
 			while (numEntries)
 				free((char *)entries[--numEntries].data[DATA_IDX_GB_PATH]);
-			if (entries)
-				free(entries);
+			free(entries);
 			free(file);
 			return -1;
 		}
@@ -580,12 +571,12 @@ static void freeNPLLEntry(struct npllEntry *e) {
 	if (!e)
 		return;
 
-	sfree(e->id);
-	sfree(e->name);
-	sfree(e->execPath);
-	sfree(e->initrdPath);
-	sfree(e->dtbPath);
-	sfree(e->cmdline);
+	free(e->id);
+	free(e->name);
+	free(e->execPath);
+	free(e->initrdPath);
+	free(e->dtbPath);
+	free(e->cmdline);
 	free(e);
 }
 
@@ -756,7 +747,7 @@ static void finalizeCurEntry(struct npllCtx *ctx) {
 }
 
 static void assignStr(char **slot, const char *val) {
-	sfree(*slot);
+	free(*slot);
 	*slot = strdup(val);
 }
 
@@ -1381,9 +1372,9 @@ static void npllBootLinux(struct npllEntry *ne) {
 	log_printf("npllBootLinux: ELF_LoadLinuxFile returned %d\r\n", ret);
 
 fail:
-	sfree(temporaryDTB);
-	sfree(files.dtb);
-	sfree(files.initrd);
+	free(temporaryDTB);
+	free(files.dtb);
+	free(files.initrd);
 }
 
 static void npllBootELF(struct npllEntry *ne) {
@@ -1525,8 +1516,8 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	if (ctx.aborted) {
 		for (i = 0; i < ctx.numEntries; i++)
 			freeNPLLEntry(ctx.entries[i]);
-		sfree(ctx.entries);
-		sfree(ctx.defaultId);
+		free(ctx.entries);
+		free(ctx.defaultId);
 		return -1;
 	}
 
@@ -1543,19 +1534,19 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	}
 
 	if (!(globalsSet & CONFIG_GLOBAL_DEFAULT) && ctx.defaultId) {
-		sfree(pendingDefaultId);
+		free(pendingDefaultId);
 		pendingDefaultId = ctx.defaultId;
 		ctx.defaultId = NULL;
 		*globalsOut |= CONFIG_GLOBAL_DEFAULT;
 	}
-	sfree(ctx.defaultId);
+	free(ctx.defaultId);
 
 	if (pendingDefaultId) {
 		for (i = 0; i < ctx.numEntries; i++) {
 			if (!strcmp(ctx.entries[i]->id, pendingDefaultId)) {
 				*defaultOut = i;
 				*globalsOut |= CONFIG_GLOBAL_DEFAULT;
-				sfree(pendingDefaultId);
+				free(pendingDefaultId);
 				pendingDefaultId = NULL;
 				break;
 			}
@@ -1563,7 +1554,7 @@ static int npllProbe(struct menuEntry **entriesOut, int *timeoutOut, uint *defau
 	}
 
 	if (ctx.numEntries == 0) {
-		sfree(ctx.entries);
+		free(ctx.entries);
 		*entriesOut = NULL;
 		return 0;
 	}
@@ -1614,7 +1605,7 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, ui
 	if (gbN < 0) {
 		for (i = 0; i < (uint)npllN; i++)
 			C_FreeEntryData(&npllEnts[i]);
-		sfree(npllEnts);
+		free(npllEnts);
 		return -1;
 	}
 
@@ -1644,8 +1635,8 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, ui
 	}
 
 	if (npllN + gbN == 0) {
-		sfree(npllEnts);
-		sfree(gbEnts);
+		free(npllEnts);
+		free(gbEnts);
 		return 0;
 	}
 
@@ -1655,8 +1646,8 @@ int C_Probe(struct menuEntry **entriesOut, int *timeoutOut, uint *defaultOut, ui
 	if (gbN)
 		memcpy(merged + npllN, gbEnts, sizeof(*merged) * (uint)gbN);
 
-	sfree(npllEnts);
-	sfree(gbEnts);
+	free(npllEnts);
+	free(gbEnts);
 
 	*entriesOut = merged;
 	return npllN + gbN;

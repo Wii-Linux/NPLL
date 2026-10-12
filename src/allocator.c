@@ -369,6 +369,9 @@ void free(void *ptr) {
 	struct block *block;
 	int i;
 
+	if (!ptr)
+		return;
+
 	for (i = 0; i < MAX_POOLS; i++) {
 		pool = &pools[i];
 		if (__unlikely(memcmp(pool->magic, POOL_HDR_MAGIC, POOL_HDR_MAGIC_SIZE)))

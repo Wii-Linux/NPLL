@@ -164,9 +164,7 @@ static int mmc_cmd_add_data(struct mmc_cmd *cmd, void *vbuf, uintptr_t pbuf, u32
 
 static void mmc_cmd_destroy(struct mmc_cmd *cmd)
 {
-	if (cmd->data) {
-		free(cmd->data);
-	}
+	free(cmd->data);
 	free(cmd);
 }
 

@@ -206,8 +206,6 @@ void WC_LoadFromSFFS(void) {
 	if (ret)
 		log_printf("System video mode selection failed: %d\r\n", ret);
 
-	if (settings)
-		free(settings);
-	if (sysconf)
-		free(sysconf);
+	free(settings);
+	free(sysconf);
 }
