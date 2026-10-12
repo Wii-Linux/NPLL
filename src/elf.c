@@ -271,6 +271,34 @@ int ELF_LoadMem(const void *data) {
 	__builtin_unreachable();
 }
 
+/*
+ * Where a Wii U direct-Linux DTB lands: just past the kernel's PT_LOAD end, but
+ * below the hash-table window.  Checked before anything is overwritten so a
+ * bad layout is a recoverable failure, and again when placing.
+ */
+static int wiiuDtbPlacement(const void *dtb, u32 linuxLoadEnd, u32 *dtbPhysOut, u32 *dtbSizeOut) {
+	u32 dtbSize = (u32)fdt_totalsize(dtb), dtbPhys, dtbEnd;
+
+	if (linuxLoadEnd > 0xffffffffu - (LINUX_DTB_ALIGN - 1u)) {
+		log_puts("Linux load end cannot be aligned for DTB placement");
+		return ELF_ERR_INVALID_EXEC;
+	}
+	dtbPhys = (linuxLoadEnd + LINUX_DTB_ALIGN - 1u) & ~(LINUX_DTB_ALIGN - 1u);
+	if (!dtbSize || dtbPhys > 0xffffffffu - dtbSize) {
+		log_puts("Linux DTB placement overflows");
+		return ELF_ERR_INVALID_EXEC;
+	}
+	dtbEnd = dtbPhys + dtbSize;
+	if (dtbEnd > WIIU_LINUX_DTB_LIMIT) {
+		log_printf("Linux image/DTB ends at %08x, cannot preserve hash window at %08x\r\n", dtbEnd, WIIU_LINUX_DTB_LIMIT);
+		return ELF_ERR_INVALID_EXEC;
+	}
+
+	*dtbPhysOut = dtbPhys;
+	*dtbSizeOut = dtbSize;
+	return 0;
+}
+
 static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdSize, const char *cmdline, u32 cmdlineFlags) {
 	/* should be aligned since we're reading into these */
 	Elf32_Ehdr ALIGN(32) ehdr;
@@ -282,7 +310,7 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	int ret;
 	ssize_t res;
 	size_t off;
-	u32 linuxEntry = 0, linuxLoadEnd = 0;
+	u32 linuxEntry = 0, linuxLoadEnd = 0, dtbMovePhys = 0, dtbMoveSize = 0;
 	bool irqWasEnabled = false, irqStateSaved = false, loadStarted = false;
 
 	/* read in the ehdr */
@@ -351,6 +379,11 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 			ret = ELF_ERR_INVALID_EXEC;
 			goto fail;
 		}
+		if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
+			ret = wiiuDtbPlacement(dtb, linuxLoadEnd, &dtbMovePhys, &dtbMoveSize);
+			if (ret)
+				goto fail;
+		}
 	}
 
 	/*
@@ -418,35 +451,14 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 	/* close the file */
 	FS_Close(fd);
 	if (dtb && H_ConsoleType == CONSOLE_TYPE_WII_U) {
-		u32 dtbSize = (u32)fdt_totalsize(dtb);
-		u32 dtbPhys, dtbEnd;
-		void *newDtb;
+		void *newDtb = physToCached(dtbMovePhys);
 
-		if (linuxLoadEnd > 0xffffffffu - (LINUX_DTB_ALIGN - 1u)) {
-			log_puts("Linux load end cannot be aligned for DTB placement");
-			ret = ELF_ERR_INVALID_EXEC;
-			goto fail_closed;
-		}
-		dtbPhys = (linuxLoadEnd + LINUX_DTB_ALIGN - 1u) & ~(LINUX_DTB_ALIGN - 1u);
-		if (!dtbSize || dtbPhys > 0xffffffffu - dtbSize) {
-			log_puts("Linux DTB placement overflows");
-			ret = ELF_ERR_INVALID_EXEC;
-			goto fail_closed;
-		}
-		dtbEnd = dtbPhys + dtbSize;
-		if (dtbEnd > WIIU_LINUX_DTB_LIMIT) {
-			log_printf("Linux image/DTB ends at %08x, cannot preserve hash window at %08x\r\n",
-			           dtbEnd, WIIU_LINUX_DTB_LIMIT);
-			ret = ELF_ERR_INVALID_EXEC;
-			goto fail_closed;
-		}
-
-		newDtb = physToCached(dtbPhys);
-		memmove(newDtb, dtb, dtbSize);
-		dcache_flush(newDtb, dtbSize);
+		/* placement was validated before the kernel overwrote anything */
+		memmove(newDtb, dtb, dtbMoveSize);
+		dcache_flush(newDtb, dtbMoveSize);
 		dtb = newDtb;
 		log_printf("ELF: Linux PT_LOAD end %08x, moved DTB to %08x-%08x\r\n",
-		           linuxLoadEnd, dtbPhys, dtbEnd);
+		           linuxLoadEnd, dtbMovePhys, dtbMovePhys + dtbMoveSize);
 	}
 
 	if (H_PreEntryMEM1)
@@ -480,7 +492,6 @@ static int _elfLoadFile(int fd, const void *dtb, const void *initrd, u32 initrdS
 
 fail:
 	FS_Close(fd);
-fail_closed:
 	if (irqStateSaved) {
 		/* Physical zero may now contain a partial kernel instead of vectors. */
 		/* FIXME: this might be recoverable by re-initializing the vectors */
