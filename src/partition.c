@@ -164,6 +164,8 @@ static uint probeMBR(struct blockDevice *bdev) {
  * Try to parse a GPT partition table from the device.
  * Returns the number of valid partitions found, or 0 if no MBR was found.
  */
+#define MAX_GPT_ENTRIES 1024
+
 static int probeGPT(struct blockDevice *bdev) {
 	u8 ALIGN(32) _sect[512], nullGUID[16];
 	struct mbr *pmbr;
@@ -212,9 +214,14 @@ static int probeGPT(struct blockDevice *bdev) {
 	entriesLBA = (size_t)npll_le64_to_cpu(gpt->entryArrayLBA);
 	numEntries = npll_le32_to_cpu(gpt->numEntries);
 	entrySize = npll_le32_to_cpu(gpt->entrySize);
-	if (entrySize > 512) {
-		log_printf("refusing to parse absurdly large GPT entries of size %zd\r\n", entrySize);
+	/* spec: 128 * 2^n; zero would never advance curOff, undersized would misparse */
+	if (entrySize < sizeof(struct gptEntry) || entrySize > 512 || (entrySize & 7)) {
+		log_printf("refusing to parse GPT with bad entry size %zd\r\n", entrySize);
 		return 0;
+	}
+	if (numEntries > MAX_GPT_ENTRIES) {
+		log_printf("GPT claims %zu entries, only scanning the first %u\r\n", numEntries, MAX_GPT_ENTRIES);
+		numEntries = MAX_GPT_ENTRIES;
 	}
 
 	curOff = entriesLBA * bdev->blockSize;
@@ -230,6 +237,10 @@ static int probeGPT(struct blockDevice *bdev) {
 
 		if (!memcmp(entry->typeGUID, nullGUID, sizeof(entry->typeGUID)))
 			goto skip;
+		if (npll_le64_to_cpu(entry->endLBA) < npll_le64_to_cpu(entry->startLBA)) {
+			log_printf("GPT entry %u has end < start, ignoring\r\n", i);
+			goto skip;
+		}
 
 		bdev->partitions[count] = malloc(sizeof(struct partition));
 		memset(bdev->partitions[count], 0, sizeof(struct partition));
