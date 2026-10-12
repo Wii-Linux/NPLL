@@ -19,6 +19,9 @@
  * Try to parse an MBR partition table from the first sector of the device.
  * Returns the number of valid partitions found, or 0 if no MBR was found.
  */
+/* generous upper bound on EBRs walked, independent of how many yield partitions */
+#define MAX_EBR_CHAIN 256
+
 static uint probeMBR(struct blockDevice *bdev) {
 	u8 ALIGN(32) _mbr[512];
 	struct mbr *mbr;
@@ -26,7 +29,8 @@ static uint probeMBR(struct blockDevice *bdev) {
 	uint i, count = 0;
 	int extIdx;
 	ssize_t ret;
-	u64 firstExtOff = 0, extendedOff = 0;
+	u64 firstExtOff = 0, extendedOff = 0, nextOff;
+	uint ebrCount = 0;
 
 	mbr = (struct mbr *)_mbr;
 
@@ -79,6 +83,11 @@ static uint probeMBR(struct blockDevice *bdev) {
 
 	/* consume all extended partitions */
 	while (extendedOff && count < MAX_PARTITIONS) {
+		/* a corrupt chain can loop without ever yielding a logical partition */
+		if (++ebrCount > MAX_EBR_CHAIN) {
+			log_puts("EBR chain too long, giving up");
+			break;
+		}
 		log_printf("consuming extended partition @ 0x%llx, count=%d\r\n", extendedOff, count);
 
 		ret = B_ReadDevice(bdev, _mbr, 512, extendedOff);
@@ -139,7 +148,12 @@ static uint probeMBR(struct blockDevice *bdev) {
 				break;
 			}
 			/* LBA Start of the next EBR is relative to the 1st EBR (why would they do that....) */
-			extendedOff = firstExtOff + ((u64)npll_le32_to_cpu(entries[extIdx].lbaStart) * bdev->blockSize);
+			nextOff = firstExtOff + ((u64)npll_le32_to_cpu(entries[extIdx].lbaStart) * bdev->blockSize);
+			if (nextOff <= extendedOff) {
+				log_puts("EBR chain does not advance, giving up");
+				break;
+			}
+			extendedOff = nextOff;
 		}
 	}
 
