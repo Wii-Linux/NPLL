@@ -17,6 +17,17 @@
 #include <npll/menu.h>
 #include <npll/soc.h>
 
+#define SYSINFO_BUF_SIZE 8192
+
+static void sysAppend(char *buf, const char *str) {
+	size_t len = strlen(buf), room = SYSINFO_BUF_SIZE - 1 - len, n = strlen(str);
+
+	if (n > room)
+		n = room;
+	memcpy(buf + len, str, n);
+	buf[len + n] = '\0';
+}
+
 static void sysinfoMenuInit(struct menu *m);
 static void sysinfoMenuCleanup(struct menu *m);
 
@@ -74,31 +85,31 @@ static void sysinfoMenuInit(struct menu *m) {
 	u32 total, used, freeBytes, largestAlloc, largestFree;
 
 	/* allocate scratch space */
-	m->content = malloc(4096);
+	m->content = malloc(SYSINFO_BUF_SIZE);
 	assert(m->content);
-	memset(m->content, 0, 4096);
+	memset(m->content, 0, SYSINFO_BUF_SIZE);
 
 	/* step 1: report NPLL ver */
-	strcat(m->content, "NPLL Version: " VERSION "\r\n");
+	sysAppend(m->content, "NPLL Version: " VERSION "\r\n");
 
 	/* step 2: report console type */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE)
-		strcat(m->content, H_GCNIsDevkit ? "Console Type: Nintendo GameCube (devkit)" :
+		sysAppend(m->content, H_GCNIsDevkit ? "Console Type: Nintendo GameCube (devkit)" :
 			"Console Type: Nintendo GameCube");
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		if (H_WiiIsvWii)
-			strcat(m->content, "Console Type: Nintendo Wii U (vWii)");
+			sysAppend(m->content, "Console Type: Nintendo Wii U (vWii)");
 		else if (H_WiiIsDevkit)
-			strcat(m->content, "Console Type: Nintendo Wii (NDEV/RVT-H)");
+			sysAppend(m->content, "Console Type: Nintendo Wii (NDEV/RVT-H)");
 		else if (H_WiiIsIronic)
-			strcat(m->content, "Console Type: Ironic emulator (Wii)");
+			sysAppend(m->content, "Console Type: Ironic emulator (Wii)");
 		else
-			strcat(m->content, "Console Type: Nintendo Wii");
+			sysAppend(m->content, "Console Type: Nintendo Wii");
 	}
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U)
-		strcat(m->content, "Console Type: Nintendo Wii U (native)");
+		sysAppend(m->content, "Console Type: Nintendo Wii U (native)");
 
-	strcat(m->content, "\r\n");
+	sysAppend(m->content, "\r\n");
 
 
 	/* step 3: report hardware revisions */
@@ -129,8 +140,8 @@ static void sysinfoMenuInit(struct menu *m) {
 		else
 			sprintf(tmp, "Flipper SoC Revision: Unknown (%08x) (?!)", H_GCNRev);
 
-		strcat(m->content, tmp);
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, tmp);
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 3b: report Hollywood revision if Wii/Wii U */
@@ -147,8 +158,8 @@ static void sysinfoMenuInit(struct menu *m) {
 		else
 			sprintf(tmp, "%s: 0x%02x (Unknown?!?!?!)", name, H_WiiRev);
 
-		strcat(m->content, tmp);
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, tmp);
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 3c: report Latte revision if Wii U */
@@ -193,69 +204,69 @@ static void sysinfoMenuInit(struct menu *m) {
 		else
 			sprintf(tmp, "Latte SoC Revision: Unknown (%08x)", H_WiiURev);
 
-		strcat(m->content, tmp);
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, tmp);
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 3d: report SMC revision if Wii U */
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		sprintf(tmp, "SMC Chip Revision: 0x%02x\r\nSMC Firmware Revision: 0x%02x", H_WiiUSMCChipRev, H_WiiUSMCFWRev);
-		strcat(m->content, tmp);
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, tmp);
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 3e: report IPL revision if GameCube */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) {
-		strcat(m->content, "IPL revision: ");
-		strcat(m->content, H_GCNIPLRev ? H_GCNIPLRev : "(read failed)");
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, "IPL revision: ");
+		sysAppend(m->content, H_GCNIPLRev ? H_GCNIPLRev : "(read failed)");
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 4: report boot method, if applicable */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE) /* TODO: Determine */
-		strcat(m->content, "Boot method: Unknown\r\n");
+		sysAppend(m->content, "Boot method: Unknown\r\n");
 	else if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		if (H_WiiBootIOS > 0) {
 			sprintf(tmp, "Boot method: IOS %d", H_WiiBootIOS);
-			strcat(m->content, tmp);
+			sysAppend(m->content, tmp);
 		}
 		else
-			strcat(m->content, "Boot method: MINI");
+			sysAppend(m->content, "Boot method: MINI");
 
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, "\r\n");
 	}
 	else if (H_ConsoleType == CONSOLE_TYPE_WII_U) /* TODO: Determine */
-		strcat(m->content, "Boot method: linux-loader\r\n");
+		sysAppend(m->content, "Boot method: linux-loader\r\n");
 
 	/* step 5: report video mode if GC/Wii */
 	if (H_ConsoleType == CONSOLE_TYPE_GAMECUBE || H_ConsoleType == CONSOLE_TYPE_WII) {
-		strcat(m->content, "Video mode: ");
-		strcat(m->content, H_VIMode ? H_VIMode : "(not yet set)");
-		strcat(m->content, "\r\n");
+		sysAppend(m->content, "Video mode: ");
+		sysAppend(m->content, H_VIMode ? H_VIMode : "(not yet set)");
+		sysAppend(m->content, "\r\n");
 	}
 
 	/* step 6: report CPU PVR */
 	sprintf(tmp, "CPU PVR: 0x%08x (%s)\r\n", mfspr(PVR), pvrToName(mfspr(PVR)));
-	strcat(m->content, tmp);
+	sysAppend(m->content, tmp);
 
 	/* step 7: memory */
 	M_PoolStats(POOL_MEM1, &total, &used, &freeBytes, &largestAlloc, &largestFree);
 	sprintf(tmp, "MEM1: %uK total/%uK used/%uK free/%uK max alloc/%uK max free range\r\n", total / 1024, used / 1024, freeBytes / 1024, largestAlloc / 1024, largestFree / 1024);
-	strcat(m->content, tmp);
+	sysAppend(m->content, tmp);
 	if (H_ConsoleType != CONSOLE_TYPE_GAMECUBE) {
 		M_PoolStats(POOL_MEM2, &total, &used, &freeBytes, &largestAlloc, &largestFree);
 		sprintf(tmp, "MEM2: %uK total/%uK used/%uK free/%uK max alloc/%uK max free range\r\n", total / 1024, used / 1024, freeBytes / 1024, largestAlloc / 1024, largestFree / 1024);
-		strcat(m->content, tmp);
+		sysAppend(m->content, tmp);
 	}
 
 
 	/* step 8: report attached storage */
-	strcat(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
+	sysAppend(m->content, "Attached block devices ('[*]' = currently mounted):\r\n");
 	for (i = 0; i < B_NumDevices; i++) {
 		sprintf(tmp, "- %s: %llu bytes, %u partitions%s\r\n",
 			B_Devices[i]->name, B_Devices[i]->size, B_Devices[i]->numPartitions,
 			B_Devices[i]->flags & BLOCK_FLAG_READ_ONLY ? " [READ-ONLY]" : "");
-		strcat(m->content, tmp);
+		sysAppend(m->content, tmp);
 		for (j = 0; j < B_Devices[i]->numPartitions; j++) {
 			sprintf(tmp, "  - [%c] %u: %llu bytes @ 0x%llx%s%s%s\r\n",
 				FS_MountedPartition == B_Devices[i]->partitions[j] ? '*' : ' ',
@@ -263,7 +274,7 @@ static void sysinfoMenuInit(struct menu *m) {
 				B_Devices[i]->partitions[j]->fsName ? " (" : "",
 				B_Devices[i]->partitions[j]->fsName ? B_Devices[i]->partitions[j]->fsName : "",
 				B_Devices[i]->partitions[j]->fsName ? ")" : "");
-			strcat(m->content, tmp);
+			sysAppend(m->content, tmp);
 		}
 	}
 
