@@ -36,6 +36,12 @@ static volatile struct aesRegs *const regs = (volatile struct aesRegs *)HOLLYWOO
 #define AES_CTRL_IRQ  BIT(30)
 #define AES_CTRL_EXEC BIT(31)
 
+/*
+ * The blocks field is only 12-bit, interpreted as [num blocks - 1], meaning
+ * the max that the engine can encrypt/decrypt/copy in one go is 4096 blocks
+ */
+#define AES_MAX_BYTES (4096u * 16u)
+
 static void aesIRQ(enum irqDev dev) {
 	(void)dev;
 }
@@ -71,12 +77,13 @@ static int aesReset(void) {
 static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key, size_t size, u32 aesCtrlFlags) {
 	int ret;
 	u64 tb;
-	u32 ctrl, elapsed;
-	bool irqs;
+	u32 ctrl, elapsed, chunk;
+	size_t origSize = size;
+	const u8 *cursorIn = in, *cursorOut = out;
+	bool irqs, first = true;
 
 	assert(H_ConsoleType != CONSOLE_TYPE_GAMECUBE);
 
-	ctrl = AES_CTRL_EXEC | AES_CTRL_IRQ | aesCtrlFlags | ((u32)(size / 16) - 1);
 	irqs = IRQ_DisableSave();
 
 	if (size < 16 || size & 15) {
@@ -108,8 +115,6 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 		barrier(); regs->iv = iv[2];
 		barrier(); regs->iv = iv[3]; barrier();
 	}
-	else
-		ctrl |= AES_CTRL_IV;
 
 	if (key) {
 		barrier(); regs->key = key[0];
@@ -121,26 +126,34 @@ static int aesOp(const char *func, const void *in, void *out, u32 *iv, u32 *key,
 	dcache_flush(in, (u32)size);
 	dcache_invalidate(out, (u32)size);
 
-	regs->src = (u32)(uintptr_t)virtToPhys(in);
-	regs->dest = (u32)(uintptr_t)virtToPhys(out); barrier();
-	regs->ctrl = ctrl;
-	tb = mftb();
-	while (regs->ctrl & AES_CTRL_EXEC) {
-		if (T_HasElapsed(tb, 100 * 1000)) {
-			log_printf("%s: timeout on AES eng to finish, ctrl=0x%08x\r\n", func, regs->ctrl);
-			IRQ_Restore(irqs);
-			return -ETIMEDOUT;
-		}
-		if (irqs && IRQ_CanWait(IRQDEV_AES)) {
-			elapsed = T_ElapsedUsecs(tb);
-			if (elapsed < 100 * 1000)
-				IRQ_WaitLocked(IRQDEV_AES, 100 * 1000 - elapsed);
+	while (size) {
+		chunk = size > AES_MAX_BYTES ? AES_MAX_BYTES : (u32)size;
+		ctrl = AES_CTRL_EXEC | AES_CTRL_IRQ | aesCtrlFlags | ((u32)(chunk / 16) - 1) | (first ? 0 : AES_CTRL_IV) | (!iv ? AES_CTRL_IV : 0);
+		regs->src = (u32)(uintptr_t)virtToPhys(cursorIn);
+		regs->dest = (u32)(uintptr_t)virtToPhys(cursorOut); barrier();
+		regs->ctrl = ctrl;
+		tb = mftb();
+		while (regs->ctrl & AES_CTRL_EXEC) {
+			if (T_HasElapsed(tb, 100 * 1000)) {
+				log_printf("%s: timeout on AES eng to finish, ctrl=0x%08x\r\n", func, regs->ctrl);
+				IRQ_Restore(irqs);
+				return -ETIMEDOUT;
+			}
+			if (irqs && IRQ_CanWait(IRQDEV_AES)) {
+				elapsed = T_ElapsedUsecs(tb);
+				if (elapsed < 100 * 1000)
+					IRQ_WaitLocked(IRQDEV_AES, 100 * 1000 - elapsed);
+			}
 		}
 
+		cursorIn += chunk;
+		cursorOut += chunk;
+		size -= chunk;
+		first = false;
 	}
 
 	IRQ_Restore(irqs);
-	dcache_invalidate(out, (u32)size);
+	dcache_invalidate(out, (u32)origSize);
 	return 0;
 }
 
