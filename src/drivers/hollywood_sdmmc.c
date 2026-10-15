@@ -31,8 +31,11 @@ static sdio_host_dev_t sdioDev[4];
 static mmc_card_t mmcDev[2];
 static struct blockDevice sdmmcBdev[2];
 static bool sdmmcRegistered[2];
-static bool checkConnected = false;
-static bool connectionReady, connectionQueued, lastCardPresent;
+static bool connectionReady, lastCardPresent;
+static u32 evCounter;
+
+/* the card detect line is bouncy while inserting, only init once it settles */
+#define DEBOUNCE_US (500 * 1000)
 
 static inline mmc_card_t bdevToMMC(struct blockDevice *bdev) {
 	if (bdev == &sdmmcBdev[0])
@@ -167,70 +170,57 @@ static void sdmmcRegisterBlock(struct blockDevice *bdev, const char *name) {
 	B_RegisterAsync(bdev);
 }
 
-static void sdmmcConnectionCheck(void *dummy) {
-	u32 pstate;
+static void sdmmcCardInserted(void) {
 	int ret;
-	(void)dummy;
-	if (!checkConnected)
+
+	ret = mmc_init(&sdioDev[0], &mmcDev[0]);
+	if (ret) {
+		log_printf("mmc_init failed with %d\r\n", ret);
 		return;
-
-	checkConnected = false;
-
-	if (!sdmmcRegistered[0]) {
-		/* check for a card */
-		pstate = sdio_get_present_state(&sdioDev[0]);
-		if (!(pstate & SDHC_PRES_STATE_CINST))
-			return; /* nothing */
-
-		/* ooh, we have a card */
-		ret = mmc_init(&sdioDev[0], &mmcDev[0]);
-		if (ret) {
-			log_printf("mmc_init failed with %d\r\n", ret);
-			return;
-		}
-
-		log_puts("card init success in CB");
-		sdmmcDrv.state = DRIVER_STATE_READY;
-		sdmmcRegisterBlock(&sdmmcBdev[0], bdevNames[0]);
-		sdmmcRegistered[0] = true;
 	}
-	else {
-		/* check for card removed */
-		pstate = sdio_get_present_state(&sdioDev[0]);
-		if (pstate & SDHC_PRES_STATE_CINST)
-			return; /* nothing */
 
-		log_puts("card removed!");
-		sdmmcRegistered[0] = false;
-		B_Unregister(&sdmmcBdev[0]);
-		sdmmcDrv.state = DRIVER_STATE_NO_HARDWARE;
-		free(mmcDev[0]);
-		mmcDev[0] = NULL;
-		memset(&sdmmcBdev[0], 0, sizeof(sdmmcBdev[0]));
-		/*
-		 * Hot-remove/reinsert needs a full host reset here. Without it,
-		 * the next probe can limp along with CRC errors and then degrade
-		 * into the old read-active/data-active wedge.
-		 */
-		if (sdio_reset(&sdioDev[0])) {
-			log_puts("sdmmcCB: host reset after removal failed");
-		}
-	}
+	log_puts("card init success in CB");
+	sdmmcDrv.state = DRIVER_STATE_READY;
+	sdmmcRegisterBlock(&sdmmcBdev[0], bdevNames[0]);
+	sdmmcRegistered[0] = true;
 }
 
-static void sdmmcConnectionWorker(void *data) {
-	bool enabled;
+static void sdmmcCardRemoved(void) {
+	log_puts("card removed!");
 
-	while (true) {
-		sdmmcConnectionCheck(data);
-		enabled = IRQ_DisableSave();
-		if (!checkConnected || !connectionReady) {
-			connectionQueued = false;
-			IRQ_Restore(enabled);
-			return;
-		}
-		IRQ_Restore(enabled);
-	}
+	sdmmcRegistered[0] = false;
+	B_Unregister(&sdmmcBdev[0]);
+	sdmmcDrv.state = DRIVER_STATE_NO_HARDWARE;
+	free(mmcDev[0]);
+	mmcDev[0] = NULL;
+	memset(&sdmmcBdev[0], 0, sizeof(sdmmcBdev[0]));
+
+	if (sdio_reset(&sdioDev[0]))
+		log_puts("sdmmcCB: host reset after removal failed");
+}
+
+/*
+ * Runs from the timer thread once a card detect edge has settled.
+ * Removals are queued with no delay, insertions after DEBOUNCE_US.
+ */
+static void sdmmcConnectionEvent(void *data) {
+	bool present;
+
+	if ((u32)(uintptr_t)data != evCounter || !connectionReady)
+		return; /* bounced, or superseded by a newer edge */
+
+	present = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
+	if (present && !sdmmcRegistered[0])
+		sdmmcCardInserted();
+	else if (!present && sdmmcRegistered[0])
+		sdmmcCardRemoved();
+}
+
+static void sdmmcQueueConnectionEvent(bool present) {
+	/* ignore any pending edge, only the newest one matters */
+	++evCounter;
+	T_QueueEvent(present ? DEBOUNCE_US : 0, sdmmcConnectionEvent,
+		(void *)(uintptr_t)evCounter);
 }
 
 static void sdmmcIRQ(enum irqDev dev) {
@@ -245,11 +235,8 @@ static void sdmmcIRQ(enum irqDev dev) {
 		present = !!(sdio_get_present_state(&sdioDev[0]) & SDHC_PRES_STATE_CINST);
 		if (present != lastCardPresent) {
 			lastCardPresent = present;
-			checkConnected = true;
-			if (connectionReady && !connectionQueued) {
-				connectionQueued = true;
-				T_QueueEvent(0, sdmmcConnectionWorker, NULL);
-			}
+			if (connectionReady)
+				sdmmcQueueConnectionEvent(present);
 		}
 	}
 }
@@ -348,16 +335,16 @@ static void sdmmcInit(void) {
 	enabled = IRQ_DisableSave();
 	sdmmcDrv.state = DRIVER_STATE_READY;
 	connectionReady = true;
-	if (checkConnected && !connectionQueued) {
-		connectionQueued = true;
-		T_QueueEvent(0, sdmmcConnectionWorker, NULL);
-	}
+	/* catch any edge that happened while we were still initializing */
+	if (lastCardPresent != sdmmcRegistered[0])
+		sdmmcQueueConnectionEvent(lastCardPresent);
 	IRQ_Restore(enabled);
 }
 
 static void sdmmcCleanup(void) {
 	connectionReady = false;
-	T_CancelEvent(sdmmcConnectionWorker, NULL);
+	T_CancelEvent(sdmmcConnectionEvent, (void *)(uintptr_t)evCounter);
+	++evCounter;
 	IRQ_Mask(IRQDEV_SDHCI0);
 	sdio_reset(&sdioDev[0]);
 	IRQ_Mask(IRQDEV_SDHCI1);
