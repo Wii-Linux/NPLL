@@ -62,7 +62,10 @@ static const char *pvrToName(u32 pvr) {
 	case 0x00083204: return "Gekko DD2.4";
 	case 0x00083214: return "Gekko DD2.4e";
 	case 0x00083410: return "Gekko DD4.0";
-	/* Only DD2.0 seen in retail */
+	/*
+	 * DD2.0 primarily seen in retail, one early French retail
+	 * console seen with a DD1.3.
+	 */
 	case 0x00087100: return "Broadway DD1.0";
 	case 0x00087110: return "Broadway DD1.01";
 	case 0x00087102: return "Broadway DD1.2";
