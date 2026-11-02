@@ -11,6 +11,7 @@
 #include <npll/drivers.h>
 #include <npll/hollywood/gpio.h>
 #include <npll/i2c.h>
+#include <npll/log.h>
 #include <npll/timer.h>
 
 static REGISTER_DRIVER(gpioI2CDrv);
@@ -105,7 +106,15 @@ static u8 readByte(bool ack) {
 
 static int gpioI2CTransfer(struct i2cController *controller, struct i2cMsg *msgs, uint numMsg) {
 	uint i, j;
+	int error = -ENXIO;
 	(void)controller;
+
+	/* A stuck-low SDA would otherwise look like an ACK for every byte */
+	setSDA(true);
+	setSCL(true);
+	udelay(2);
+	if (!getSDA())
+		return -EBUSY;
 
 	for (i = 0; i < numMsg; i++) {
 		i2cStart();
@@ -118,8 +127,10 @@ static int gpioI2CTransfer(struct i2cController *controller, struct i2cMsg *msgs
 		}
 		else {
 			for (j = 0; j < msgs[i].len; j++) {
-				if (!writeByte(msgs[i].buf[j]))
+				if (!writeByte(msgs[i].buf[j])) {
+					error = -EIO;
 					goto no_ack;
+				}
 			}
 		}
 	}
@@ -129,7 +140,7 @@ static int gpioI2CTransfer(struct i2cController *controller, struct i2cMsg *msgs
 
 no_ack:
 	i2cStop();
-	return -ENXIO;
+	return error;
 }
 
 static struct i2cController gpioI2CController = {
@@ -140,6 +151,9 @@ static struct i2cController gpioI2CController = {
 };
 
 static void gpioI2CInit(void) {
+	struct i2cMsg probe = { .addr = 0x70 };
+	int ret;
+
 	/* Native Wii U uses Latte's hardware I2C engine. */
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U) {
 		gpioI2CDrv.state = DRIVER_STATE_NO_HARDWARE;
@@ -148,6 +162,13 @@ static void gpioI2CInit(void) {
 
 	setSDA(true);
 	setSCL(true);
+	/* Address-only write, require an AVE ACK without changing its registers */
+	ret = gpioI2CTransfer(&gpioI2CController, &probe, 1);
+	if (ret != 1) {
+		log_printf("AVE probe failed: %d\r\n", ret);
+		gpioI2CDrv.state = DRIVER_STATE_FAULTED;
+		return;
+	}
 	if (I2C_RegisterController(&gpioI2CController)) {
 		gpioI2CDrv.state = DRIVER_STATE_FAULTED;
 		return;
