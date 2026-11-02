@@ -1077,7 +1077,6 @@ fallback:
 
 /* After registration, caller holds the FB lock */
 static int viApplyMode(enum viMode desired) {
-	enum viMode oldMode = videoMode;
 	enum viInitResult result;
 	uint rows, height = desired == VI_MODE_640X576_PAL50_INT ? 574 : 480;
 	u16 *newXFB, *oldXFB = xfb;
@@ -1106,25 +1105,8 @@ static int viApplyMode(enum viMode desired) {
 	result = viInit(desired);
 	if (H_ConsoleType == CONSOLE_TYPE_WII) {
 		error = viAVESetup(component);
-		if (error) {
-			if (viInitialized) {
-				viInit(oldMode);
-				if (viAVESetup(component))
-					log_puts("AVE-RVL: failed to restore previous encoder mode");
-
-				viSetXFB(oldXFB);
-				regs->dcr |= VI_DCR_ENB;
-			}
-
-			IRQ_Restore(irqs);
-
-			if (resize) {
-				free(newXFB);
-				free(newRGB);
-			}
-
-			return error;
-		}
+		if (error)
+			log_printf("AVE-RVL setup failed: %d\r\n", error);
 	}
 
 	xfb = newXFB;
