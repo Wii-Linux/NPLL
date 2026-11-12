@@ -2,6 +2,8 @@
  * NPLL - Wii - IOS /dev/es
  *
  * Copyright (C) 2025-2026 Techflash
+ *
+ * TMD stuff taken from https://wiibrew.org/wiki/Title_metadata
  */
 
 
@@ -35,5 +37,46 @@ extern i32 ES_LaunchTitle(u64 title_id, tikview_t *tikview);
 extern i32 ES_GetTitleID(u64 *title_id);
 
 #define TITLE_ID_IOS 0x100000000ull
+
+struct tmdContentRecord {
+	u32 cid;
+	u16 index;
+	u16 type;
+	u64 size;
+	u8  hash[20];
+} __attribute__((packed));
+
+struct tmd {
+	u32 sigType;
+	u8 sig[256];
+	u8 fill1[60];
+	u8 issuer[64];
+	u8 version;
+	u8 caCRLVersion;
+	u8 signerCRLVersion;
+	u8 vwii;
+	u64 sysVersion;
+	u64 titleID;
+	u32 titleType;
+	u16 groupID;
+	u8 reserved[62];
+	u32 accessRights;
+	u16 titleVersion;
+	u16 numContents;
+	u16 bootIndex;
+	u16 fill2;
+	struct tmdContentRecord contents[];
+} __attribute__((packed));
+
+struct contentMapEntry {
+	char name[8];
+	u8 sha1[20];
+} __attribute__((packed));
+
+#define TMD_SIGTYPE_RSA2048 0x00010001u
+
+#define TMD_CONTENT_NORMAL  0x0001u
+#define TMD_CONTENT_DLC     0x4000u
+#define TMD_CONTENT_SHARED  0x8000u
 
 #endif /* _IOS_ES_H */
