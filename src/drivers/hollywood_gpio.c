@@ -7,6 +7,7 @@
 #define MODULE "GPIO"
 
 #include <npll/log.h>
+#include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/drivers.h>
 #include <npll/irq.h>
@@ -81,6 +82,19 @@ static void gpioIRQHandler(enum irqDev dev) {
 	prevIn = in;
 }
 
+/* BT breaks under IOS if we take all of the pins */
+#define GPIO_VWII_PINS (GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN | GPIO_SLOT_LED | GPIO_AVE_SCL | GPIO_AVE_SDA)
+
+static u32 origOwner;
+static bool ownerSaved;
+
+void H_GPIOReleaseForIOS(void) {
+	if (!ownerSaved)
+		return;
+	HW_GPIO_OWNER = origOwner;
+	sync();
+}
+
 static void gpioInit(void) {
 	u32 dir, out;
 	bool irqs;
@@ -99,18 +113,29 @@ HW_GPIO_OWNER, HW_GPIO_ENABLE, HW_GPIOB_DIR, HW_GPIOB_OUT,
 HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 #endif
 
-	/* Broadway owns all */
-	HW_GPIO_OWNER = 0xffffffff;
+	if (H_WiiIsvWii) {
+		origOwner = HW_GPIO_OWNER;
+		ownerSaved = true;
+		HW_GPIO_OWNER = origOwner | GPIO_VWII_PINS;
+	}
+	else
+		/* Broadway owns all */
+		HW_GPIO_OWNER = 0xffffffff;
 
 	/* all enabled */
-	HW_GPIO_ENABLE = 0xffffffff;
+	if (H_WiiIsvWii)
+		HW_GPIO_ENABLE |= GPIO_VWII_PINS;
+	else
+		HW_GPIO_ENABLE = 0xffffffff;
 
 	/* set up outputs properly */
 	out = GPIO_DC_DC | GPIO_FAN | GPIO_SENSOR_BAR | GPIO_DI_SPIN;
 	if (H_ConsoleType == CONSOLE_TYPE_WII_U || H_WiiIsvWii)
 		out |= GPIO_GAMEPAD_EN | GPIO_PADPD | GPIO_BLUETOOTHMODE;
 	HW_GPIOB_OUT = out;
-	HW_GPIO_OUT  = out;
+	/* the GPIO* registers drive every pin we don't own */
+	if (!H_WiiIsvWii)
+		HW_GPIO_OUT = out;
 
 	/* set proper directions */
 	dir = ~(GPIO_POWER | GPIO_EJECT_BTN | GPIO_SLOT_IN | GPIO_EEP_MISO | GPIO_AVE_SDA);
@@ -118,7 +143,8 @@ HW_GPIOB_IN, HW_GPIO_DIR, HW_GPIO_OUT, HW_GPIO_IN);
 		dir |= GPIO_GAMEPAD_EN | GPIO_PADPD | GPIO_BLUETOOTHMODE;
 
 	HW_GPIOB_DIR = dir;
-	HW_GPIO_DIR  = dir;
+	if (!H_WiiIsvWii)
+		HW_GPIO_DIR = dir;
 
 	/* register the current state of the inlog_puts */
 	prevIn = HW_GPIOB_IN;

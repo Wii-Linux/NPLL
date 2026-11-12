@@ -68,4 +68,7 @@
 /* 5GHz (DRC) WiFi mode (Wii U) */
 #define GPIO_DWIFI_MODE BIT(1)
 
+/* vWii: give pins we took over back to the IOS before reloading it */
+extern void H_GPIOReleaseForIOS(void);
+
 #endif /* _GPIO_H */
