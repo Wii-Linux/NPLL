@@ -1276,6 +1276,22 @@ static void installPreEntryHook(struct npllEntry *ne) {
 		H_PreEntryHook = preEntryHook;
 }
 
+/*
+ * Reloading IOS needs the IOS kernel image in RAM, so read it from NAND now,
+ * before anything below opens files and before the drivers are torn down
+ */
+static int npllPreloadIOS(const struct npllEntry *ne) {
+	int ret;
+
+	if (!(ne->mods & NPLL_MOD_IOS) || !ne->ios)
+		return 0;
+
+	ret = H_WiiPreloadIOS(ne->ios);
+	if (ret)
+		log_printf("Failed to preload IOS%u for reload: %d\r\n", ne->ios, ret);
+	return ret;
+}
+
 static void npllBootLinux(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
@@ -1287,6 +1303,8 @@ static void npllBootLinux(struct npllEntry *ne) {
 	enum pool_idx initrdPool = POOL_ANY;
 
 	memset(&files, 0, sizeof(files));
+	if (npllPreloadIOS(ne))
+		return;
 	IOStats_MarkStart();
 
 	if (ne->dtbPath) {
@@ -1381,6 +1399,8 @@ static void npllBootELF(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
 
+	if (npllPreloadIOS(ne))
+		return;
 	if (npllEnsureFS(&ne->execOrigin, ne->execPath, &path))
 		return;
 
@@ -1399,6 +1419,8 @@ static void npllBootDOL(struct npllEntry *ne) {
 	int fd, ret;
 	const char *path;
 
+	if (npllPreloadIOS(ne))
+		return;
 	if (npllEnsureFS(&ne->execOrigin, ne->execPath, &path))
 		return;
 
@@ -1414,6 +1436,9 @@ static void npllBootDOL(struct npllEntry *ne) {
 }
 
 static void npllBootChannel(struct npllEntry *ne) {
+	u32 ios = 0;
+	int ret;
+
 	if (H_ConsoleType != CONSOLE_TYPE_WII) {
 		log_puts("npllBootChannel: channel boot is Wii-only");
 		return;
@@ -1421,9 +1446,14 @@ static void npllBootChannel(struct npllEntry *ne) {
 
 	log_printf("Booting channel %08x-%08x\r\n", ne->titleidHi, ne->titleidLo);
 
-	H_PrepareForExecEntry();
-	H_VIDisable();
-	H_WiiBootChannel(ne->titleidHi, ne->titleidLo);
+	/* the TMD names the IOS to use, also fails cleanly for titles that aren't installed */
+	ret = H_WiiPreloadChannel(ne->titleidHi, ne->titleidLo, &ios);
+	if (ret) {
+		log_printf("Failed to prepare channel %08x-%08x: %d\r\n", ne->titleidHi, ne->titleidLo, ret);
+		return;
+	}
+
+	H_WiiBootChannel(ne->titleidHi, ne->titleidLo, ios);
 	/* does not return */
 }
 

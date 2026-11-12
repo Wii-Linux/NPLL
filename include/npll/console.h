@@ -86,6 +86,8 @@ extern void H_PrepareForExecEntry(void);
 extern void (*H_PreEntryHook)(void);
 extern bool H_PreEntryMEM1;
 extern void H_WiiReloadIOS(u32 iosVer);
-extern void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo);
+extern int H_WiiPreloadIOS(u32 iosVer);
+extern int H_WiiPreloadChannel(u32 titleHi, u32 titleLo, u32 *iosVer);
+extern void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo, u32 iosVer);
 
 #endif /* _CONSOLE_H */

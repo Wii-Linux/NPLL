@@ -10,7 +10,13 @@
 #define MODULE "Wii"
 
 #include <assert.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <npll/allocator.h>
+#include <npll/block.h>
+#include <npll/fs.h>
 #include <npll/cache.h>
 #include <npll/console.h>
 #include <npll/cpu.h>
@@ -32,6 +38,7 @@
 #include <npll/utils.h>
 #include <npll/video.h>
 #include "../armboot_bin.h"
+#include "../fs/sffs.h"
 #include "ios_ipc.h"
 #include "ios_es.h"
 #include "mini_ipc.h"
@@ -52,6 +59,35 @@ extern int IOS_DevShaExploit(void);
 #define MINI_BOOT_MAGIC_PTR (*(vu32 *)(MEM1_UNCACHED_BASE + 0xfffff0))
 /* 'NRST' */
 #define MINI_NO_RESET_MAGIC 0x4e525354
+
+#define IOS_IMAGE_PHYS      0x11000000u
+#define IOS_IMAGE_MAX_SIZE  0x600000u
+#define IOS_TMD_MAX_SIZE    0x4000u
+#define IOS_CONTENT_MAP_MAX 0x40000u
+
+#define NAND_REG_BANK      (HOLLYWOOD_NAND_BASE + 0x18)
+#define NAND_BANK_SLCCMPT  1
+
+/* TODO: lower? */
+#define IOS_BOOT_TIMEOUT_MS 15000
+
+struct iosImageHdr {
+	u32 hdrSize;
+	u32 loaderSize;
+	u32 elfSize;
+	u32 argument;
+};
+
+static void *iosImage = NULL;
+static u32 iosImageSize = 0;
+static u32 iosImageVer = 0;
+static u32 iosImageTitleVer = 0;
+
+/* where the last preload failure happened, so we can put it in the panic message, to work around our crappy logging */
+static const char *iosPreloadStage = "not run";
+static char iosPreloadPath[80];
+#define PRELOAD_STAGE(x) (iosPreloadStage = (x))
+
 
 static bool testMEM2(void) {
 	u32 low_orig, low_after, high_orig, high_after;
@@ -312,20 +348,328 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	wiiReboot();
 }
 
+static struct partition *findSFFSPartition(void) {
+	uint i, j;
+	struct partition *part;
+
+	for (i = 0; i < B_NumDevices; i++) {
+		if (!(B_Devices[i]->flags & BLOCK_FLAG_HLWD_NAND))
+			continue;
+
+		for (j = 0; j < B_Devices[i]->numPartitions; j++) {
+			part = B_Devices[i]->partitions[j];
+			if (part->fsName && !strcmp(part->fsName, FS_SFFS.name))
+				return part;
+		}
+	}
+
+	return NULL;
+}
+
+static ssize_t readWholeFile(const char *path, size_t maxSize, void **out, const struct memRange *avoid, size_t avoidCount) {
+	int fd;
+	ssize_t size, got;
+	void *buf;
+
+	PRELOAD_STAGE("open");
+	snprintf(iosPreloadPath, sizeof(iosPreloadPath), "%s", path);
+	fd = FS_Open(path);
+	if (fd < 0) {
+		log_printf("IOS: failed to open %s: %d\r\n", path, fd);
+		return fd;
+	}
+
+	PRELOAD_STAGE("size");
+	size = FS_GetSize(fd);
+	if (size <= 0 || (size_t)size > maxSize) {
+		log_printf("IOS: %s has unreasonable size %d\r\n", path, (int)size);
+		FS_Close(fd);
+		return size < 0 ? (int)size : -EINVAL;
+	}
+
+	PRELOAD_STAGE("alloc");
+	buf = M_PoolAllocAvoid(POOL_MEM2, (size_t)size, 32, avoid, avoidCount);
+	if (!buf) {
+		FS_Close(fd);
+		return -ENOMEM;
+	}
+
+	PRELOAD_STAGE("read");
+	got = FS_Read(fd, buf, (size_t)size);
+	FS_Close(fd);
+	if (got != size) {
+		log_printf("IOS: short read of %s: %d/%d\r\n", path, (int)got, (int)size);
+		free(buf);
+		return got < 0 ? got : -EIO;
+	}
+
+	*out = buf;
+	return size;
+}
+
+/* make sure SFFS is the mounted FS */
+static int mountSFFS(void) {
+	struct partition *sffs;
+	int ret;
+
+	PRELOAD_STAGE("find SFFS partition");
+	sffs = findSFFSPartition();
+	if (!sffs) {
+		log_puts("IOS: no SFFS partition found");
+		return -ENODEV;
+	}
+
+	if (FS_Mounted != &FS_SFFS || FS_MountedPartition != sffs) {
+		PRELOAD_STAGE("mount SFFS");
+		ret = FS_Mount(&FS_SFFS, sffs);
+		if (ret) {
+			log_printf("IOS: FS_Mount(SFFS) failed: %d\r\n", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+/* put back whatever was mounted before */
+static void restoreFS(struct filesystem *prevFS, struct partition *prevPart) {
+	if (prevFS && (prevFS != FS_Mounted || prevPart != FS_MountedPartition))
+		FS_Mount(prevFS, prevPart);
+}
+
+static void freeIOSImage(void) {
+	free(iosImage);
+	iosImage = NULL;
+	iosImageSize = 0;
+	iosImageVer = 0;
+}
+
+int H_WiiPreloadIOS(u32 iosVer) {
+	struct memRange avoid = { .start = IOS_IMAGE_PHYS, .size = IOS_IMAGE_MAX_SIZE };
+	struct filesystem *prevFS = FS_Mounted;
+	struct partition *prevPart = FS_MountedPartition;
+	const struct tmd *tmd;
+	const struct iosImageHdr *hdr;
+	void *tmdBuf = NULL, *img = NULL;
+	char path[96];
+	ssize_t tmdSize, imgSize;
+	u32 numContents, bootIdx, cid = 0, expectSize = 0, elfOff, i, contentType = 0;
+	u8 contentHash[20] = { 0 };
+	u64 expectTid = TITLE_ID_IOS | iosVer;
+	u64 tid;
+	int ret = -EINVAL;
+
+	if (iosImage && iosImageVer == iosVer)
+		return 0;
+	freeIOSImage();
+
+	ret = mountSFFS();
+	if (ret) {
+		restoreFS(prevFS, prevPart);
+		return ret;
+	}
+
+	PRELOAD_STAGE("read title.tmd");
+	snprintf(path, sizeof(path), "/title/00000001/%08x/content/title.tmd", iosVer);
+	tmdSize = readWholeFile(path, IOS_TMD_MAX_SIZE, &tmdBuf, NULL, 0);
+	if (tmdSize < 0) {
+		ret = (int)tmdSize;
+		goto out;
+	}
+
+	PRELOAD_STAGE("parse TMD");
+	tmd = tmdBuf;
+	numContents = tmd->numContents;
+	bootIdx = tmd->bootIndex;
+	tid = tmd->titleID;
+	if (tmd->sigType != TMD_SIGTYPE_RSA2048 || tid != expectTid || bootIdx >= numContents ||
+	    (size_t)tmdSize < sizeof(struct tmd) + (size_t)numContents * sizeof(struct tmdContentRecord)) {
+		log_printf("IOS: unexpected TMD layout (sig %08x tid %08x%08x contents %u boot %u)\r\n",
+		           tmd->sigType, (u32)(tid >> 32), (u32)tid, numContents, bootIdx);
+		goto out;
+	}
+
+	/* find the content record whose index is the boot index */
+	for (i = 0; i < numContents; i++) {
+		const struct tmdContentRecord *rec = (const struct tmdContentRecord *)(((u8 *)tmd) + sizeof(struct tmd) + i * sizeof(struct tmdContentRecord));
+
+		if (rec->index != bootIdx)
+			continue;
+
+		cid = rec->cid;
+		contentType = rec->type;
+		expectSize = (u32)rec->size;
+		memcpy(contentHash, rec->hash, sizeof(contentHash));
+		break;
+	}
+	if (i == numContents) {
+		log_puts("IOS: boot content not found in TMD");
+		goto out;
+	}
+
+	if (contentType & TMD_CONTENT_SHARED) {
+		void *mapBuf = NULL;
+		ssize_t mapSize;
+		bool found = false;
+		struct contentMapEntry *ent;
+
+		PRELOAD_STAGE("read shared content.map");
+		mapSize = readWholeFile("/shared1/content.map", IOS_CONTENT_MAP_MAX, &mapBuf, NULL, 0);
+		if (mapSize < 0) {
+			ret = (int)mapSize;
+			goto out;
+		}
+
+		ent = mapBuf;
+		for (ent = mapBuf; ((u8 *)ent - (u8 *)mapBuf) < mapSize; ent++) {
+			if (memcmp(ent->sha1, contentHash, sizeof(contentHash)))
+				continue;
+
+			snprintf(path, sizeof(path), "/shared1/%.8s.app", ent->name);
+			found = true;
+			break;
+		}
+		free(mapBuf);
+		if (!found) {
+			log_puts("IOS: shared boot content not in content.map");
+			PRELOAD_STAGE("shared content not in content.map");
+			ret = -ENOENT;
+			goto out;
+		}
+	}
+	else
+		snprintf(path, sizeof(path), "/title/00000001/%08x/content/%08x.app", iosVer, cid);
+
+	PRELOAD_STAGE("read boot content");
+	imgSize = readWholeFile(path, IOS_IMAGE_MAX_SIZE, &img, &avoid, 1);
+	if (imgSize < 0) {
+		ret = (int)imgSize;
+		goto out;
+	}
+
+	PRELOAD_STAGE("validate boot content");
+	hdr = img;
+	elfOff = hdr->hdrSize + hdr->loaderSize;
+	if ((u32)imgSize != expectSize || (size_t)imgSize < sizeof(*hdr) || hdr->hdrSize < sizeof(*hdr) ||
+	    elfOff + hdr->elfSize != (u32)imgSize || *(u32 *)((const u8 *)img + elfOff) != 0x7f454c46) {
+		log_printf("IOS: boot content failed validation (size %u/%u hdr %x loader %x elf %x)\r\n",
+		           (u32)imgSize, expectSize, hdr->hdrSize, hdr->loaderSize, hdr->elfSize);
+		goto out;
+	}
+
+	iosImage = img;
+	iosImageSize = (u32)imgSize;
+	iosImageVer = iosVer;
+	iosImageTitleVer = tmd->titleVersion;
+	img = NULL;
+	ret = 0;
+	log_printf("IOS: preloaded IOS%u boot content (%u bytes)\r\n", iosVer, iosImageSize);
+
+out:
+	free(img);
+	free(tmdBuf);
+	restoreFS(prevFS, prevPart);
+	return ret;
+}
+
+int H_WiiPreloadChannel(u32 titleHi, u32 titleLo, u32 *iosVer) {
+	struct filesystem *prevFS = FS_Mounted;
+	struct partition *prevPart = FS_MountedPartition;
+	void *tmdBuf = NULL;
+	const struct tmd *tmd;
+	char path[96];
+	ssize_t tmdSize;
+	u64 tid;
+	u32 sysHi, sysLo;
+	int ret;
+
+	ret = mountSFFS();
+	if (ret) {
+		restoreFS(prevFS, prevPart);
+		return ret;
+	}
+
+	PRELOAD_STAGE("read title.tmd");
+	snprintf(path, sizeof(path), "/title/%08x/%08x/content/title.tmd", titleHi, titleLo);
+	tmdSize = readWholeFile(path, IOS_TMD_MAX_SIZE, &tmdBuf, NULL, 0);
+	if (tmdSize < 0) {
+		ret = (int)tmdSize;
+		goto out;
+	}
+
+	PRELOAD_STAGE("parse TMD");
+	tmd = tmdBuf;
+	tid = tmd->titleID;
+	sysHi = (u32)(tmd->sysVersion >> 32);
+	sysLo = (u32)(tmd->sysVersion);
+	if (tmd->sigType != TMD_SIGTYPE_RSA2048 || (size_t)tmdSize < sizeof(struct tmd) ||
+	    tid != (((u64)titleHi << 32) | titleLo)) {
+		log_printf("Title: unexpected TMD layout for %08x-%08x\r\n", titleHi, titleLo);
+		ret = -EINVAL;
+		goto out;
+	}
+	if (sysHi != 1 || !sysLo || sysLo > 0xffff) {
+		log_printf("Title: %08x-%08x has no usable IOS (%08x-%08x)\r\n", titleHi, titleLo, sysHi, sysLo);
+		ret = -EINVAL;
+		goto out;
+	}
+	log_printf("Title %08x-%08x requires IOS%u\r\n", titleHi, titleLo, sysLo);
+
+	free(tmdBuf);
+	tmdBuf = NULL;
+	restoreFS(prevFS, prevPart);
+
+	ret = H_WiiPreloadIOS(sysLo);
+	if (!ret)
+		*iosVer = sysLo;
+	return ret;
+
+out:
+	free(tmdBuf);
+	restoreFS(prevFS, prevPart);
+	return ret;
+}
+
+static void jumpToIOSImage(u32 iosVer) {
+	struct iosImageHdr *hdr;
+	void *dest;
+	enum MINI_Err err;
+
+	if (!iosImage || iosImageVer != iosVer)
+		panic("IOS reload without a preloaded image");
+
+	dest = physToCached(IOS_IMAGE_PHYS);
+	memmove(dest, iosImage, iosImageSize);
+	hdr = dest;
+	dcache_flush(dest, iosImageSize);
+
+	/* IOS drives its own pins, don't leave them with us */
+	H_GPIOReleaseForIOS();
+
+	/* IOS hangs if we don't write its version */
+	*(vu32 *)(MEM1_UNCACHED_BASE + 0x3140) = (iosVer << 16) | iosImageTitleVer;
+	*(vu32 *)NAND_REG_BANK = NAND_BANK_SLCCMPT;
+	sync();
+
+	log_printf("IOS: image placed at %08x, jumping to %08x\r\n", IOS_IMAGE_PHYS, IOS_IMAGE_PHYS + hdr->hdrSize);
+
+	/* SYS_JUMP has no reply */
+	err = MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, IOS_IMAGE_PHYS + hdr->hdrSize);
+	if (err != MINI_OK)
+		panic("MINI JUMP to IOS failed");
+}
+
 void H_WiiReloadIOS(u32 iosVer) {
 	int i = 0, ret;
 	u64 tb;
-	struct ipc_request_mini req;
 
 	log_printf("Trying to reload into IOS%d\r\n", iosVer);
-	*(u32 *)(MEM1_UNCACHED_BASE + 0x3140) = 0;
-	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, 1, iosVer);
+	jumpToIOSImage(iosVer);
 	log_puts("Waiting for IOS...");
 
 	while ((u32)IOS_GetVersion() != iosVer) {
 		udelay(1000);
 		i++;
-		if (i >= 1000)
+		if (i >= IOS_BOOT_TIMEOUT_MS)
 			panic("IOS reload stuck");
 	}
 
@@ -334,7 +678,7 @@ void H_WiiReloadIOS(u32 iosVer) {
 	while (!(HW_IPC_PPCCTRL & (HW_IPC_PPCCTRL_Y2 | HW_IPC_PPCCTRL_Y1))) {
 		udelay(1000);
 		i++;
-		if (i >= 1000)
+		if (i >= IOS_BOOT_TIMEOUT_MS)
 			panic("IOS reload succeeded but stuck waiting for IPC");
 	}
 
@@ -351,7 +695,7 @@ void H_WiiReloadIOS(u32 iosVer) {
 }
 
 static void __attribute__((noreturn)) wiiExitThread(void *data) {
-	u32 iosVer = (u32)H_WiiBootIOS;
+	int iosVer = H_WiiBootIOS;
 	void (*stub)(void);
 
 	(void)data;
@@ -362,7 +706,7 @@ static void __attribute__((noreturn)) wiiExitThread(void *data) {
 	if (iosVer <= 0)
 		iosVer = IOS_VALID_GUESS;
 
-	H_WiiReloadIOS(iosVer);
+	H_WiiReloadIOS((u32)iosVer);
 
 	/* IOS is reloaded and ready, hand off to the stub! */
 	log_puts("Handing off to stub...");
@@ -373,20 +717,80 @@ static void __attribute__((noreturn)) wiiExitThread(void *data) {
 }
 
 static void __attribute__((noreturn)) wiiExit(void) {
-	/* BOOT2_RUN, as well as later IOS itself, protects upper MEM2, which is where our stack is */
+	int iosVer = H_WiiBootIOS, ret;
+	static char msg[192];
+
+	if (iosVer <= 0)
+		iosVer = IOS_VALID_GUESS;
+
+	/* the reload below needs the IOS image in RAM, read it now while NAND still works */
+	ret = H_WiiPreloadIOS((u32)iosVer);
+	if (ret) {
+		snprintf(msg, sizeof(msg), "IOS%d preload failed at '%s' (%s): %d", iosVer, iosPreloadStage, iosPreloadPath, ret);
+		panic(msg);
+	}
+
+	/* IOS protects upper MEM2, which is where our stack is */
 	TH_Handoff(POOL_MEM1, wiiExitThread, NULL);
 }
 
-void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo) {
-	struct ipc_request_mini req;
+/* launch a title like IOS */
+struct channelBootArgs {
+	u32 titleHi, titleLo, iosVer;
+};
 
-	log_printf("Booting title %08x-%08x via MINI BOOT2_RUN\r\n", titleHi, titleLo);
+static void __attribute__((noreturn)) channelBootThread(void *data) {
+	const struct channelBootArgs *args = data;
+	tikview_t tikviews[4] ALIGN(32);
+	u64 titleID = ((u64)args->titleHi << 32) | args->titleLo;
+	u32 numViews = 0;
+	int retries = 20;
 
-	MINI_IPCExchange(&req, IPC_MINI_CODE_BOOT2_RUN, 5, 5, 2, titleHi, titleLo);
+	L_Method = LOG_METHOD_ALL_ODEV;
+	log_printf("\x1b[1;1H\x1b[2JBooting title %08x-%08x via IOS%u\r\n", args->titleHi, args->titleLo, args->iosVer);
+	H_PrepareForExecEntry();
+	V_Flush();
+	H_VIDisable();
 
-	/* the title will take over from here; if it doesn't, just hang */
-	while (1)
-		udelay(1000 * 1000);
+	H_WiiReloadIOS(args->iosVer);
+
+	while (retries--) {
+		udelay(20 * 1000);
+
+		if (ES_GetTikViewsCount(titleID, &numViews) || !numViews || numViews > 4) {
+			if (!retries)
+				panic("channel boot: no usable tickets");
+			IOS_Reset();
+			ES_Init();
+			continue;
+		}
+		if (ES_GetTikViews(titleID, tikviews, numViews)) {
+			if (!retries)
+				panic("channel boot: ES_GetTikViews failed");
+			IOS_Reset();
+			ES_Init();
+			continue;
+		}
+
+		ES_LaunchTitle(titleID, &tikviews[0]);
+		break;
+	}
+
+	/* the title will take over from here; if it doesn't, give up */
+	udelay(10 * 1000 * 1000);
+	panic("channel boot: title didn't start");
+}
+
+void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo, u32 iosVer) {
+	static struct channelBootArgs args;
+
+	args.titleHi = titleHi;
+	args.titleLo = titleLo;
+	args.iosVer = iosVer;
+
+	L_Method = LOG_METHOD_ALL_ODEV;
+	TH_Handoff(POOL_MEM1, channelBootThread, &args);
+	__builtin_unreachable();
 }
 
 static void wiiEject(void) {
