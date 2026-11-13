@@ -549,11 +549,6 @@ unsigned long elf_hash(const unsigned char *name);
 
 #define R_X86_64_NUM		16
 
-/*
- * XXX - PowerPC defines really don't belong in here,
- * but we'll put them in for simplicity.
- */
-
 /* Values for Elf32/64_Ehdr.e_flags */
 #define EF_PPC_EMB		0x80000000	/* PowerPC embedded flag */
 
