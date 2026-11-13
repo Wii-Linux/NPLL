@@ -13,6 +13,7 @@
  * Extrems' Corner.org
  */
 
+#include "npll/rtc.h"
 #define MODULE "EXI"
 
 #include <assert.h>
@@ -447,18 +448,18 @@ static int romXfer(void *buf, u32 len, u32 offset) {
 	bool irqs;
 
 	irqs = IRQ_DisableSave();
-	H_EXISelect(0, 1, 32);
-	off = offset << 6;
-	ret = H_EXIWriteImm(0, 4, &off);
+	H_EXISelect(RTC_CHAN, RTC_CS, 32);
+	off = RTC_ROM_BASE + (offset << 6);
+	ret = H_EXIWriteImm(RTC_CHAN, 4, &off);
 	if (ret)
 		goto out;
 
-	ret = H_EXIXferDMA(0, buf, len, EXI_MODE_READ);
+	ret = H_EXIXferDMA(RTC_CHAN, buf, len, EXI_MODE_READ);
 	if (ret)
 		goto out;
 
 out:
-	H_EXIDeselect(0);
+	H_EXIDeselect(RTC_CHAN);
 	IRQ_Restore(irqs);
 	return ret;
 }

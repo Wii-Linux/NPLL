@@ -30,6 +30,7 @@
 #include <npll/irq.h>
 #include <npll/log.h>
 #include <npll/output.h>
+#include <npll/rtc.h>
 #include <npll/soc.h>
 #include <npll/timer.h>
 #include <npll/thread.h>
@@ -257,18 +258,18 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 		 * we talk to the RTC.  linux-loader does this for us on
 		 * native Wii U, but it's obviously not present here.
 		 */
-		H_EXISelect(0, 1, 2);
-		cmd = 0xa1000100; H_EXIWriteImm(0, 4, &cmd);
-		cmd = 0x00000000; H_EXIWriteImm(0, 4, &cmd);
-		H_EXIDeselect(0);
-		H_EXISelect(0, 1, 2);
-		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
-		cmd = 0x00000101; H_EXIWriteImm(0, 4, &cmd);
-		H_EXIDeselect(0);
-		H_EXISelect(0, 1, 2);
-		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
-		cmd = 0x00010101; H_EXIWriteImm(0, 4, &cmd);
-		H_EXIDeselect(0);
+		H_EXISelect(RTC_CHAN, RTC_CS, 2);
+		cmd = RTC_WR | RTC_OFFTMR; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		cmd = 0; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		H_EXIDeselect(RTC_CHAN);
+		H_EXISelect(RTC_CHAN, RTC_CS, 2);
+		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		cmd = RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		H_EXIDeselect(RTC_CHAN);
+		H_EXISelect(RTC_CHAN, RTC_CS, 2);
+		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		cmd = RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_POFF_EXE; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		H_EXIDeselect(RTC_CHAN);
 
 		while (1); /* weird... */
 	}
@@ -286,14 +287,14 @@ static __attribute__((noreturn)) void wiiReboot(void) {
 
 	if (H_WiiIsvWii) {
 		/* see comment in wiiShutdown */
-		H_EXISelect(0, 1, 2);
-		cmd = 0xa1000d00; H_EXIWriteImm(0, 4, &cmd);
-		cmd = 0x00000501; H_EXIWriteImm(0, 4, &cmd);
-		H_EXIDeselect(0);
-		H_EXISelect(0, 1, 2);
-		cmd = 0xa1000100; H_EXIWriteImm(0, 4, &cmd);
-		cmd = 0x00000000; H_EXIWriteImm(0, 4, &cmd);
-		H_EXIDeselect(0);
+		H_EXISelect(RTC_CHAN, RTC_CS, 2);
+		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		cmd = RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_DEVPWR_EN; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		H_EXIDeselect(RTC_CHAN);
+		H_EXISelect(RTC_CHAN, RTC_CS, 2);
+		cmd = RTC_WR | RTC_OFFTMR; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		cmd = 0; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
+		H_EXIDeselect(RTC_CHAN);
 
 		LT_RESETS &= ~BIT(0);
 
