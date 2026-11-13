@@ -91,7 +91,7 @@ static int botReset(struct usbMassStorage *storage) {
 		log_printf("BOT class reset failed: %d\r\n", ret);
 		return ret;
 	}
-	mdelay(10);
+	msleep(10);
 
 	ret = USB_ClearHalt(storage->interface->device, storage->bulkIn);
 	if (ret) {
@@ -243,7 +243,7 @@ static int scsiReady(struct usbMassStorage *storage, u8 lun) {
 		if ((sense[2] & 0x0fu) != 2u && (sense[2] & 0x0fu) != 6u)
 			break;
 
-		mdelay(500);
+		msleep(500);
 	}
 	return ret;
 }
@@ -383,7 +383,7 @@ static int setupLun(struct usbMassStorage *storage, u8 lunNumber) {
 			if (key != 2u && key != 6u)
 				break;
 		}
-		mdelay(1000);
+		msleep(1000);
 	}
 
 	if (ret || actual < 5 || (inquiry[0] & 0x1fu) == 0x1fu)

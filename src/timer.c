@@ -85,21 +85,9 @@ u32 T_ElapsedUsecs(u64 startTB) {
 	return (u32)delta / ticksPerUsec;
 }
 
-/* delay for [n] microseconds */
-/*
- * FIXME: udelay should really only be a spin loop, but there's too many
- * callers to fix right now.  Eventually make an msleep/sleep() and migrate
- * udelay callers with large delays off.
- */
+/* busy-wait for [usec] microseconds; use msleep()/usleep() to yield instead */
 void udelay(u32 usec) {
-	u32 msr;
-
-	asm volatile("mfmsr %0" : "=r"(msr));
-	/* keep spins for short delays */
-	if (TH_CanBlock() && (msr & MSR_EE) && usec > 1000)
-		TH_Sleep(usec);
-	else
-		spinOnTB((u64)ticksPerUsec * usec);
+	spinOnTB((u64)ticksPerUsec * usec);
 }
 
 void T_Init(void) {

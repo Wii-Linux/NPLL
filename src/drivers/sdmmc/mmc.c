@@ -373,7 +373,7 @@ static int mmc_voltage_validation(mmc_card_t card)
 		cmd.arg = voltage;
 		cmd.rsp_type = MMC_RSP_TYPE_R3;
 		host_send_command(card, &cmd, NULL, NULL);
-		mdelay(100);
+		msleep(100);
 	} while (!(cmd.response[0] & BIT(31)) && retries--);
 	card->ocr = cmd.response[0];
 	if (!(cmd.response[0] & BIT(31))) {

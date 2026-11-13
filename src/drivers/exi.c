@@ -680,7 +680,7 @@ static int exiProbe(uint channel, uint cs) {
 	if (!exiSlotPresent(channel, cs))
 		return 0;
 	if (exiHotplugSlot(channel, cs)) {
-		mdelay(250);
+		msleep(250);
 		if (!exiSlotPresent(channel, cs))
 			return 0;
 	}

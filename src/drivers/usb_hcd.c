@@ -415,7 +415,7 @@ static int ehciPortReset(struct usbHostController *hc, uint port, enum usbSpeed 
 	value = EHCI_ReadOp32(hc->mmioBase, EHCI_PORTSC_OFF(port));
 	value &= ~EHCI_PORT_CHANGE;
 	EHCI_WriteOp32(hc->mmioBase, EHCI_PORTSC_OFF(port), value | EHCI_PORT_RESET);
-	mdelay(50);
+	msleep(50);
 	EHCI_WriteOp32(hc->mmioBase, EHCI_PORTSC_OFF(port), value & ~EHCI_PORT_RESET);
 
 	start = mftb();
@@ -517,7 +517,7 @@ static int ohciStart(struct usbHostController *hc) {
 	control = OHCI_Read32(hc->mmioBase, OHCI_CONTROL) & ~(OHCI_CTRL_HCFS_MASK | OHCI_CTRL_PERIODIC | OHCI_CTRL_CONTROL | OHCI_CTRL_BULK);
 	OHCI_Write32(hc->mmioBase, OHCI_CONTROL, control | OHCI_CTRL_OPERATIONAL);
 	OHCI_Write32(hc->mmioBase, OHCI_INTR_ENABLE, OHCI_INTR_ENABLE_MIE | OHCI_INTR_ENABLE_WDH | OHCI_INTR_ENABLE_UE);
-	mdelay(10);
+	msleep(10);
 	return 0;
 }
 

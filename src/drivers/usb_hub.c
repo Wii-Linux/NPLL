@@ -69,7 +69,7 @@ static int hubResetPort(struct usbHub *hub, uint port, enum usbSpeed *speed) {
 
 	start = mftb();
 	do {
-		mdelay(10);
+		msleep(10);
 		ret = hubPortStatus(hub, port, &status);
 		if (ret)
 			return ret;
@@ -121,13 +121,13 @@ static void hubHandlePort(struct usbHub *hub, uint port) {
 		if (hub->children[port])
 			hubDetachPort(hub, port);
 
-		mdelay(100);
+		msleep(100);
 		ret = hubResetPort(hub, port, &speed);
 		if (ret) {
 			log_printf("bus %u hub %u port %u reset failed: %d\r\n", hub->interface->device->hc->bus, hub->interface->device->address, port + 1, ret);
 			return;
 		}
-		mdelay(10);
+		msleep(10);
 
 		ret = USB_EnumerateChild(hub->interface->device, port, speed, &hub->children[port]);
 		if (ret)
@@ -232,7 +232,7 @@ static int hubProbe(struct usbInterface *interface, const struct usbDeviceId *id
 			return ret;
 		}
 	}
-	mdelay((u32)descriptor.powerOnToPowerGood * 2);
+	msleep((u32)descriptor.powerOnToPowerGood * 2);
 
 	/*
 	 * Arm the status-change endpoint as a resident interrupt: the controller

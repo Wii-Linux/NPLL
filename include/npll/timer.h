@@ -8,6 +8,7 @@
 #define _TIMER_H
 
 #include <stdbool.h>
+#include <npll/thread.h>
 #include <npll/types.h>
 
 /* get the timebase */

@@ -496,7 +496,7 @@ static int diWaitForStatus(const char *ctx, u32 *status) {
 		if (diStopping)
 			return -EINTR;
 
-		mdelay(10);
+		msleep(10);
 	} while (!T_HasElapsed(tb, 30 * 1000 * 1000));
 
 	log_printf("%s: DI did not become ready; ret=%d CR=%08x SR=%08x\r\n", ctx, ret, regs->cr, regs->sr);
