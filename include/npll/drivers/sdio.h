@@ -44,7 +44,6 @@ enum sdio_id {
 #define SDHC_PRES_STATE_CDIHB        (1 << 1)  //Command Inhibit(DATA)
 #define SDHC_PRES_STATE_CIHB         (1 << 0)  //Command Inhibit(CMD)
 
-/* TODO turn this into sdio_cmd */
 struct mmc_cmd;
 struct sdio_host_dev;
 typedef void (*sdio_cb)(struct sdio_host_dev *sdio, int status, struct mmc_cmd *cmd, void *token);
