@@ -62,6 +62,14 @@ extern int IOS_DevShaExploit(void);
 /* 'NRST' */
 #define MINI_NO_RESET_MAGIC 0x4e525354
 
+#define MINI_READY_PTR (*(vu32 *)(MEM1_UNCACHED_BASE + 0xfffff8))
+/* 'MRDY' */
+#define MINI_READY_MAGIC 0x4d524459
+/* the MINI that booted us may not be our build, so don't wait long for it */
+#define MINI_READY_TIMEOUT_FIRST_US (500 * 1000)
+/* the reloaded MINI is always our build, so it has to show up */
+#define MINI_READY_TIMEOUT_RELOAD_US (3 * 1000 * 1000)
+
 #define IOS_IMAGE_PHYS      0x11000000u
 #define IOS_IMAGE_MAX_SIZE  0x600000u
 #define IOS_TMD_MAX_SIZE    0x4000u
@@ -126,6 +134,17 @@ static bool testMEM2(void) {
 	}
 	else
 		return true;
+}
+
+/* returns true if MINI said it was ready, false on timeout */
+static bool waitMiniReady(u32 timeoutUs) {
+	u64 tb = mftb();
+
+	while (MINI_READY_PTR != MINI_READY_MAGIC) {
+		if (T_HasElapsed(tb, timeoutUs))
+			return false;
+	}
+	return true;
 }
 
 static void armbootnow(void) {
@@ -252,6 +271,7 @@ static void armbootnow(void) {
 static __attribute__((noreturn)) void wiiShutdown(void) {
 	WM_BluetoothDisconnectAll();
 	MINI_BOOT_MAGIC_PTR = 0;
+	MINI_READY_PTR = 0;
 
 	if (H_WiiIsvWii) {
 		/*
@@ -275,6 +295,7 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 static __attribute__((noreturn)) void wiiReboot(void) {
 	WM_BluetoothDisconnectAll();
 	MINI_BOOT_MAGIC_PTR = 0;
+	MINI_READY_PTR = 0;
 
 	if (H_WiiIsvWii) {
 		/* see comment in wiiShutdown */
@@ -303,6 +324,7 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	int i;
 	(void)str;
 	MINI_BOOT_MAGIC_PTR = 0;
+	MINI_READY_PTR = 0;
 
 	/* can't hurt to try... */
 	HW_GPIO_OWNER = 0xffffffff;
@@ -1050,8 +1072,10 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		}
 		case STATE_MINI_INIT: {
 			assert(GET_SFLAG(SFLAG_CUR_MINI));
-			if (GET_SFLAG(SFLAG_ORIG_MINI))
-				mdelay(250); /* FIXME: HACK to wait for MINI to actually fully boot first */
+			if (!GET_SFLAG(SFLAG_MINI_RELOADED) && GET_SFLAG(SFLAG_ORIG_MINI)) {
+				if (!waitMiniReady(MINI_READY_TIMEOUT_FIRST_US))
+					log_puts("Wii: MINI never signalled ready, continuing anyway");
+			}
 			miniErr = MINI_Init();
 			if (miniErr != MINI_OK) {
 				if (miniErr == MINI_TIMEOUT) {
@@ -1078,8 +1102,12 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
 			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
+			MINI_READY_PTR = 0;
 			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf) + armbuf[0]);
-			mdelay(500); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
+
+			/* this is our build, so it must signal ready; wait so our logs don't overlap */
+			if (!waitMiniReady(MINI_READY_TIMEOUT_RELOAD_US))
+				panic("Wii: reloaded MINI never signalled ready");
 
 			SET_SFLAG(SFLAG_MINI_INIT, false);
 			SET_SFLAG(SFLAG_MINI_RELOADED, true);
@@ -1186,6 +1214,7 @@ out:
 		H_MEM2Size = MEM2_SIZE_NDEV;
 
 	MINI_BOOT_MAGIC_PTR = 0;
+	MINI_READY_PTR = 0;
 
 	/* kick off the real init */
 	I_InitCommon();

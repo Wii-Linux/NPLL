@@ -121,7 +121,7 @@ enum MINI_Err MINI_Init(void) {
 	log_printf(" * fast ping: %d\r\n", ret);
 	if (ret != MINI_OK)
 		return ret;
-	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 6, 3, 0);
+	ret = MINI_IPCExchange(&req, IPC_MINI_CODE_SLWPING, 400, 3, 0);
 	log_printf(" * slow ping: %d\r\n", ret);
 	if (ret != MINI_OK)
 		return ret;
@@ -230,14 +230,24 @@ enum MINI_Err MINI_IPCPost(u32 code, u32 tag, uint num_args, ...) {
 	return ret;
 }
 
+#define IPC_RECV_POLL_US 50
+/* 5ms per attempt */
+#define IPC_RECV_POLLS_PER_STEP (5000 / IPC_RECV_POLL_US)
+
 /* TODO: IRQs? */
 enum MINI_Err MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
-	uint i = 0;
+	uint i = 0, polls = 0;
 	if (!initialized)
 		return MINI_NOT_INIT;
 
 	while (peek_outtail() == state.out_head) {
-		mdelay(5);
+		/* poll finely so a quick reply isn't stuck behind a 5ms sleep */
+		udelay(IPC_RECV_POLL_US);
+		if (++polls < IPC_RECV_POLLS_PER_STEP)
+			continue;
+		polls = 0;
+
+		/* one "attempt" is still 5ms worth of polling */
 		i++;
 		if (i > 200 && i % 200 == 0) {
 			log_printf("Starlet might be stuck!  Still waiting on outtail %d == %d\r\n",
