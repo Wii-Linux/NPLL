@@ -257,7 +257,7 @@ void IOS_Reset(void) {
 	for (i = 0; i < 10; i++) {
 		ipc_cleanup_request();
 		ipc_cleanup_reply();
-		udelay(1000);
+		mdelay(1);
 		_log_printf(".");
 	}
 	_log_puts(" Done.");

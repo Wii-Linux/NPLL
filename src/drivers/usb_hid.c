@@ -272,7 +272,7 @@ void USBHID_PowerOffDRC(void) {
 			if (stationResult != -EBUSY && (stationResult || !stationCount))
 				break;
 
-			udelay(1000);
+			mdelay(1);
 		} while (!T_HasElapsed(tb, 40000));
 		elapsed = T_ElapsedUsecs(tb);
 		if (elapsed < 40000 && (stationResult || stationCount))

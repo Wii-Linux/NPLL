@@ -64,13 +64,13 @@ static void powerOffWiFi(void) {
 		log_printf("WiFi shutdown: SMC read failed: %d\r\n", ret);
 		goto disableMode;
 	}
-	udelay(100000);
+	mdelay(100);
 	ret = H_WiiUSMCWriteRegister(SMC_REG_DEVICE_ENABLE, (u8)(value & ~SMC_DEVICE_WIFI24));
 	if (ret) {
 		log_printf("WiFi shutdown: SMC write failed: %d\r\n", ret);
 		goto disableMode;
 	}
-	udelay(100000);
+	mdelay(100);
 disableMode:
 	HW_GPIO_ENABLE |= GPIO_WIFI_MODE;
 	HW_GPIO_OWNER |= GPIO_WIFI_MODE;
@@ -91,10 +91,10 @@ static __attribute__((noreturn)) void wiiuShutdown(void) {
 	HW_GPIOB_DIR |= GPIO_DWIFI_MODE;
 	HW_GPIO_DIR |= GPIO_DWIFI_MODE;
 	HW_GPIO_OWNER |= GPIO_DWIFI_MODE;
-	udelay(100000);
+	mdelay(100);
 	/* send final reset command */
 	H_WiiUSMCSendCmd(SMC_CMD_RESET_WIFI5);
-	udelay(155000);
+	mdelay(155);
 	HW_IPC_PPCMSG = LATTE_IPC_CMD_POWEROFF; /* set our data */
 	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
 
@@ -107,7 +107,7 @@ static __attribute__((noreturn)) void wiiuPanic(const char *str) {
 	wiiuDebugStr("PANIC: ");
 	wiiuDebugStr(str);
 
-	udelay(10 * 1000 * 1000);
+	mdelay(10000);
 
 	wiiuReboot();
 }

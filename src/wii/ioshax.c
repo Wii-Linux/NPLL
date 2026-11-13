@@ -74,7 +74,7 @@ int IOS_DevShaExploit(void) {
 	log_printf("triggering exploit...");
 	IOS_Ioctlv(fd, 0, 1, 2, vec);
 	log_printf("returned from trigger\r\n");
-	udelay(250 * 1000);
+	mdelay(250);
 	if (HW_AHBPROT == 0xffffffff)
 		return 0;
 	else

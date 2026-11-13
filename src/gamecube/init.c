@@ -32,7 +32,7 @@ static __attribute__((noreturn)) void gamecubeReboot(void) {
 static __attribute__((noreturn)) void gamecubePanic(const char *str) {
 	(void)str;
 
-	udelay(1000 * 2500);
+	mdelay(2500);
 
 	gamecubeReboot();
 }

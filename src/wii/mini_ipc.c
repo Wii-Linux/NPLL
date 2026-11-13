@@ -181,7 +181,7 @@ enum MINI_Err MINI_IPCVpost(u32 code, u32 tag, uint num_args, va_list args) {
 	if (inqueue_full()) {
 		log_puts("in queue full, this might be bad...");
 		while (inqueue_full()) {
-			udelay(5000);
+			mdelay(5);
 			i++;
 			if (i > 200 && i % 200 == 0) {
 				log_printf("Starlet is probably stuck!  Still waiting on inhead %d != %d\r\n",
@@ -237,7 +237,7 @@ enum MINI_Err MINI_IPCRecv(struct ipc_request_mini *req, uint max_attempts) {
 		return MINI_NOT_INIT;
 
 	while (peek_outtail() == state.out_head) {
-		udelay(5000);
+		mdelay(5);
 		i++;
 		if (i > 200 && i % 200 == 0) {
 			log_printf("Starlet might be stuck!  Still waiting on outtail %d == %d\r\n",

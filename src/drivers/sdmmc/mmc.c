@@ -373,7 +373,7 @@ static int mmc_voltage_validation(mmc_card_t card)
 		cmd.arg = voltage;
 		cmd.rsp_type = MMC_RSP_TYPE_R3;
 		host_send_command(card, &cmd, NULL, NULL);
-		udelay(100000);
+		mdelay(100);
 	} while (!(cmd.response[0] & BIT(31)) && retries--);
 	card->ocr = cmd.response[0];
 	if (!(cmd.response[0] & BIT(31))) {
@@ -437,7 +437,7 @@ static int mmc_spi_card_init(mmc_card_t card)
 			ocr = cmd.response[0];
 			break;
 		}
-		udelay(1000);
+		mdelay(1);
 	}
 
 	if (!(ocr & BIT(31))) {
@@ -671,13 +671,13 @@ int mmc_init(sdio_host_dev_t *sdio, mmc_card_t *mmc_card)
 		 * host-side width bit. The 4-bit path is timing-sensitive on
 		 * Hollywood, and rushing this transition appears to hurt reliability.
 		 */
-		udelay(1000);
+		mdelay(1);
 		if (host_set_bus_width(mmc, 4)) {
 			ZF_LOGE("Failed to switch the host controller to 4-bit mode");
 			free(mmc);
 			return -1;
 		}
-		udelay(1000);
+		mdelay(1);
 		cmd.index = MMC_SEND_STATUS;
 		cmd.arg = (u32)mmc->raw_rca << 16;
 		cmd.rsp_type = MMC_RSP_TYPE_R1;

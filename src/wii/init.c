@@ -205,7 +205,7 @@ static void armbootnow(void) {
 	log_puts("Reloading...");
 	while (retries) {
 		retries--;
-		udelay(20 * 1000);
+		mdelay(20);
 
 		if (ES_GetTikViewsCount(titleID, &num_tikviews)) {
 			if (!retries)
@@ -303,9 +303,9 @@ static __attribute__((noreturn)) void wiiReboot(void) {
 
 	/* try a HW_RESETS reset */
 	HW_RESETS |= RESETS_RSTBINB;
-	udelay(1000 * 35);
+	mdelay(35);
 	HW_RESETS &= ~RESETS_RSTBINB;
-	udelay(1000 * 35);
+	mdelay(35);
 
 	/* try a PI reset */
 	PI_RESET = 0x00;
@@ -326,24 +326,24 @@ static __attribute__((noreturn)) void wiiPanic(const char *str) {
 	/* 3x blink-blink-blink.... bliiiiiiink, reboot */
 	for (i = 0; i < 3; i++) {
 		HW_GPIOB_OUT |= GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 		HW_GPIOB_OUT &= ~GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 
 		HW_GPIOB_OUT |= GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 		HW_GPIOB_OUT &= ~GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 
 		HW_GPIOB_OUT |= GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 		HW_GPIOB_OUT &= ~GPIO_SLOT_LED;
-		udelay(1000 * 100);
+		mdelay(100);
 
 		HW_GPIOB_OUT |= GPIO_SLOT_LED;
-		udelay(1000 * 1000);
+		mdelay(1000);
 		HW_GPIOB_OUT &= ~GPIO_SLOT_LED;
-		udelay(1000 * 500);
+		mdelay(500);
 	}
 
 	wiiReboot();
@@ -668,7 +668,7 @@ void H_WiiReloadIOS(u32 iosVer) {
 	log_puts("Waiting for IOS...");
 
 	while ((u32)IOS_GetVersion() != iosVer) {
-		udelay(1000);
+		mdelay(1);
 		i++;
 		if (i >= IOS_BOOT_TIMEOUT_MS)
 			panic("IOS reload stuck");
@@ -677,7 +677,7 @@ void H_WiiReloadIOS(u32 iosVer) {
 	/* wait for PPCCTRL to match expected value */
 	i = 0;
 	while (!(HW_IPC_PPCCTRL & (HW_IPC_PPCCTRL_Y2 | HW_IPC_PPCCTRL_Y1))) {
-		udelay(1000);
+		mdelay(1);
 		i++;
 		if (i >= IOS_BOOT_TIMEOUT_MS)
 			panic("IOS reload succeeded but stuck waiting for IPC");
@@ -756,7 +756,7 @@ static void __attribute__((noreturn)) channelBootThread(void *data) {
 	H_WiiReloadIOS(args->iosVer);
 
 	while (retries--) {
-		udelay(20 * 1000);
+		mdelay(20);
 
 		if (ES_GetTikViewsCount(titleID, &numViews) || !numViews || numViews > 4) {
 			if (!retries)
@@ -778,7 +778,7 @@ static void __attribute__((noreturn)) channelBootThread(void *data) {
 	}
 
 	/* the title will take over from here; if it doesn't, give up */
-	udelay(10 * 1000 * 1000);
+	mdelay(10000);
 	panic("channel boot: title didn't start");
 }
 
@@ -797,7 +797,7 @@ void __attribute__((noreturn)) H_WiiBootChannel(u32 titleHi, u32 titleLo, u32 io
 static void wiiEject(void) {
 	HW_GPIOB_OUT |= GPIO_DO_EJECT;
 	barrier();
-	udelay(500 * 1000);
+	mdelay(500);
 	HW_GPIOB_OUT &= ~GPIO_DO_EJECT;
 }
 
@@ -960,7 +960,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 
 				/* loading MINI can be slow in some cases (e.g. Ironic emulator), give it a few retries */
 				waitMiniRetries--;
-				udelay(50 * 1000);
+				mdelay(50);
 				GOTO_STATE(STATE_ANALYZE);
 				break;
 			}
@@ -1066,7 +1066,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 		case STATE_MINI_INIT: {
 			assert(GET_SFLAG(SFLAG_CUR_MINI));
 			if (GET_SFLAG(SFLAG_ORIG_MINI))
-				udelay(250 * 1000); /* FIXME: HACK to wait for MINI to actually fully boot first */
+				mdelay(250); /* FIXME: HACK to wait for MINI to actually fully boot first */
 			miniErr = MINI_Init();
 			if (miniErr != MINI_OK) {
 				if (miniErr == MINI_TIMEOUT) {
@@ -1094,7 +1094,7 @@ void __attribute__((noreturn)) H_InitWii(void) {
 			/* clear the IPC infohdr so we can keep track of when the new MINI has reloaded */
 			*(u32 *)(MEM2_UNCACHED_BASE + MEM2_SIZE_WII - 4) = 0;
 			MINI_IPCPost(IPC_MINI_CODE_JUMP, 0, 1, virtToPhys(armbuf) + armbuf[0]);
-			udelay(500 * 1000); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
+			mdelay(500); /* hardcoded time to give it a sec, mainly so our logs don't overlap */
 
 			SET_SFLAG(SFLAG_MINI_INIT, false);
 			SET_SFLAG(SFLAG_MINI_RELOADED, true);

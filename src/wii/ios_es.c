@@ -62,7 +62,7 @@ int ES_Init(void) {
 	failed:
 		/* failed, reset IPC state and retry */
 		IOS_Reset();
-		udelay(50 * 1000);
+		mdelay(50);
 		continue;
 	}
 	if (!success)

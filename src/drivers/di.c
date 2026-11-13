@@ -304,7 +304,7 @@ static int diWaitIdle(uint timeoutUs) {
 		}
 		IRQ_Restore(enabled);
 		if (!IRQ_CanWait(IRQDEV_DI))
-			udelay(1000);
+			mdelay(1);
 	}
 
 	return 0;
@@ -496,7 +496,7 @@ static int diWaitForStatus(const char *ctx, u32 *status) {
 		if (diStopping)
 			return -EINTR;
 
-		udelay(10 * 1000);
+		mdelay(10);
 	} while (!T_HasElapsed(tb, 30 * 1000 * 1000));
 
 	log_printf("%s: DI did not become ready; ret=%d CR=%08x SR=%08x\r\n", ctx, ret, regs->cr, regs->sr);

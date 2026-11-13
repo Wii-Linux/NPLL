@@ -358,7 +358,7 @@ static int enumerateDevice(struct usbHostController *hc, struct usbDevice *paren
 		 * Keep reset-race recovery local and bounded so one device cannot
 		 * hold up polling of the other buses.
 		 */
-		udelay(10000u);
+		mdelay(10);
 	}
 	if (ret == 8)
 		memcpy(&dev->descriptor, descriptorBuffer, 8);
@@ -388,7 +388,7 @@ static int enumerateDevice(struct usbHostController *hc, struct usbDevice *paren
 	}
 
 	dev->address = address;
-	udelay(2000u);
+	mdelay(2);
 
 	memset(descriptorBuffer, 0, sizeof(descriptorBuffer));
 	ret = USB_ControlTransfer(dev, USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE,
@@ -867,7 +867,7 @@ void USB_Poll(void) {
 			 * USB 2.0 requires at least 100 ms of stable attachment before
 			 * reset.  Re-read afterwards so a bounced plug is ignored.
 			 */
-			udelay(100000u);
+			mdelay(100);
 			memset(&status, 0, sizeof(status));
 			if (hc->ops->rootPortStatus(hc, port, &status) || !status.connected)
 				goto acknowledge;
@@ -886,7 +886,7 @@ void USB_Poll(void) {
 			}
 
 			/* USB 2.0 reset recovery (TRSTRCY) before address-zero traffic. */
-			udelay(10000u);
+			mdelay(10);
 			hc->connectedPorts |= portBit;
 			log_printf("bus %u port %u connected (%s speed)\r\n", hc->bus,
 				port + 1, speed == USB_SPEED_HIGH ? "high" :
