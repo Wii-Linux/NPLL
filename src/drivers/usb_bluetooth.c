@@ -174,6 +174,7 @@ static REGISTER_DRIVER(btTopDriver);
 static struct btAdapter adapter;
 static bool pairingKnown(const u8 *address);
 static void hciServiceQueue(void);
+static void btPoll(void *data);
 
 static u16 getLE16(const void *ptr) {
 	const u8 *p = ptr;
@@ -999,6 +1000,53 @@ static void btPollLocked(void) {
 			remote->lastRepeat = mftb();
 			IN_NewEvent(buttonAction(remote->repeatButton));
 		}
+	}
+}
+
+#define BT_SHUTDOWN_TIMEOUT_US 1000000u
+
+void WM_BluetoothDisconnectAll(void) {
+	u8 params[3];
+	u8 scan = 0;
+	uint i;
+	bool any = false;
+	u64 start;
+
+	if (!adapter.interface || !adapter.interface->device->connected)
+		return;
+
+	/* we drive the controller ourselves from here on */
+	T_CancelRepeatingEvent(btPoll, NULL);
+	start = mftb();
+
+	/* stop accepting/receiving new connections first */
+	hciCommand(HCI_WRITE_SCAN_ENABLE, &scan, sizeof(scan));
+	if (adapter.pagePending)
+		hciCommand(HCI_CREATE_CONN_CANCEL, adapter.pageAddress, 6);
+
+	for (i = 0; i < BT_MAX_REMOTES; i++) {
+		if (!adapter.remotes[i].used)
+			continue;
+
+		putLE16(params, adapter.remotes[i].handle);
+		params[2] = 0x13u; /* remote user terminated connection */
+		hciCommand(HCI_DISCONNECT, params, sizeof(params));
+		any = true;
+	}
+	if (any)
+		log_puts("disconnecting Wii Remotes before shutdown");
+
+	while (!T_HasElapsed(start, BT_SHUTDOWN_TIMEOUT_US)) {
+		pollEndpoint(adapter.eventIn, true);
+		pollEndpoint(adapter.aclIn, false);
+		hciServiceQueue();
+
+		any = false;
+		for (i = 0; i < BT_MAX_REMOTES; i++)
+			any |= adapter.remotes[i].used;
+
+		if (!any && !adapter.pendingOpcode && !adapter.commandCount)
+			break;
 	}
 }
 

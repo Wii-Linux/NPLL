@@ -21,4 +21,6 @@ extern int WM_ParsePairings(const void *sysconf, size_t length);
 extern int WM_LoadPairingsFromSFFS(void);
 extern const struct wiimotePairing *WM_GetPairings(uint *count);
 
+extern void WM_BluetoothDisconnectAll(void);
+
 #endif /* _NPLL_WIIMOTE_H */

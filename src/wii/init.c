@@ -38,6 +38,7 @@
 #include <npll/types.h>
 #include <npll/utils.h>
 #include <npll/video.h>
+#include <npll/wiimote.h>
 #include "../armboot_bin.h"
 #include "../fs/sffs.h"
 #include "ios_ipc.h"
@@ -249,6 +250,7 @@ static void armbootnow(void) {
 }
 
 static __attribute__((noreturn)) void wiiShutdown(void) {
+	WM_BluetoothDisconnectAll();
 	MINI_BOOT_MAGIC_PTR = 0;
 
 	if (H_WiiIsvWii) {
@@ -271,6 +273,7 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 }
 
 static __attribute__((noreturn)) void wiiReboot(void) {
+	WM_BluetoothDisconnectAll();
 	MINI_BOOT_MAGIC_PTR = 0;
 
 	if (H_WiiIsvWii) {

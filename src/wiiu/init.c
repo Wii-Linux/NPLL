@@ -23,6 +23,7 @@
 #include <npll/menu.h>
 #include <npll/video.h>
 #include <npll/log.h>
+#include <npll/wiimote.h>
 
 enum wiiuRev H_WiiURev;
 
@@ -48,6 +49,7 @@ static void wiiuDebugStr(const char *str) {
 }
 
 static __attribute__((noreturn)) void wiiuReboot(void) {
+	WM_BluetoothDisconnectAll();
 	HW_IPC_PPCMSG = LATTE_IPC_CMD_REBOOT; /* set our data */
 	HW_IPC_PPCCTRL = HW_IPC_PPCCTRL_X1; /* tell Starbuck we're ready */
 
@@ -81,6 +83,7 @@ disableMode:
 }
 
 static __attribute__((noreturn)) void wiiuShutdown(void) {
+	WM_BluetoothDisconnectAll();
 	powerOffWiFi();
 	USBHID_PowerOffDRC();
 	USB_Shutdown();

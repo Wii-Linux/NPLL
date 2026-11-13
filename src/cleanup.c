@@ -19,6 +19,7 @@
 #include <npll/video.h>
 #include <npll/usb.h>
 #include <npll/thread.h>
+#include <npll/wiimote.h>
 
 void (*H_PreEntryHook)(void) = NULL;
 bool H_PreEntryMEM1 = false;
@@ -36,6 +37,9 @@ void H_PrepareForExecEntry(void) {
 
 	/* Last chance to report: H_PrepareForExecEntry() takes logging down. */
 	IOStats_Dump("linux load");
+
+	/* drop Wii Remotes cleanly while USB is still alive */
+	WM_BluetoothDisconnectAll();
 
 	TH_Quiesce();
 
