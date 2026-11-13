@@ -25,7 +25,15 @@
 #define BT_PRODUCT_INTERNAL 0x0305u
 
 #define BT_POLL_US            10000u
-#define BT_CONNECT_POLL_US    1000000u
+/*
+ * Gap between page attempts, measured from the end of the previous one.  The
+ * controller can't page-scan while paging, so this is the time a remote that
+ * is paging *us* has to reach us.
+ */
+#define BT_CONNECT_POLL_US    2000000u
+/* Page timeout in 0.625ms slots: 0x1000 = 2.56s, enough for a full A/B train */
+#define BT_PAGE_TIMEOUT       0x1000u
+#define BT_DRAIN_MAX          16u
 #define BT_CONNECT_WINDOW_US  15000000u
 #define BT_EVENT_SIZE         260u
 #define BT_ACL_SIZE           1024u
@@ -40,9 +48,11 @@
 #define HCI_RESET                 HCI_OP(3, 0x0003)
 #define HCI_SET_EVENT_MASK        HCI_OP(3, 0x0001)
 #define HCI_WRITE_SCAN_ENABLE     HCI_OP(3, 0x001a)
+#define HCI_WRITE_PAGE_TIMEOUT    HCI_OP(3, 0x0018)
 #define HCI_READ_STORED_LINK_KEY  HCI_OP(3, 0x000d)
 #define HCI_READ_BD_ADDR          HCI_OP(4, 0x0009)
 #define HCI_CREATE_CONNECTION     HCI_OP(1, 0x0005)
+#define HCI_CREATE_CONN_CANCEL    HCI_OP(1, 0x0008)
 #define HCI_ACCEPT_CONNECTION     HCI_OP(1, 0x0009)
 #define HCI_REJECT_CONNECTION     HCI_OP(1, 0x000a)
 #define HCI_LINK_KEY_REPLY        HCI_OP(1, 0x000b)
@@ -87,6 +97,7 @@
 enum btInitState {
 	BT_INIT_RESET,
 	BT_INIT_EVENT_MASK,
+	BT_INIT_PAGE_TIMEOUT,
 	BT_INIT_SCAN,
 	BT_INIT_ADDRESS,
 	BT_INIT_KEYS,
@@ -268,7 +279,8 @@ static int hciCommand(u16 opcode, const void *parameters, u8 length) {
 	if (length > sizeof(adapter.commandQueue[0].parameters))
 		return -EINVAL;
 
-	if (!adapter.pendingOpcode)
+	/* never jump ahead of commands that are already queued */
+	if (!adapter.pendingOpcode && !adapter.commandCount)
 		return hciCommandNow(opcode, parameters, length);
 
 	if (adapter.commandCount >= BT_COMMAND_QUEUE)
@@ -643,12 +655,18 @@ static void initAdvance(u16 opcode, const u8 *returnParams, u8 length) {
 	static const u8 eventMask[8] = { 0xff, 0xff, 0xfb, 0xff, 0x07, 0xf8, 0xbf, 0x3d };
 	u8 readKeys[7] = { 0, 0, 0, 0, 0, 0, 1 };
 	u8 scan = 2;
+	u8 pageTimeout[2];
 
 	if (adapter.init == BT_INIT_RESET && opcode == HCI_RESET) {
 		adapter.init = BT_INIT_EVENT_MASK;
 		hciCommand(HCI_SET_EVENT_MASK, eventMask, sizeof(eventMask));
 	}
 	else if (adapter.init == BT_INIT_EVENT_MASK && opcode == HCI_SET_EVENT_MASK) {
+		adapter.init = BT_INIT_PAGE_TIMEOUT;
+		putLE16(pageTimeout, BT_PAGE_TIMEOUT);
+		hciCommand(HCI_WRITE_PAGE_TIMEOUT, pageTimeout, sizeof(pageTimeout));
+	}
+	else if (adapter.init == BT_INIT_PAGE_TIMEOUT && opcode == HCI_WRITE_PAGE_TIMEOUT) {
 		adapter.init = BT_INIT_SCAN;
 		hciCommand(HCI_WRITE_SCAN_ENABLE, &scan, sizeof(scan));
 	}
@@ -690,6 +708,11 @@ static void returnLinkKeys(const u8 *parameters, u8 length) {
 	log_printf("Bluetooth controller returned %u stored link key(s)\r\n", count);
 }
 
+static void pageFinished(void) {
+	adapter.pagePending = false;
+	adapter.lastConnectPoll = mftb(); /* gap is measured from page end */
+}
+
 static void connectionComplete(const u8 *p, u8 length) {
 	struct btRemote *remote;
 	u16 handle;
@@ -698,8 +721,8 @@ static void connectionComplete(const u8 *p, u8 length) {
 	if (length < 11u)
 		return;
 
-	if (sameAddress(p + 3, adapter.pageAddress))
-		adapter.pagePending = false;
+	if (adapter.pagePending && sameAddress(p + 3, adapter.pageAddress))
+		pageFinished();
 
 	log_printf("Bluetooth connection complete status %02x from %02x:%02x:%02x:%02x:%02x:%02x\r\n",
 		p[0], p[8], p[7], p[6], p[5], p[4], p[3]
@@ -743,6 +766,9 @@ static void hciEvent(const u8 *event, u32 length) {
 			opcode = getLE16(p + 1);
 			if (adapter.pendingOpcode == opcode)
 				adapter.pendingOpcode = 0;
+			/* nothing left to cancel: the page is already over */
+			if (opcode == HCI_CREATE_CONN_CANCEL && adapter.pagePending && plen >= 4u && p[3])
+				pageFinished();
 			initAdvance(opcode, p + 3, (u8)(plen - 3));
 		}
 		break;
@@ -756,7 +782,7 @@ static void hciEvent(const u8 *event, u32 length) {
 			if (adapter.pendingOpcode == opcode)
 				adapter.pendingOpcode = 0;
 			if (opcode == HCI_CREATE_CONNECTION && p[0])
-				adapter.pagePending = false;
+				pageFinished();
 		}
 		break;
 	}
@@ -766,6 +792,9 @@ static void hciEvent(const u8 *event, u32 length) {
 	}
 	case HCI_EV_CONNECTION_REQUEST: {
 		if (plen >= 10u) {
+			/* the radio can't answer an incoming connection while paging */
+			if (adapter.pagePending)
+				hciCommand(HCI_CREATE_CONN_CANCEL, adapter.pageAddress, 6);
 			log_printf("Bluetooth connection request from %02x:%02x:%02x:%02x:%02x:%02x\r\n",
 				p[5], p[4], p[3], p[2], p[1], p[0]);
 
@@ -851,22 +880,29 @@ static void pollEndpoint(struct usbEndpoint *endpoint, bool event) {
 	u8 packet[BT_ACL_SIZE] ALIGN(32);
 	u32 actual;
 	int ret;
+	uint n;
 
 	if (!endpoint)
 		return;
-	ret = USB_ResidentInPoll(adapter.interface->device, endpoint, packet,
-		event ? BT_EVENT_SIZE : BT_ACL_SIZE, &actual
-	);
 
-	if (ret == 1) {
+	/* drain everything that's pending; one packet per tick is far too slow */
+	for (n = 0; n < BT_DRAIN_MAX; n++) {
+		ret = USB_ResidentInPoll(adapter.interface->device, endpoint, packet,
+			event ? BT_EVENT_SIZE : BT_ACL_SIZE, &actual
+		);
+
+		if (ret != 1) {
+			if (ret == -EPIPE) {
+				USB_ClearHalt(adapter.interface->device, endpoint);
+				USB_ResidentInArm(adapter.interface->device, endpoint, event ? BT_EVENT_SIZE : BT_ACL_SIZE);
+			}
+			break;
+		}
+
 		if (event)
 			hciEvent(packet, actual);
 		else
 			aclPackets(packet, actual);
-	}
-	else if (ret == -EPIPE) {
-		USB_ClearHalt(adapter.interface->device, endpoint);
-		USB_ResidentInArm(adapter.interface->device, endpoint, event ? BT_EVENT_SIZE : BT_ACL_SIZE);
 	}
 }
 
