@@ -222,10 +222,6 @@ static void handleEscape(char c) {
 		 *   [J or [0J - clear screen from cursor down
 		 *   [1J       - clear screen from cursor up
 		 *   [2J       - clear entire screen
-		 *
-		 * TODO we really only handle entire-screen case, others
-		 * probably require some additions to video-uclass (and
-		 * are not really needed yet by efi_console)
 		 */
 		parsenum(escapeBuf + 1, &mode);
 
