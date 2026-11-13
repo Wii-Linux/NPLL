@@ -30,6 +30,10 @@ static inline void mtdec(u32 val) {
 }
 
 extern void udelay(u32 usec);
+#define mdelay(ms) udelay((u32)(ms) * 1000u)
+#define usleep(us) TH_Sleep(us)
+#define msleep(ms) usleep((u32)(ms) * 1000u)
+#define sleep(s) msleep((u32)(s) * 1000u)
 extern void T_Init(void);
 extern void T_EnableEvents(void);
 extern bool T_HasElapsed(u64 startTB, u32 usecSince);
