@@ -13,7 +13,6 @@
  * Extrems' Corner.org
  */
 
-#include "npll/rtc.h"
 #define MODULE "EXI"
 
 #include <assert.h>
@@ -73,8 +72,8 @@ struct exi_id_entry {
 	uint speed_mhz;
 };
 
-extern struct exi_device_driver usbgeckoEXIDriver, sdgeckoEXIDriver;
-static struct exi_device_driver *exiRegisteredDrivers[3];
+extern struct exi_device_driver usbgeckoEXIDriver, sdgeckoEXIDriver, rtcEXIDriver;
+static struct exi_device_driver *exiRegisteredDrivers[4];
 
 static const struct exi_id_entry exiIDTable[] = {
 	{ 0xffff1698, "GameCube Mask ROM/RTC/SRAM/UART", NULL, 8 },
@@ -442,46 +441,6 @@ int H_EXIXferDMA(uint channel, void *dmaAddr, size_t len, uint mode) {
 	return ret;
 }
 
-static int romXfer(void *buf, u32 len, u32 offset) {
-	int ret;
-	uint off;
-	bool irqs;
-
-	irqs = IRQ_DisableSave();
-	H_EXISelect(RTC_CHAN, RTC_CS, 32);
-	off = RTC_ROM_BASE + (offset << 6);
-	ret = H_EXIWriteImm(RTC_CHAN, 4, &off);
-	if (ret)
-		goto out;
-
-	ret = H_EXIXferDMA(RTC_CHAN, buf, len, EXI_MODE_READ);
-	if (ret)
-		goto out;
-
-out:
-	H_EXIDeselect(RTC_CHAN);
-	IRQ_Restore(irqs);
-	return ret;
-}
-
-int H_EXIReadROM(void *buf, uint len, uint offset) {
-	int ret = 0;
-	u32 count;
-
-	while (len > 0) {
-		count = 1024 - (offset % 1024);
-		count = (len > count) ? count : len;
-		ret = romXfer(buf, count, offset);
-		if (ret)
-			return ret;
-		offset += count;
-		buf += count;
-		len -= count;
-	}
-
-	return ret;
-}
-
 uint H_EXIReadID(uint channel, uint cs) {
 	u16 cmd = 0x0000;
 	u32 id = 0;
@@ -698,7 +657,7 @@ static int exiProbe(uint channel, uint cs) {
 
 	if (channel == 0 && cs == 1) {
 		name = "GameCube Mask ROM/RTC/SRAM/UART";
-		driver = NULL;
+		driver = &rtcEXIDriver;
 		speedMhz = 8;
 	}
 
@@ -809,9 +768,7 @@ void H_EXIUnregisterDriver(struct exi_device_driver *drv) {
 }
 
 static void exiInit(void) {
-	uint i, len;
-	int ret;
-	u8 ALIGN(32) ipl[256];
+	uint i;
 
 	switch (H_ConsoleType) {
 	case CONSOLE_TYPE_GAMECUBE: {
@@ -841,17 +798,6 @@ static void exiInit(void) {
 	for (i = 0; i < 3; i++)
 		exiRescanChannel(i);
 
-	ret = H_EXIReadROM(ipl, 256, 0);
-	if (ret)
-		goto skipROM;
-
-	/* revision / region */
-	len = (uint)strnlen((char *)(ipl + 0x55), sizeof(ipl) - 0x55);
-	H_GCNIPLRev = malloc(len + 1);
-	memcpy(H_GCNIPLRev, ipl + 0x55, len);
-	H_GCNIPLRev[len] = '\0';
-
-skipROM:
 	T_QueueRepeatingEvent(500 * 1000, exiHotplug, NULL);
 }
 

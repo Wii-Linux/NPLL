@@ -249,7 +249,6 @@ static void armbootnow(void) {
 }
 
 static __attribute__((noreturn)) void wiiShutdown(void) {
-	u32 cmd;
 	MINI_BOOT_MAGIC_PTR = 0;
 
 	if (H_WiiIsvWii) {
@@ -258,18 +257,9 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 		 * we talk to the RTC.  linux-loader does this for us on
 		 * native Wii U, but it's obviously not present here.
 		 */
-		H_EXISelect(RTC_CHAN, RTC_CS, 2);
-		cmd = RTC_WR | RTC_OFFTMR; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		cmd = 0; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		H_EXIDeselect(RTC_CHAN);
-		H_EXISelect(RTC_CHAN, RTC_CS, 2);
-		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		cmd = RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		H_EXIDeselect(RTC_CHAN);
-		H_EXISelect(RTC_CHAN, RTC_CS, 2);
-		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		cmd = RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_POFF_EXE; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		H_EXIDeselect(RTC_CHAN);
+		H_RTCWriteReg(RTC_OFFTMR, 0);
+		H_RTCWriteReg(RTC_CONTROL1, RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN);
+		H_RTCWriteReg(RTC_CONTROL1, RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_POFF_EXE);
 
 		while (1); /* weird... */
 	}
@@ -281,20 +271,12 @@ static __attribute__((noreturn)) void wiiShutdown(void) {
 }
 
 static __attribute__((noreturn)) void wiiReboot(void) {
-	u32 cmd;
-
 	MINI_BOOT_MAGIC_PTR = 0;
 
 	if (H_WiiIsvWii) {
 		/* see comment in wiiShutdown */
-		H_EXISelect(RTC_CHAN, RTC_CS, 2);
-		cmd = RTC_WR | RTC_CONTROL1; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		cmd = RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_DEVPWR_EN; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		H_EXIDeselect(RTC_CHAN);
-		H_EXISelect(RTC_CHAN, RTC_CS, 2);
-		cmd = RTC_WR | RTC_OFFTMR; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		cmd = 0; H_EXIWriteImm(RTC_CHAN, 4, &cmd);
-		H_EXIDeselect(RTC_CHAN);
+		H_RTCWriteReg(RTC_CONTROL1, RTC_CONTROL1_4COUNT_EN | RTC_CONTROL1_SLEEP_EN | RTC_CONTROL1_DEVPWR_EN);
+		H_RTCWriteReg(RTC_OFFTMR, 0);
 
 		LT_RESETS &= ~BIT(0);
 

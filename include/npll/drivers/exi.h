@@ -78,12 +78,6 @@ extern int H_EXIXferImm(uint channel, uint len,	uint mode, const void *in, void 
 extern int H_EXIXferDMA(uint channel, void *dmaAddr, size_t len, uint mode);
 
 /*
- * Read the IPL ROM.
- * Address and length must be 32B aligned.
- */
-extern int H_EXIReadROM(void *buf, uint len, uint offset);
-
-/*
  * Transfer modes
  */
 #define EXI_MODE_READ  (1 << 0)

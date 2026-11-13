@@ -164,4 +164,13 @@ struct rtcSRAM {
 #  define RTC_EUART_CTRL_INIT2  0x000000f3
 #define RTC_EUART_FIFO 0x30000100u
 
+extern u32 H_RTCReadReg(u32 reg);
+extern void H_RTCWriteReg(u32 reg, u32 val);
+
+/*
+ * Read the IPL ROM.
+ * Address and length must be 32B aligned.
+ */
+extern int H_RTCReadROM(void *buf, uint len, uint offset);
+
 #endif /* _RTC_H */
