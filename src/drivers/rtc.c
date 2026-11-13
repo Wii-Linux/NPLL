@@ -112,6 +112,9 @@ static int rtcEXIProbe(struct exi_device *dev) {
 	memcpy(H_GCNIPLRev, ipl + 0x55, len);
 	H_GCNIPLRev[len] = '\0';
 
+	if ((H_ConsoleType == CONSOLE_TYPE_WII && H_WiiIsvWii) || H_ConsoleType == CONSOLE_TYPE_WII_U)
+		H_RTCWriteReg(RTC_CONTROL1, H_RTCReadReg(RTC_CONTROL1) | RTC_CONTROL1_4COUNT_EN);
+
 	return 0;
 }
 
