@@ -8,7 +8,7 @@
 #include <npll/allocator.h>
 #include <npll/cache.h>
 #include <npll/drivers.h>
-#include <npll/latte/r600.h>
+#include <npll/latte/r700.h>
 #include <npll/types.h>
 #include <npll/utils.h>
 #include <npll/video.h>

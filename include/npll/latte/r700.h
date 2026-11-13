@@ -1,5 +1,5 @@
 /*
- * NPLL - Latte R600 GPU registers
+ * NPLL - Latte R700 GPU registers
  *
  * Copyright (C) 2026 Techflash
  *
@@ -12,11 +12,11 @@
  *
  */
 
-#ifndef _LATTE_R600_H
-#define _LATTE_R600_H
+#ifndef _LATTE_R700_H
+#define _LATTE_R700_H
 
 #include <npll/soc.h>
-#define D1(x) (*(vu32 *)(LATTE_R600_BASE + 0x6100 + x))
+#define D1(x) (*(vu32 *)(LATTE_R700_BASE + 0x6100 + x))
 
 #define DGRPH_ENABLE D1(0x0000)
     #define DGRPH_ENABLE_REG 0x1
@@ -82,4 +82,4 @@
 
 #define DGRPH_CROSSBAR_RGBA(r, g, b, a) (DGRPH_RED_CROSSBAR_ ## r | DGRPH_GREEN_CROSSBAR_ ## g | DGRPH_BLUE_CROSSBAR_ ## b | DGRPH_ALPHA_CROSSBAR_ ## a)
 
-#endif /* _LATTE_R600_H */
+#endif /* _LATTE_R700_H */
