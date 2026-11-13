@@ -156,7 +156,6 @@
 
 #define SDHC_DELAY 5
 #define SDHC_USE_SDMA 1
-#define SDHC_SLOW_4BIT_TEST 0
 
 static inline void writel(u32 v, volatile void *a) {
 	revLEwritel(a, v);
@@ -1015,25 +1014,12 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		}
 	}
 
-	/* TODO: Relate the clock rate settings to the actual capabilities of the
-	 * card and the host controller. The conservative settings chosen should
-	 * work with most setups, but this is not an ideal solution. According to
-	 * the RM, the default freq. of the base clock should be at around 200MHz.
-	 */
 	switch (clk_mode) {
 	case CLOCK_INITIAL:
 		/* Divide the base clock by 512 */
 		rslt = sdhc_set_clock_div(base_addr, DIV_16, PRESCALER_32, SDCLK_TIMES_2_POW_14);
 		break;
 	case CLOCK_OPERATIONAL:
-		/*
-		 * Keep the 4-bit test at a very conservative clock so we can
-		 * separate "4-bit sequencing is broken" from "4-bit only fails
-		 * once the bus is fast enough to expose timing/signal issues".
-		 */
-#if SDHC_SLOW_4BIT_TEST
-		rslt = sdhc_set_clock_div(base_addr, DIV_8, PRESCALER_8, SDCLK_TIMES_2_POW_27);
-#else
 		/*
 		 * base/2 = 24MHz on Hollywood's 48MHz base clock. This sits just
 		 * under the 25MHz default-speed rating that every SD card must
@@ -1050,7 +1036,6 @@ static int sdhc_set_clock(volatile void *base_addr, clock_mode clk_mode)
 		 * clock and is the floor on what raising it can buy.
 		 */
 		rslt = sdhc_set_clock_div(base_addr, DIV_4, PRESCALER_2, SDCLK_TIMES_2_POW_27);
-#endif
 		break;
 	case CLOCK_HIGH_SPEED:
 		/*
