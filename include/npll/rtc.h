@@ -46,11 +46,20 @@
 #define RTC_COUNTER    0x20000000u
 /* WiiUbrew claims it's a snapshot of RTC_COUNTER but I can't get this to work */
 #define RTC_SNAPSHOT   0x20400000u
+/* same locking effect as OFFTMR, see below */
 #define RTC_ONTMR      0x21000000u
 #  define RTC_ONTMR_SET             0x3fffffffu
 #  define RTC_ONTMR_DTCT            BIT(30)
 #  define RTC_ONTMR_EN              BIT(31)
-/* weird effects on Wii */
+/*
+ * Weird effects on Wii:
+ *   - When EN=0, writes with SET=X and/or EN=X apply immediately
+ *   - When EN=1, SET cannot be modified; EN=0 must be written first, which
+ *     retains SET, then SET can be modified (potentially setting EN=1 at the
+ *     same time)
+ *   - When SHUTDOWN GPIO is asserted while EN=1, green+red (yellow) power LED
+ *     is lit, seemingly without Hollywood remaining active?!
+ */
 #define RTC_OFFTMR     0x21000100u
 #  define RTC_OFFTMR_SET            0x3fffffffu
 #  define RTC_OFFTMR_DTCT           BIT(30)
@@ -67,6 +76,7 @@
 #define RTC_COMPATINT  0x21000800u
 #  define RTC_COMPATINT_EJECT_BTN   BIT(0)
 #  define RTC_COMPATINT_DISC_CHANGE BIT(1)
+/* seems to be Wii U only - reads all 0s regardless of anything done on Wii */
 #define RTC_CONTROL0   0x21000c00u
 #  define RTC_CONTROL0_REVISION     0x000000ffu
 #  define RTC_CONTROL0_CANARY       BIT(8)
@@ -77,7 +87,7 @@
 #  define RTC_CONTROL0_POFFLG_TMR   BIT(24)
 #  define RTC_CONTROL0_POFFLG_4S    BIT(25)
 #  define RTC_CONTROL0_POFFLG_FPOFF BIT(26)
-/* Wii U only */
+/* seems to be Wii U only - reads all 0s regardless of anything done on Wii */
 #define RTC_CONTROL1   0x21000d00u
 #  define RTC_CONTROL1_4COUNT_EN    BIT(0)
 #  define RTC_CONTROL1_CLKOUT_EN    BIT(2)
