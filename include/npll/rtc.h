@@ -42,12 +42,15 @@
 /*
  * RTC and control registers
  */
+/* number of seconds which have passed since 1/1/2000, after the bias is accounted for */
 #define RTC_COUNTER    0x20000000u
+/* WiiUbrew claims it's a snapshot of RTC_COUNTER but I can't get this to work */
 #define RTC_SNAPSHOT   0x20400000u
 #define RTC_ONTMR      0x21000000u
 #  define RTC_ONTMR_SET             0x3fffffffu
 #  define RTC_ONTMR_DTCT            BIT(30)
 #  define RTC_ONTMR_EN              BIT(31)
+/* weird effects on Wii */
 #define RTC_OFFTMR     0x21000100u
 #  define RTC_OFFTMR_SET            0x3fffffffu
 #  define RTC_OFFTMR_DTCT           BIT(30)
