@@ -80,6 +80,7 @@
 #define RTC_CONTROL0   0x21000c00u
 #  define RTC_CONTROL0_REVISION     0x000000ffu
 #  define RTC_CONTROL0_CANARY       BIT(8)
+/* set when the battery is low voltage/not present on Wii U */
 #  define RTC_CONTROL0_LOW_BATT     BIT(9)
 #  define RTC_CONTROL0_UNSTBL_PWR   BIT(11)
 #  define RTC_CONTROL0_PONLG_TMR    BIT(16)
@@ -89,11 +90,13 @@
 #  define RTC_CONTROL0_POFFLG_FPOFF BIT(26)
 /* seems to be Wii U only - reads all 0s regardless of anything done on Wii */
 #define RTC_CONTROL1   0x21000d00u
+/* when set, allows holding the power button for 4 seconds to force power off */
 #  define RTC_CONTROL1_4COUNT_EN    BIT(0)
 #  define RTC_CONTROL1_CLKOUT_EN    BIT(2)
 #  define RTC_CONTROL1_FPOFF_MODE   BIT(3)
 #  define RTC_CONTROL1_SLEEP_EN     BIT(8)
 #  define RTC_CONTROL1_DEVPWR_EN    BIT(10)
+/* when set, immediately powers off the system */
 #  define RTC_CONTROL1_POFF_EXE     BIT(16)
 #define RTC_CONTROL2   0x21000e00u
 #define RTC_CONTROL3   0x21000f00u
