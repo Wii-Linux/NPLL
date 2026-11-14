@@ -121,10 +121,12 @@ struct _rtcSRAM {
 	u32 ead0;
 	u32 ead1;
 	/*
-	 * I've seen the Wii sysmenu set this negative, so I'm almost certain this
-	 * is signed, despite what Dolphin SDK decomps and liboc/libogc2 suggest.
+	 * Relies on 32-bit unsigned overflow semantics; Wii sysmenu can intentionally
+	 * set this to a negative value to cause overflow and wrap back around, but
+	 * it's also not a signed integer; a large (>0x80000000) but positive bias, but
+	 * small enough that it doesn't overflow, is also valid.
 	 */
-	i32 counterBias;
+	u32 counterBias;
 	i8 displayOffsetH;
 	u8 ntd;
 	u8 language;
@@ -139,7 +141,7 @@ struct _rtcSRAMEx {
 	u8 _padding0;
 	u8 flashIDCheckSum[2];
 	u16 gbs;
-	/* libogc2 calls it this, other stuff calls it reserved */
+	/* libogc2-specific, other software doesn't use it */
 	u16 dvdDevCode;
 } __attribute__((packed));
 
@@ -152,6 +154,8 @@ struct rtcSRAM {
 #define RTC_SRAM_NTD_EURGB60       BIT(6)
 /* set = production, clear = development */
 #define RTC_SRAM_NTD_BOOT_MODE     BIT(7)
+/* Gekko TAU calibration used by libogc2 */
+#define RTC_SRAM_NTD_TAU_CALIB     0x3fu
 
 #define RTC_SRAM_LANGUAGE_ENGLISH    0x00u
 #define RTC_SRAM_LANGUAGE_GERMAN     0x01u
@@ -159,11 +163,8 @@ struct rtcSRAM {
 #define RTC_SRAM_LANGUAGE_SPANISH    0x03u
 #define RTC_SRAM_LANGUAGE_ITALIAN    0x04u
 #define RTC_SRAM_LANGUAGE_DUTCH      0x05u
+/* Below 2 are only used by Super Mario Sunshine in Super Mario 3D All Stars */
 #define RTC_SRAM_LANGUAGE_JAPANESE   0x06u
-/*
- * TODO: difference from 0x00?
- * Is 0x00 British English and 0x07 is American English?
- */
 #define RTC_SRAM_LANGUAGE_ENGLISH_US 0x07u
 
 #define RTC_SRAM_FLAGS_VIDEO_MODE  0x03u
