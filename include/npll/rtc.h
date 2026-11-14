@@ -52,10 +52,18 @@
 #  define RTC_OFFTMR_SET            0x3fffffffu
 #  define RTC_OFFTMR_DTCT           BIT(30)
 #  define RTC_OFFTMR_EN             BIT(31)
-/* from WiiUbrew - name suggests this was not "compat" on the Wii's RTC */
+/* from WiiUbrew - name suggests these were not "compat" on the Wii's RTC, but I have no better name for them */
 #define RTC_COMPATSET  0x21000400u
-/* Wiibrew says this holds some DI-related flags */
+/*
+ * DI flags, mirrored per byte
+ * They're sticky flags, cleared by writing 0:
+ *   0x01010101 - eject button pressed
+ *   0x02020202 - disc changed
+ *   0x03030303 - both
+ */
 #define RTC_COMPATINT  0x21000800u
+#  define RTC_COMPATINT_EJECT_BTN   BIT(0)
+#  define RTC_COMPATINT_DISC_CHANGE BIT(1)
 #define RTC_CONTROL0   0x21000c00u
 #  define RTC_CONTROL0_REVISION     0x000000ffu
 #  define RTC_CONTROL0_CANARY       BIT(8)
