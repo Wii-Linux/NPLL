@@ -90,13 +90,18 @@
 #  define RTC_CONTROL0_POFFLG_FPOFF BIT(26)
 /* seems to be Wii U only - reads all 0s regardless of anything done on Wii */
 #define RTC_CONTROL1   0x21000d00u
-/* when set, allows holding the power button for 4 seconds to force power off */
+/*
+ * When set on Wii U, allows holding the power button for 4 seconds to force
+ * power off, if clear, this does nothing.
+ * On Wii, this functionality is always enabled regardless of this bit
+ * (which always reads 0).
+ */
 #  define RTC_CONTROL1_4COUNT_EN    BIT(0)
 #  define RTC_CONTROL1_CLKOUT_EN    BIT(2)
 #  define RTC_CONTROL1_FPOFF_MODE   BIT(3)
 #  define RTC_CONTROL1_SLEEP_EN     BIT(8)
 #  define RTC_CONTROL1_DEVPWR_EN    BIT(10)
-/* when set, immediately powers off the system */
+/* when set on Wii U, immediately powers off the system; always reads 0 */
 #  define RTC_CONTROL1_POFF_EXE     BIT(16)
 #define RTC_CONTROL2   0x21000e00u
 #define RTC_CONTROL3   0x21000f00u
